@@ -137,7 +137,6 @@ GameObject:
   - component: {fileID: 3458451528250862337}
   - component: {fileID: 6614906323051471733}
   - component: {fileID: 4596838793308598492}
-  - component: {fileID: 4136293332220616908}
   - component: {fileID: 322300984421804362}
   - component: {fileID: 2763095343719607636}
   - component: {fileID: 1629181840047361504}
@@ -146,6 +145,7 @@ GameObject:
   - component: {fileID: 8457335594079492682}
   - component: {fileID: 465053131265936943}
   - component: {fileID: 791806707811693276}
+  - component: {fileID: 274603642580577355}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -317,28 +317,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7621ade7304d0724abfff8a489173ae6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
---- !u!95 &4136293332220616908
-Animator:
-  serializedVersion: 7
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3540110564427285031}
-  m_Enabled: 1
-  m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 9100000, guid: 7c2a82ddb21375e4a80ad8bc446f0391, type: 2}
-  m_CullingMode: 0
-  m_UpdateMode: 0
-  m_ApplyRootMotion: 0
-  m_LinearVelocityBlending: 0
-  m_StabilizeFeet: 0
-  m_AnimatePhysics: 0
-  m_WarningMessage: 
-  m_HasTransformHierarchy: 1
-  m_AllowConstantClipSamplingOptimization: 1
-  m_KeepAnimatorStateOnDisable: 0
-  m_WriteDefaultValuesOnDisable: 0
 --- !u!114 &322300984421804362
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -480,6 +458,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d94713e1bd99d794d92aceb82095e3d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
+--- !u!95 &274603642580577355
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 7c2a82ddb21375e4a80ad8bc446f0391, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0
