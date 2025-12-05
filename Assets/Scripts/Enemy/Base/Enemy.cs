@@ -65,7 +65,22 @@ public class Enemy : MonoBehaviour
 
     private void Die()
     {
+
+        DropCoins();
         Debug.Log($"{stats.enemyName} died!");
         Destroy(gameObject);
     }
+
+    [SerializeField] private GameObject coinPrefab;
+    [SerializeField] private int coinDropCount = 3;
+
+    private void DropCoins()
+    {
+        for (int i = 0; i < coinDropCount; i++)
+        {
+            Vector3 spawnPos = transform.position + new Vector3(Random.Range(-0.5f, 0.5f), Random.Range(-0.5f, 0.5f), 0);
+            Instantiate(coinPrefab, spawnPos, Quaternion.identity);
+        }
+    }
+
 }

@@ -146,6 +146,7 @@ GameObject:
   - component: {fileID: 465053131265936943}
   - component: {fileID: 791806707811693276}
   - component: {fileID: 274603642580577355}
+  - component: {fileID: -4804353808761203150}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -417,7 +418,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2216731382
+  GlobalObjectIdHash: 1639142946
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -480,6 +481,20 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &-4804353808761203150
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ecd08db489f55544e8b9dadaa1bd7d21, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCoinCollector
+  carriedCoins: 0
+  bankedCoins: 0
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0
