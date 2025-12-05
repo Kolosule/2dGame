@@ -17,3 +17,10 @@ MonoBehaviour:
   basePosition: {x: 0, y: 0}
   teamID: Team3
   isAITeam: 1
+  damageMultiplier: 1
+  defenseMultiplier: 1
+  respawnDelay: 3
+  usesTerritorialAdvantage: 0
+  teamIcon: {fileID: 0}
+  teamMaterial: {fileID: 0}
+  teamDescription: 

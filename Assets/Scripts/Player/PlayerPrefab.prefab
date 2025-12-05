@@ -145,6 +145,7 @@ GameObject:
   - component: {fileID: 3938946417030660628}
   - component: {fileID: 8457335594079492682}
   - component: {fileID: 465053131265936943}
+  - component: {fileID: 791806707811693276}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -161,7 +162,7 @@ Transform:
   m_GameObject: {fileID: 3540110564427285031}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -81.7, y: 1.68, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -423,9 +424,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b6bd075e4925b0b469ea0cb123142f36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
-  teamID: 
+  teamID: Team1
   spriteRenderer: {fileID: 0}
-  colorizePlayer: 1
+  colorizePlayer: 0
 --- !u!114 &8457335594079492682
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -438,7 +439,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1639142946
+  GlobalObjectIdHash: 2216731382
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -467,6 +468,18 @@ MonoBehaviour:
   yourPlayerControllerScript: {fileID: 4596838793308598492}
   rb: {fileID: 6614906323051471733}
   teamId: 0
+--- !u!114 &791806707811693276
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d94713e1bd99d794d92aceb82095e3d3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0

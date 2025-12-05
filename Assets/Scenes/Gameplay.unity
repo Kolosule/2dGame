@@ -3466,11 +3466,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CameraFollow
   FollowSpeed: 20
   Target: {fileID: 0}
-  offset: {x: 0, y: 0, z: 100}
+  offset: {x: 0, y: 0, z: -10}
   deadzoneSize: {x: 1, y: 1}
   zoomOutSize: 10
-  lookAheadDistance: 3
-  lookAheadSpeed: 10
+  lookAheadDistance: 2
+  lookAheadSpeed: 5
   shakeDuration: 0
   shakeAmount: 0.1
   decreaseFactor: 1
@@ -7867,7 +7867,7 @@ GameObject:
   - component: {fileID: 1213272657}
   m_Layer: 0
   m_Name: TeamManager
-  m_TagString: Untagged
+  m_TagString: GameController
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -7884,8 +7884,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dd41c7266ec27044d835031f439f66fa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
-  team1Data: {fileID: 11400000, guid: 00dea736a97d2eb45b12b147d8455094, type: 2}
-  team2Data: {fileID: 11400000, guid: 9517ac3531343d54c985383046ac7d9d, type: 2}
+  team1Data: {fileID: 11400000, guid: 9517ac3531343d54c985383046ac7d9d, type: 2}
+  team2Data: {fileID: 11400000, guid: 00dea736a97d2eb45b12b147d8455094, type: 2}
   team3Data: {fileID: 11400000, guid: 65bb79ee2921af84e94956759ba60ca9, type: 2}
   minDamageMultiplier: 0.5
   maxDamageMultiplier: 1.5
@@ -7899,7 +7899,7 @@ Transform:
   m_GameObject: {fileID: 1213272656}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -45.79525, y: 10.53735, z: 0}
+  m_LocalPosition: {x: -45.79525, y: 30.6, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -9462,7 +9462,7 @@ MonoBehaviour:
       - {fileID: 11400000, guid: 9ff83f017da848644ab14c42e7b9492a, type: 2}
     TickRate: 30
     ClientConnectionBufferTimeout: 10
-    ConnectionApproval: 0
+    ConnectionApproval: 1
     ConnectionData: 
     EnableTimeResync: 0
     TimeResyncInterval: 30
@@ -11746,7 +11746,7 @@ GameObject:
   - component: {fileID: 1986279254}
   - component: {fileID: 1986279253}
   m_Layer: 0
-  m_Name: NetworkedSpawnManager
+  m_Name: NetworkSpawnManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

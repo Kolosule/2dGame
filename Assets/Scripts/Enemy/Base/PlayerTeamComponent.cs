@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 /// <summary>
 /// Attach this to player characters to define their team and get territorial bonuses
@@ -13,8 +13,34 @@ public class PlayerTeamComponent : MonoBehaviour
     [SerializeField] private SpriteRenderer spriteRenderer;
     [SerializeField] private bool colorizePlayer = true;
 
+    private bool isInitialized = false;
+
     private void Start()
     {
+        // Don't initialize visuals until team is properly set
+        StartCoroutine(WaitForTeamAssignment());
+    }
+
+    private System.Collections.IEnumerator WaitForTeamAssignment()
+    {
+        // Wait for team to be assigned by NetworkPlayerWrapper
+        int waitCount = 0;
+        while (string.IsNullOrEmpty(teamID) && waitCount < 50)
+        {
+            yield return new WaitForSeconds(0.1f);
+            waitCount++;
+        }
+
+        if (!string.IsNullOrEmpty(teamID) && teamID != "Team1")
+        {
+            InitializeVisuals();
+        }
+    }
+
+    private void InitializeVisuals()
+    {
+        if (isInitialized) return;
+
         // Optional: Color the player based on team
         if (colorizePlayer && spriteRenderer != null && TeamManager.Instance != null)
         {
@@ -22,8 +48,11 @@ public class PlayerTeamComponent : MonoBehaviour
             if (teamData != null)
             {
                 spriteRenderer.color = teamData.teamColor;
+                Debug.Log($"✓ Player colored for team: {teamData.teamName}");
             }
         }
+
+        isInitialized = true;
     }
 
     /// <summary>
@@ -34,6 +63,12 @@ public class PlayerTeamComponent : MonoBehaviour
         if (TeamManager.Instance == null)
         {
             Debug.LogWarning("TeamManager not found! Returning 1.0 damage modifier.");
+            return 1f;
+        }
+
+        if (string.IsNullOrEmpty(teamID))
+        {
+            Debug.LogWarning("Player has no team assigned! Returning 1.0 damage modifier.");
             return 1f;
         }
 
@@ -52,6 +87,12 @@ public class PlayerTeamComponent : MonoBehaviour
             return 1f;
         }
 
+        if (string.IsNullOrEmpty(teamID))
+        {
+            Debug.LogWarning("Player has no team assigned! Returning 1.0 damage modifier.");
+            return 1f;
+        }
+
         float territorialAdvantage = CalculateTerritorialAdvantage();
         return TeamManager.Instance.GetDamageReceivedModifier(teamID, territorialAdvantage);
     }
@@ -62,20 +103,49 @@ public class PlayerTeamComponent : MonoBehaviour
     private float CalculateTerritorialAdvantage()
     {
         if (TeamManager.Instance == null)
+        {
+            Debug.LogWarning("TeamManager not found in CalculateTerritorialAdvantage!");
             return 0f;
+        }
+
+        if (string.IsNullOrEmpty(teamID))
+        {
+            Debug.LogWarning("teamID is empty in CalculateTerritorialAdvantage!");
+            return 0f;
+        }
 
         TeamData myTeam = TeamManager.Instance.GetTeamData(teamID);
         if (myTeam == null)
+        {
+            Debug.LogWarning($"Could not find team data for teamID: '{teamID}'");
             return 0f;
+        }
 
         // Get opposing team
-        string opposingTeamID = TeamManager.Instance.GetPlayerTeams()[0] == teamID
-            ? TeamManager.Instance.GetPlayerTeams()[1]
-            : TeamManager.Instance.GetPlayerTeams()[0];
+        string[] playerTeams = TeamManager.Instance.GetPlayerTeams();
+        string opposingTeamID = null;
+
+        foreach (string team in playerTeams)
+        {
+            if (team != teamID)
+            {
+                opposingTeamID = team;
+                break;
+            }
+        }
+
+        if (string.IsNullOrEmpty(opposingTeamID))
+        {
+            Debug.LogWarning("Could not determine opposing team!");
+            return 0f;
+        }
 
         TeamData enemyTeam = TeamManager.Instance.GetTeamData(opposingTeamID);
         if (enemyTeam == null)
+        {
+            Debug.LogWarning($"Could not find enemy team data for: {opposingTeamID}");
             return 0f;
+        }
 
         // Calculate distances
         float distToOwnBase = Vector2.Distance(transform.position, myTeam.basePosition);

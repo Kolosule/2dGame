@@ -1,15 +1,13 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class CameraFollow : MonoBehaviour
 {
     public float FollowSpeed = 20f;
-    public Transform Target;   // 👈 Player transform
+    public Transform Target;   // Player transform
 
     private Camera cam;
 
-    [SerializeField] private Vector3 offset;
+    [SerializeField] private Vector3 offset = new Vector3(0, 0, -10);
     [SerializeField] private Vector2 deadzoneSize = new Vector2(1f, 1f);
     [SerializeField] private float zoomOutSize = 10f;
     [SerializeField] private float lookAheadDistance = 2f;
@@ -17,7 +15,6 @@ public class CameraFollow : MonoBehaviour
 
     private Vector3 currentLookAhead = Vector3.zero;
     private Vector3 targetLookAhead = Vector3.zero;
-
     private Transform camTransform;
 
     public float shakeDuration = 0f;
@@ -30,9 +27,10 @@ public class CameraFollow : MonoBehaviour
     {
         cam = GetComponent<Camera>();
         Cursor.visible = false;
+
         if (camTransform == null)
         {
-            camTransform = GetComponent(typeof(Transform)) as Transform;
+            camTransform = GetComponent<Transform>();
         }
     }
 
@@ -44,11 +42,15 @@ public class CameraFollow : MonoBehaviour
 
     private void Update()
     {
-        // 👇 Prevent errors if Target has been destroyed
-        if (Target == null) return;
+        // Check if we have a target
+        if (Target == null)
+        {
+            Debug.LogWarning("Camera has no target to follow!");
+            return;
+        }
 
         Vector3 baseTarget = Target.position + offset;
-        baseTarget.z = -300f;
+        baseTarget.z = -10f; // Keep camera in front
 
         float horizontalInput = Input.GetAxisRaw("Horizontal");
 
@@ -70,9 +72,40 @@ public class CameraFollow : MonoBehaviour
         shakeDuration = 0.2f;
     }
 
-    // 👇 New method to update camera target after respawn
+    /// <summary>
+    /// Set the camera target (called when player spawns)
+    /// </summary>
     public void SetTarget(Transform newTarget)
     {
+        if (newTarget == null)
+        {
+            Debug.LogError("⚠️ Trying to set camera target to NULL!");
+            return;
+        }
+
         Target = newTarget;
+
+        // Immediately snap to target position
+        if (Target != null)
+        {
+            Vector3 targetPos = Target.position + offset;
+            targetPos.z = -10f;
+            transform.position = targetPos;
+        }
+
+        Debug.Log($"✓ Camera target set to: {newTarget.name} at position {newTarget.position}");
+    }
+
+    // Draw debug info in Scene view
+    private void OnDrawGizmos()
+    {
+        if (Target != null)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawLine(transform.position, Target.position);
+
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireCube(Target.position + offset, new Vector3(deadzoneSize.x * 2, deadzoneSize.y * 2, 1));
+        }
     }
 }
