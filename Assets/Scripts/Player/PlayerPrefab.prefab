@@ -446,7 +446,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   yourPlayerControllerScript: {fileID: 4596838793308598492}
   rb: {fileID: 6614906323051471733}
-  teamId: 1
+  teamId: 0
 --- !u!114 &791806707811693276
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -1,4 +1,4 @@
-﻿using Unity.Netcode;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,13 +22,6 @@ public class GameNetworkManager : MonoBehaviour
     {
         networkManager = NetworkManager.Singleton;
 
-        // IMPORTANT: Enable connection approval
-        if (networkManager != null)
-        {
-            networkManager.NetworkConfig.ConnectionApproval = true;
-            Debug.Log("✓ Connection approval enabled");
-        }
-
         // Setup button listeners
         if (hostButton != null)
             hostButton.onClick.AddListener(StartHost);
@@ -37,9 +30,14 @@ public class GameNetworkManager : MonoBehaviour
             clientButton.onClick.AddListener(StartClient);
     }
 
+    // 12/4/2025 AI-Tag
+    // This was created with the help of Assistant, a Unity Artificial Intelligence product.
+
     private void StartHost()
     {
         Debug.Log("Starting as Host...");
+
+        
 
         // Start as host (server + client)
         bool success = networkManager.StartHost();
@@ -79,6 +77,32 @@ public class GameNetworkManager : MonoBehaviour
         {
             Debug.LogError("Failed to start client");
         }
+    }
+
+    // Approve or deny player connections
+    private void ApprovalCheck(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)
+    {
+        // Check if server is full
+        if (networkManager.ConnectedClients.Count >= maxPlayers)
+        {
+            response.Approved = false;
+            response.Reason = "Server is full";
+            Debug.Log("Connection denied: Server full");
+            return;
+        }
+
+        // Let NetworkedSpawnManager handle the approval (it sets spawn position)
+        var spawnManager = FindObjectOfType<NetworkedSpawnManager>();
+        if (spawnManager != null)
+        {
+            // NetworkedSpawnManager will handle the rest
+            return;
+        }
+
+        // Fallback if no spawn manager found
+        response.Approved = true;
+        response.CreatePlayerObject = true;
+        Debug.Log($"Player approved. Total players: {networkManager.ConnectedClients.Count + 1}");
     }
 
     private void HideMenu()

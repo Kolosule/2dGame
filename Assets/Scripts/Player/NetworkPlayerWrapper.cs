@@ -51,25 +51,8 @@ public class NetworkPlayerWrapper : NetworkBehaviour
     {
         Debug.Log($"Player spawned! IsOwner: {IsOwner}, Position: {transform.position}");
 
-        // SERVER: Assign team immediately based on what was decided in ApprovalCheck
-        if (IsServer)
-        {
-            if (NetworkedSpawnManager.Instance != null)
-            {
-                // Get the team that was assigned during connection approval
-                int assignedTeam = NetworkedSpawnManager.Instance.GetTeamForClient(OwnerClientId);
-                networkTeamId.Value = assignedTeam;
-                Debug.Log($"✓ Server assigned team ID {assignedTeam} to client {OwnerClientId}");
-            }
-            else
-            {
-                Debug.LogError("⚠️ NetworkedSpawnManager.Instance is null on server!");
-                networkTeamId.Value = 0;
-            }
-        }
-
-        // Assign team component immediately (both server and client)
-        StartCoroutine(AssignTeamComponent());
+        // Wait one frame to ensure everything is initialized
+        StartCoroutine(InitializePlayerTeam());
 
         if (IsOwner)
         {
@@ -93,6 +76,38 @@ public class NetworkPlayerWrapper : NetworkBehaviour
             }
 
             Debug.Log("✓ Remote player - showing synced position");
+        }
+
+        // Server sets team
+        if (IsServer)
+        {
+            networkTeamId.Value = teamId;
+        }
+
+        // Update team component
+        var playerTeamComponent = GetComponent<PlayerTeamComponent>();
+        if (playerTeamComponent != null && TeamManager.Instance != null)
+        {
+            // Convert team ID (0 or 1) to team name ("Team1" or "Team2")
+            string teamName = networkTeamId.Value == 0 ? "Team1" : "Team2";
+
+            TeamData teamData = TeamManager.Instance.GetTeamData(teamName);
+            if (teamData != null)
+            {
+                playerTeamComponent.teamID = teamData.teamID;
+                Debug.Log($"✓ Player assigned to {teamData.teamName} (ID: {playerTeamComponent.teamID})");
+            }
+            else
+            {
+                Debug.LogError($"⚠️ Failed to find team data for {teamName}");
+            }
+        }
+        else
+        {
+            if (playerTeamComponent == null)
+                Debug.LogError("⚠️ PlayerTeamComponent not found on player!");
+            if (TeamManager.Instance == null)
+                Debug.LogError("⚠️ TeamManager not found in scene!");
         }
 
         if (!IsOwner)
@@ -241,18 +256,48 @@ public class NetworkPlayerWrapper : NetworkBehaviour
     }
 
     /// <summary>
-    /// Assign team to PlayerTeamComponent
+    /// Initialize team assignment for this player
     /// </summary>
-    private System.Collections.IEnumerator AssignTeamComponent()
+    private System.Collections.IEnumerator InitializePlayerTeam()
     {
-        // Wait for network team ID to be set (clients need to wait for server)
+        // Wait one frame to ensure everything is initialized
+        yield return null;
+
+        // Wait for NetworkedSpawnManager to exist (up to 2 seconds)
+        int spawnManagerWaitCount = 0;
+        while (NetworkedSpawnManager.Instance == null && spawnManagerWaitCount < 20)
+        {
+            yield return new WaitForSeconds(0.1f);
+            spawnManagerWaitCount++;
+        }
+
+        // Server determines team based on spawn position
+        if (IsServer)
+        {
+            if (NetworkedSpawnManager.Instance != null)
+            {
+                int determinedTeam = NetworkedSpawnManager.Instance.GetTeamIDForPosition(transform.position);
+                networkTeamId.Value = determinedTeam;
+                Debug.Log($"Server assigned team ID: {determinedTeam} based on position {transform.position}");
+            }
+            else
+            {
+                Debug.LogError("⚠️ NetworkedSpawnManager.Instance is null!");
+                // Fallback: determine team based on X position
+                networkTeamId.Value = transform.position.x > 0 ? 0 : 1;
+                Debug.LogWarning($"Using fallback team assignment: {networkTeamId.Value} based on X position");
+            }
+        }
+
+        // Wait for team to be set by server (for clients)
         int waitCount = 0;
-        while (networkTeamId.Value == teamId && !IsServer && waitCount < 20)
+        while (networkTeamId.Value == teamId && waitCount < 20)
         {
             yield return new WaitForSeconds(0.1f);
             waitCount++;
         }
 
+        // Now assign team to PlayerTeamComponent
         var playerTeamComponent = GetComponent<PlayerTeamComponent>();
         if (playerTeamComponent == null)
         {
@@ -273,7 +318,7 @@ public class NetworkPlayerWrapper : NetworkBehaviour
         if (teamData != null)
         {
             playerTeamComponent.teamID = teamData.teamID;
-            Debug.Log($"✓ Player at {transform.position} assigned to {teamData.teamName} (ID: {playerTeamComponent.teamID})");
+            Debug.Log($"✓ Player assigned to {teamData.teamName} (ID: {playerTeamComponent.teamID})");
         }
         else
         {
