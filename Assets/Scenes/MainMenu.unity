@@ -119,7 +119,11 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+<<<<<<< Updated upstream
 --- !u!1 &414371155
+=======
+--- !u!1 &111594028
+>>>>>>> Stashed changes
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,6 +131,7 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
+<<<<<<< Updated upstream
   - component: {fileID: 414371156}
   m_Layer: 0
   m_Name: Team2Spawn
@@ -159,6 +164,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 441099918}
+=======
+  - component: {fileID: 111594029}
+>>>>>>> Stashed changes
   m_Layer: 0
   m_Name: Team1Spawn
   m_TagString: Untagged
@@ -166,16 +174,27 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+<<<<<<< Updated upstream
 --- !u!4 &441099918
+=======
+--- !u!4 &111594029
+>>>>>>> Stashed changes
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
+<<<<<<< Updated upstream
   m_GameObject: {fileID: 441099917}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 195, y: 0, z: 0}
+=======
+  m_GameObject: {fileID: 111594028}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 205, y: 0, z: 0}
+>>>>>>> Stashed changes
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -238,7 +257,7 @@ MonoBehaviour:
       - {fileID: 11400000, guid: 9ff83f017da848644ab14c42e7b9492a, type: 2}
     TickRate: 30
     ClientConnectionBufferTimeout: 10
-    ConnectionApproval: 0
+    ConnectionApproval: 1
     ConnectionData: 
     EnableTimeResync: 0
     TimeResyncInterval: 30
@@ -424,6 +443,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 892260756}
   m_CullTransparentMesh: 1
+--- !u!1 &1033903351
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1033903352}
+  m_Layer: 0
+  m_Name: Team2Spawn
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1033903352
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1033903351}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -195, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1102132678
 GameObject:
   m_ObjectHideFlags: 0
@@ -1143,11 +1193,19 @@ MonoBehaviour:
   team1:
     teamName: Team1
     spawnPoints:
+<<<<<<< Updated upstream
     - {fileID: 441099918}
   team2:
     teamName: Team2
     spawnPoints:
     - {fileID: 414371156}
+=======
+    - {fileID: 111594029}
+  team2:
+    teamName: Team1
+    spawnPoints:
+    - {fileID: 1033903352}
+>>>>>>> Stashed changes
   autoBalanceTeams: 1
 --- !u!4 &1637765722
 Transform:
@@ -1588,5 +1646,10 @@ SceneRoots:
   - {fileID: 1102132682}
   - {fileID: 1622506356}
   - {fileID: 1637765722}
+<<<<<<< Updated upstream
   - {fileID: 441099918}
   - {fileID: 414371156}
+=======
+  - {fileID: 111594029}
+  - {fileID: 1033903352}
+>>>>>>> Stashed changes

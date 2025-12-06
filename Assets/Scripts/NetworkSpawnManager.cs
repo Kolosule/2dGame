@@ -32,6 +32,9 @@ public class NetworkedSpawnManager : NetworkBehaviour
     private int team1PlayerCount = 0;
     private int team2PlayerCount = 0;
 
+    // Track which team each client should be on
+    private System.Collections.Generic.Dictionary<ulong, int> clientTeams = new System.Collections.Generic.Dictionary<ulong, int>();
+
     private void Awake()
     {
         // Initialize singleton FIRST before anything else
@@ -104,7 +107,7 @@ public class NetworkedSpawnManager : NetworkBehaviour
             }
         }
 
-        // Double-check that callback is registered (in case NetworkManager wasn't ready in Awake)
+        // Double-check that callback is registered
         if (NetworkManager.Singleton != null)
         {
             if (NetworkManager.Singleton.ConnectionApprovalCallback == null)
@@ -121,71 +124,115 @@ public class NetworkedSpawnManager : NetworkBehaviour
         {
             Debug.LogError("⚠️ NetworkManager.Singleton is still null in Start!");
         }
+        // 12/5/2025 AI-Tag
+        // This was created with the help of Assistant, a Unity Artificial Intelligence product.
+
+        if (team1.spawnPoints != null)
+        {
+            foreach (var sp in team1.spawnPoints)
+            {
+                if (sp != null)
+                {
+                    Debug.Log($"Spawn Point: {sp.name}, Position: {sp.position}");
+                }
+                else
+                {
+                    Debug.LogError("One of the spawn points in Team 1 is null!");
+                }
+            }
+        }
+        else
+        {
+            Debug.LogError("Team 1 spawn points array is null!");
+        }
     }
 
     private void ApprovalCheck(
         NetworkManager.ConnectionApprovalRequest request,
         NetworkManager.ConnectionApprovalResponse response)
     {
-        Debug.Log("Server: Approving player connection...");
+        Debug.Log($"Server: Approving player connection for client {request.ClientNetworkId}...");
 
         // Approve the connection
         response.Approved = true;
         response.CreatePlayerObject = true;
 
-        // Determine which team
-        string assignedTeam = autoBalanceTeams ? GetBalancedTeam() : team1.teamName;
-        Vector3 spawnPosition = GetSpawnPosition(assignedTeam);
+        // Determine which team (0 = Team1, 1 = Team2)
+        int teamId = autoBalanceTeams ? GetBalancedTeamId() : 0;
+        string assignedTeam = teamId == 0 ? team1.teamName : team2.teamName;
+
+        // Store this client's team assignment
+        clientTeams[request.ClientNetworkId] = teamId;
+
+        // Get spawn position for this team
+        Vector3 spawnPosition = GetSpawnPositionForTeam(teamId);
 
         // Set spawn position
         response.Position = spawnPosition;
         response.Rotation = Quaternion.identity;
 
-        Debug.Log($"✓ Player spawning at {spawnPosition} on {assignedTeam}");
-
-        // Store the team assignment for this player
-        // We'll set this after spawn in a different way
+        Debug.Log($"✓ Client {request.ClientNetworkId} assigned to {assignedTeam} (ID: {teamId}) at {spawnPosition}");
     }
 
-    private string GetBalancedTeam()
+    private int GetBalancedTeamId()
     {
         if (team1PlayerCount <= team2PlayerCount)
         {
             team1PlayerCount++;
-            Debug.Log($"Assigned to {team1.teamName}. Count: Team1={team1PlayerCount}, Team2={team2PlayerCount}");
-            return team1.teamName;
+            Debug.Log($"Assigned to Team1. Count: Team1={team1PlayerCount}, Team2={team2PlayerCount}");
+            return 0;
         }
         else
         {
             team2PlayerCount++;
-            Debug.Log($"Assigned to {team2.teamName}. Count: Team1={team1PlayerCount}, Team2={team2PlayerCount}");
-            return team2.teamName;
+            Debug.Log($"Assigned to Team2. Count: Team1={team1PlayerCount}, Team2={team2PlayerCount}");
+            return 1;
         }
     }
 
-    public Vector3 GetSpawnPosition(string teamName)
+    private Vector3 GetSpawnPositionForTeam(int teamId)
     {
-        TeamSpawnPoints teamSpawns = teamName == team1.teamName ? team1 : team2;
+        TeamSpawnPoints teamSpawns = teamId == 0 ? team1 : team2;
+        int teamCount = teamId == 0 ? team1PlayerCount : team2PlayerCount;
 
         if (teamSpawns.spawnPoints == null || teamSpawns.spawnPoints.Length == 0)
         {
-            Debug.LogError($"⚠️ No spawn points for {teamName}! Using Vector3.zero");
+            Debug.LogError($"⚠️ No spawn points for team {teamId}! Using Vector3.zero");
             return Vector3.zero;
         }
 
-        int teamCount = teamName == team1.teamName ? team1PlayerCount : team2PlayerCount;
-        int spawnIndex = (teamCount - 1) % teamSpawns.spawnPoints.Length;
+        int spawnIndex = teamCount % teamSpawns.spawnPoints.Length;
 
         if (teamSpawns.spawnPoints[spawnIndex] == null)
         {
-            Debug.LogError($"⚠️ Spawn point at index {spawnIndex} is null for {teamName}!");
+            Debug.LogError($"⚠️ Spawn point at index {spawnIndex} is null for team {teamId}!");
             return Vector3.zero;
         }
 
         Vector3 position = teamSpawns.spawnPoints[spawnIndex].position;
-        Debug.Log($"✓ Spawn position for {teamName}: {position} (using spawn point index {spawnIndex})");
+        Debug.Log($"✓ Spawn position for team {teamId}: {position} (using spawn point index {spawnIndex})");
 
         return position;
+    }
+
+    /// <summary>
+    /// Get the team ID that was assigned to a specific client
+    /// </summary>
+    public int GetTeamForClient(ulong clientId)
+    {
+        if (clientTeams.ContainsKey(clientId))
+        {
+            return clientTeams[clientId];
+        }
+
+        Debug.LogWarning($"No team assignment found for client {clientId}, defaulting to Team1");
+        return 0;
+    }
+
+    public Vector3 GetSpawnPosition(string teamName)
+    {
+        int teamId = teamName == team1.teamName ? 0 : 1;
+        return GetSpawnPositionForTeam(teamId);
     }
 
     /// <summary>
@@ -208,7 +255,7 @@ public class NetworkedSpawnManager : NetworkBehaviour
         if (cam != null)
         {
             cam.SetTarget(player.transform);
-            cameraFollow = cam; // Cache it for next time
+            cameraFollow = cam;
             Debug.Log($"✓ Found camera and set target to {player.name}");
         }
         else
@@ -260,4 +307,8 @@ public class NetworkedSpawnManager : NetworkBehaviour
             NetworkManager.Singleton.ConnectionApprovalCallback -= ApprovalCheck;
         }
     }
+
+
+
+
 }

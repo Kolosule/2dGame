@@ -181,6 +181,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
   stats: {fileID: 11400000, guid: 8dc8b0c282a923d42b38a8e1b42121f7, type: 2}
+  coinPrefab: {fileID: 5639303580997766304, guid: f8d416c37ab27d644866d2455c7533d9, type: 3}
+  coinDropCount: 3
 --- !u!114 &1057860978440285187
 MonoBehaviour:
   m_ObjectHideFlags: 0
