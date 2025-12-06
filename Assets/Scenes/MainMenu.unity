@@ -176,12 +176,7 @@ GameObject:
   - component: {fileID: 441099918}
 =======
   - component: {fileID: 111594029}
->>>>>>> Stashed changes
-=======
-  - component: {fileID: 111594029}
->>>>>>> Stashed changes
-=======
-  - component: {fileID: 111594029}
+
 >>>>>>> Stashed changes
   m_Layer: 0
   m_Name: Team1Spawn
