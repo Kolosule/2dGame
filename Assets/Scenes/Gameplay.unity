@@ -3605,7 +3605,7 @@ MonoBehaviour:
   Target: {fileID: 0}
   offset: {x: 0, y: 0, z: -10}
   deadzoneSize: {x: 1, y: 1}
-  zoomOutSize: 10
+  zoomOutSize: 15
   lookAheadDistance: 2
   lookAheadSpeed: 5
   shakeDuration: 0
