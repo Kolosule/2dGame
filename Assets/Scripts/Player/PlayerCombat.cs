@@ -6,8 +6,8 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private PlayerStats stats;
     [SerializeField] private LayerMask attackableLayer;
     [SerializeField] private int damageAmount = 10;   // base damage
-    [SerializeField] private float knockbackStrength = 5f;
-    [SerializeField] private float knockbackUpward = 2f;
+    [SerializeField] private float knockbackStrength = 10f; // Horizontal knockback force
+    [SerializeField] private float knockbackUpward = 3f;    // Upward knockback force
 
     [Header("Attack Points")]
     [SerializeField] private Transform sideAttackPoint;
@@ -60,6 +60,7 @@ public class PlayerCombat : MonoBehaviour
         }
     }
 
+    // ========== FIX #3: PROPER COLLISION DETECTION ==========
     private void PerformAttack(Transform attackPoint, Vector2 attackArea)
     {
         // Apply territorial damage modifier
@@ -77,24 +78,35 @@ public class PlayerCombat : MonoBehaviour
             Debug.Log($"Player attacking in {territoryStatus}: {damageAmount} → {finalDamage} damage (×{damageModifier:F2})");
         }
 
-        // Raycast forward to detect enemy
-        RaycastHit2D hit = Physics2D.Raycast(transform.position, transform.right, 1.5f);
+        // FIX: Use OverlapBoxAll to detect enemies in the attack area
+        Collider2D[] hitEnemies = Physics2D.OverlapBoxAll(attackPoint.position, attackArea, 0f, attackableLayer);
 
-        if (hit.collider != null)
+        Debug.Log($"Attack detected {hitEnemies.Length} potential targets at {attackPoint.position}");
+
+        foreach (Collider2D hit in hitEnemies)
         {
-            Enemy enemy = hit.collider.GetComponent<Enemy>();
+            Enemy enemy = hit.GetComponent<Enemy>();
             if (enemy != null)
             {
-                // Calculate knockback relative to player facing direction
-                Vector2 knockbackForce = new Vector2(transform.localScale.x * knockbackStrength, knockbackUpward);
+                // Calculate knockback direction based on player facing
+                Vector2 knockbackDirection = new Vector2(transform.localScale.x, 0).normalized;
+                Vector2 knockbackForce = new Vector2(knockbackDirection.x * knockbackStrength, knockbackUpward);
 
-                // Get hit point (use raycast hit point if available)
-                Vector2 hitPoint = hit.point;
+                // Get hit point (center of the enemy collider)
+                Vector2 hitPoint = hit.bounds.center;
 
-                // Apply damage with knockback and hit point
+                // Apply damage with knockback
                 enemy.TakeDamage(finalDamage, knockbackForce, hitPoint);
+                Debug.Log($"Player dealt {finalDamage} damage to {enemy.name}");
+            }
+            else
+            {
+                Debug.Log($"Hit {hit.name} but it has no Enemy component");
             }
         }
+
+        // Visual feedback - draw the attack area briefly
+        Debug.DrawLine(attackPoint.position - (Vector3)attackArea / 2, attackPoint.position + (Vector3)attackArea / 2, Color.red, 0.2f);
     }
 
     private bool IsGrounded()
