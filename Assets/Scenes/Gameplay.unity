@@ -3603,9 +3603,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CameraFollow
   FollowSpeed: 20
   Target: {fileID: 0}
-  offset: {x: 0, y: 0, z: -10}
+  offset: {x: 0, y: 0, z: 0}
   deadzoneSize: {x: 1, y: 1}
-  zoomOutSize: 15
+  zoomOutSize: 10
   lookAheadDistance: 2
   lookAheadSpeed: 5
   shakeDuration: 0
@@ -8024,8 +8024,8 @@ MonoBehaviour:
   team1Data: {fileID: 11400000, guid: 9517ac3531343d54c985383046ac7d9d, type: 2}
   team2Data: {fileID: 11400000, guid: 00dea736a97d2eb45b12b147d8455094, type: 2}
   team3Data: {fileID: 11400000, guid: 65bb79ee2921af84e94956759ba60ca9, type: 2}
-  minDamageMultiplier: 0.5
-  maxDamageMultiplier: 1.5
+  minDamageMultiplier: 0.75
+  maxDamageMultiplier: 1.25
   aiUsesTerritory: 0
 --- !u!4 &1213272658
 Transform:
