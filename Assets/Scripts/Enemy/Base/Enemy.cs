@@ -5,6 +5,11 @@ public class Enemy : MonoBehaviour
     [SerializeField] private EnemyStats stats;
     private int currentHealth;
     private EnemyTeamComponent teamComponent;
+    private float lastAttackTime = -999f; // Allow first attack immediately
+
+    // Knockback tracking
+    private bool isKnockedBack = false;
+    private float knockbackEndTime = 0f;
 
     void Awake()
     {
@@ -25,10 +30,21 @@ public class Enemy : MonoBehaviour
 
         currentHealth -= finalDamage;
 
+        // Apply knockback
         Rigidbody2D rb = GetComponent<Rigidbody2D>();
-        if (rb != null)
+        if (rb != null && knockbackForce.magnitude > 0.1f)
         {
+            // Stop current movement
+            rb.linearVelocity = Vector2.zero;
+
+            // Apply knockback force
             rb.AddForce(knockbackForce, ForceMode2D.Impulse);
+
+            // Flag as knocked back for a short duration
+            isKnockedBack = true;
+            knockbackEndTime = Time.time + 0.3f; // 0.3 second knockback stun
+
+            Debug.Log($"{stats.enemyName} knocked back by {knockbackForce}");
         }
 
         Debug.Log($"{stats.enemyName} took {finalDamage} damage (base: {amount}, modifier: {defenseModifier:F2}x) at {hitPoint}. Health = {currentHealth}");
@@ -39,6 +55,19 @@ public class Enemy : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Check if enemy is currently in knockback state (for AI to pause movement)
+    /// </summary>
+    public bool IsKnockedBack()
+    {
+        if (isKnockedBack && Time.time >= knockbackEndTime)
+        {
+            isKnockedBack = false;
+        }
+        return isKnockedBack;
+    }
+
+    // ========== FIX: ADD ATTACK COOLDOWN ==========
     public void AttackPlayer(PlayerStatsHandler player)
     {
         if (player == null)
@@ -47,10 +76,17 @@ public class Enemy : MonoBehaviour
             return;
         }
 
+        // Check attack cooldown
+        if (Time.time - lastAttackTime < stats.attackCooldown)
+        {
+            return; // Still on cooldown
+        }
+
         if (teamComponent == null)
         {
             Debug.LogWarning($"{stats.enemyName} has no team component! Using base damage.");
             player.TakeDamage(stats.attackDamage);
+            lastAttackTime = Time.time;
             return;
         }
 
@@ -59,13 +95,13 @@ public class Enemy : MonoBehaviour
         int finalDamage = Mathf.RoundToInt(stats.attackDamage * damageModifier);
 
         player.TakeDamage(finalDamage);
+        lastAttackTime = Time.time; // Record attack time
 
         Debug.Log($"{stats.enemyName} (Team: {teamComponent.teamID}, Territory: {teamComponent.territorialAdvantage:F2}) attacked player for {finalDamage} damage (base: {stats.attackDamage}, modifier: {damageModifier:F2}x)!");
     }
 
     private void Die()
     {
-
         DropCoins();
         Debug.Log($"{stats.enemyName} died!");
         Destroy(gameObject);
@@ -76,11 +112,12 @@ public class Enemy : MonoBehaviour
 
     private void DropCoins()
     {
+        if (coinPrefab == null) return;
+
         for (int i = 0; i < coinDropCount; i++)
         {
             Vector3 spawnPos = transform.position + new Vector3(Random.Range(-0.5f, 0.5f), Random.Range(-0.5f, 0.5f), 0);
             Instantiate(coinPrefab, spawnPos, Quaternion.identity);
         }
     }
-
 }

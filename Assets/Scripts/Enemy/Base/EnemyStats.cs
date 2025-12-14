@@ -1,17 +1,20 @@
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "EnemyStats", menuName = "Game/Enemy Stats")]
+[CreateAssetMenu(fileName = "NewEnemyStats", menuName = "Enemy/Stats")]
 public class EnemyStats : ScriptableObject
 {
-    [Header("Base Stats")]
-    public string enemyName;
-    public int maxHealth;
-    public int attackDamage;
-    public float attackCooldown;
-    public float moveSpeed;
+    [Header("Identity")]
+    public string enemyName = "Enemy";
 
-    [Header("Scaling")]
-    public int level; // 1–5
+    [Header("Combat Stats")]
+    public int maxHealth = 10;
+    public int attackDamage = 1;
+    public float attackCooldown = 1f; // Time between attacks in seconds
 
-    public string enemyTeam;
+    [Header("Movement")]
+    public float moveSpeed = 3f;
+
+    [Header("Progression")]
+    public int level = 1;
+    public string enemyTeam = "Team3";
 }

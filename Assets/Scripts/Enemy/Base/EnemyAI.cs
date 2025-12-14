@@ -25,6 +25,12 @@ public class EnemyAI : MonoBehaviour
 
     void Update()
     {
+        // ========== FIX: Don't move during knockback ==========
+        if (enemy != null && enemy.IsKnockedBack())
+        {
+            return; // Skip all AI logic while being knocked back
+        }
+
         if (lockedTarget != null)
         {
             ChaseTarget();

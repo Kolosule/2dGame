@@ -21,4 +21,4 @@ MonoBehaviour:
   attackDamage: 1
   attackForce: 1
   attackCooldown: 0.3
-  maxHealth: 1000
+  maxHealth: 100
