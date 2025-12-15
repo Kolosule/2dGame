@@ -61,6 +61,7 @@ public class PlayerCombat : MonoBehaviour
         }
     }
 
+    // ========== FIX #3: PROPER COLLISION DETECTION ==========
     private void PerformAttack(Transform attackPoint, Vector2 attackArea)
     {
         // Apply territorial damage modifier
@@ -104,6 +105,9 @@ public class PlayerCombat : MonoBehaviour
                 Debug.Log($"Hit {enemy.name} for {finalDamage} damage!");
             }
         }
+
+        // Visual feedback - draw the attack area briefly
+        Debug.DrawLine(attackPoint.position - (Vector3)attackArea / 2, attackPoint.position + (Vector3)attackArea / 2, Color.red, 0.2f);
     }
 
     private bool IsGrounded()

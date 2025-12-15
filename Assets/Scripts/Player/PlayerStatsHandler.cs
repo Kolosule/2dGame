@@ -44,6 +44,7 @@ public class PlayerStatsHandler : MonoBehaviour
         currentHealth -= amount;
         Debug.Log($"Player took {amount} damage. Health = {currentHealth}/{stats.maxHealth}");
 
+        // FIX: Check if health has dropped to 0 or below
         if (currentHealth <= 0)
         {
             currentHealth = 0;

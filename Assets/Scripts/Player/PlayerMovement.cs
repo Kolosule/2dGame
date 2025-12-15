@@ -113,15 +113,9 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
+    // ========== FIX #1: HORIZONTAL-ONLY DASH ==========
     private IEnumerator Dash(float xAxis, float yAxis)
     {
-        // Block pure vertical input
-        if (xAxis == 0 && yAxis != 0)
-        {
-            EndDash();
-            yield break;
-        }
-
         canDash = false;
         isDashing = true;
         anim.SetTrigger("Dashing");
@@ -132,11 +126,15 @@ public class PlayerMovement : MonoBehaviour
         rb.gravityScale = 0f;
         rb.linearDamping = 0f;
 
-        Vector2 dashDir = new Vector2(transform.localScale.x, 0);
-        if (xAxis != 0 || yAxis != 0)
+        // FORCE HORIZONTAL DASH ONLY - completely ignore yAxis
+        Vector2 dashDir = new Vector2(transform.localScale.x, 0); // Default to facing direction
+
+        // If player is pressing left/right, use that direction
+        if (xAxis != 0)
         {
-            dashDir = new Vector2(xAxis, yAxis).normalized;
+            dashDir = new Vector2(xAxis, 0);
         }
+        // Note: yAxis is completely ignored - no vertical dashing possible
 
         rb.linearVelocity = dashDir * stats.dashSpeed;
 
@@ -167,8 +165,12 @@ public class PlayerMovement : MonoBehaviour
         while (elapsed < stats.dashCooldown)
         {
             elapsed += Time.deltaTime;
+
             if (dashCooldownBar != null)
-                dashCooldownBar.fillAmount = 1f - (elapsed / stats.dashCooldown); // shrink
+            {
+                dashCooldownBar.fillAmount = 1f - (elapsed / stats.dashCooldown);
+            }
+
             yield return null;
         }
 
@@ -176,55 +178,40 @@ public class PlayerMovement : MonoBehaviour
 
         if (dashCooldownBar != null)
         {
-            dashCooldownBar.fillAmount = 1f; // instantly refill when ready
-            dashCooldownBar.gameObject.SetActive(false); // hide if you prefer
+            dashCooldownBar.fillAmount = 1f; // show full = ready
+            dashCooldownBar.gameObject.SetActive(false);
         }
-    }
 
-    private bool IsGrounded()
-    {
-        return Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+        Debug.Log("Dash ready!");
     }
 
     private void UpdateJumpVariables()
     {
-        bool grounded = IsGrounded();
+        bool isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
 
-        if (grounded)
+        if (isGrounded)
         {
-            remainingAirJumps = stats.maxAirJumps;
             coyoteCounter = coyoteTimeFrames;
-
-            if (jumpBufferCounter > 0)
-            {
-                Jump();
-            }
+            remainingAirJumps = stats.maxAirJumps;
         }
         else
         {
-            if (coyoteCounter > 0) coyoteCounter--;
+            coyoteCounter--;
         }
 
         if (jumpBufferCounter > 0)
         {
-            if (!grounded && coyoteCounter > 0)
+            jumpBufferCounter--;
+
+            if (coyoteCounter > 0)
             {
                 Jump();
             }
-            else if (!grounded && coyoteCounter <= 0 && remainingAirJumps > 0)
+            else if (remainingAirJumps > 0)
             {
                 remainingAirJumps--;
                 Jump();
             }
         }
-
-        if (jumpBufferCounter > 0) jumpBufferCounter--;
-    }
-
-    private void OnDrawGizmosSelected()
-    {
-        if (groundCheck == null) return;
-        Gizmos.color = Color.green;
-        Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
     }
 }
