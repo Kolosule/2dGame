@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 18c09048ad1f4234dab66666de18c739, type: 3}
-  m_Name: EnemyStats_2
+  m_Name: EnemyStats_7
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
-  enemyName: Orange
-  maxHealth: 50
-  attackDamage: 10
+  enemyName: Violet
+  maxHealth: 25
+  attackDamage: 5
   attackCooldown: 1
-  moveSpeed: 10
-  level: 2
+  moveSpeed: 5
+  level: 7
   enemyTeam: 

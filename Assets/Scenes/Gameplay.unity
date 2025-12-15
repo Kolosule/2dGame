@@ -579,6 +579,11 @@ MonoBehaviour:
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 0}
+  patrolPointB: {fileID: 0}
+  useRelativePatrolPoints: 0
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!1 &64518173
 GameObject:
@@ -1157,11 +1162,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 8cf9ae77686ca8049889c0de36289053, type: 3}
+  enemyPrefab: {fileID: 8054919171351746083, guid: 6aee8894b90824c478e5a67fe9aee3f7, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 1432219432}
+  patrolPointB: {fileID: 1291755008}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &90954303
 Transform:
@@ -1177,6 +1187,37 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 167520092}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &141301639
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 141301640}
+  m_Layer: 0
+  m_Name: VioletPatrolA
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &141301640
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 141301639}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 149.3, y: 27.34, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &154701844
 GameObject:
@@ -1725,6 +1766,37 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1313010105}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &173770744
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 173770745}
+  m_Layer: 0
+  m_Name: IndigoPatrolA
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &173770745
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 173770744}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 99.7, y: 37.7, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &212223987
 GameObject:
@@ -3125,11 +3197,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 5f1590081fe451f4587e4975ae395d03, type: 3}
+  enemyPrefab: {fileID: 8054919171351746083, guid: 38d0a71c6db6ab74dbcd0c1cc8927de5, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 0}
+  patrolPointB: {fileID: 0}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &408978074
 Transform:
@@ -3622,7 +3699,7 @@ GameObject:
   - component: {fileID: 526135364}
   - component: {fileID: 526135363}
   m_Layer: 0
-  m_Name: EnemySpawnerPurple (1)
+  m_Name: EnemySpawnerViolet (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3640,11 +3717,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 5f1590081fe451f4587e4975ae395d03, type: 3}
+  enemyPrefab: {fileID: 8054919171351746083, guid: c36c73ff4e92a14478803a46af8932ef, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 141301640}
+  patrolPointB: {fileID: 854778410}
+  useRelativePatrolPoints: 0
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &526135364
 Transform:
@@ -5192,6 +5274,11 @@ MonoBehaviour:
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 0}
+  patrolPointB: {fileID: 0}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &731959679
 Transform:
@@ -5242,6 +5329,11 @@ MonoBehaviour:
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 0}
+  patrolPointB: {fileID: 0}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &736981107
 Transform:
@@ -5806,6 +5898,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1313010105}
   m_LocalEulerAnglesHint: {x: 179.759, y: 0, z: 0}
+--- !u!1 &802065236
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 802065237}
+  m_Layer: 0
+  m_Name: IndigoPatrolB
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &802065237
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 802065236}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 134.68, y: -19, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &827931939
 GameObject:
   m_ObjectHideFlags: 0
@@ -6217,6 +6340,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1313010105}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &854778409
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 854778410}
+  m_Layer: 0
+  m_Name: VioletPatrolB
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &854778410
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 854778409}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 176.94, y: 27.7, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &913619486
 GameObject:
   m_ObjectHideFlags: 0
@@ -6525,6 +6679,11 @@ MonoBehaviour:
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 0}
+  patrolPointB: {fileID: 0}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &917896195
 Transform:
@@ -7255,11 +7414,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 5f1590081fe451f4587e4975ae395d03, type: 3}
+  enemyPrefab: {fileID: 8054919171351746083, guid: 38d0a71c6db6ab74dbcd0c1cc8927de5, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 173770745}
+  patrolPointB: {fileID: 802065237}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &1022191733
 Transform:
@@ -7971,8 +8135,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1208211533}
   m_Layer: 0
-  m_Name: Team2_BaseSpawner
-  m_TagString: Untagged
+  m_Name: Team2Spawn
+  m_TagString: Team2Spawn
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -8179,6 +8343,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1313010105}
   m_LocalEulerAnglesHint: {x: 179.759, y: 0, z: 0}
+--- !u!1 &1291755007
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1291755008}
+  m_Layer: 0
+  m_Name: BluePatrolB
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1291755008
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1291755007}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 85.4, y: -29.07, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1313010104
 GameObject:
   m_ObjectHideFlags: 0
@@ -8324,6 +8519,11 @@ MonoBehaviour:
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 0}
+  patrolPointB: {fileID: 0}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &1325049997
 Transform:
@@ -8487,8 +8687,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1356165867}
   m_Layer: 0
-  m_Name: Team1_BaseSpawner
-  m_TagString: Untagged
+  m_Name: Team1Spawn
+  m_TagString: Team1Spawn
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -8816,6 +9016,11 @@ MonoBehaviour:
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 0}
+  patrolPointB: {fileID: 0}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &1376949269
 Transform:
@@ -9106,6 +9311,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1313010105}
   m_LocalEulerAnglesHint: {x: 179.759, y: 0, z: 0}
+--- !u!1 &1432219431
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1432219432}
+  m_Layer: 0
+  m_Name: BluePatrolA
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1432219432
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1432219431}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 50.4, y: 48.1, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1444243366
 GameObject:
   m_ObjectHideFlags: 0
@@ -10465,6 +10701,11 @@ MonoBehaviour:
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 0}
+  patrolPointB: {fileID: 0}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &1720206372
 Transform:
@@ -10510,11 +10751,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 8cf9ae77686ca8049889c0de36289053, type: 3}
+  enemyPrefab: {fileID: 8054919171351746083, guid: 6aee8894b90824c478e5a67fe9aee3f7, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 1432219432}
+  patrolPointB: {fileID: 1291755008}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &1723887608
 Transform:
@@ -11281,6 +11527,11 @@ MonoBehaviour:
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 0}
+  patrolPointB: {fileID: 0}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &1891720200
 Transform:
@@ -12037,6 +12288,9 @@ MonoBehaviour:
     teamName: Team2
     spawnPoints:
     - {fileID: 1208211533}
+  team1SpawnTag: Team1Spawn
+  team2SpawnTag: Team2Spawn
+  useSpawnTags: 1
   autoBalanceTeams: 1
 --- !u!114 &1986279254
 MonoBehaviour:
@@ -12542,7 +12796,7 @@ GameObject:
   - component: {fileID: 2084827508}
   - component: {fileID: 2084827507}
   m_Layer: 0
-  m_Name: EnemySpawnerPurple
+  m_Name: EnemySpawnerViolet
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -12560,11 +12814,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 5f1590081fe451f4587e4975ae395d03, type: 3}
+  enemyPrefab: {fileID: 8054919171351746083, guid: c36c73ff4e92a14478803a46af8932ef, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
   territorialAdvantage: 0
+  patrolPointA: {fileID: 141301640}
+  patrolPointB: {fileID: 854778410}
+  useRelativePatrolPoints: 1
+  relativePointA: {x: -5, y: 0}
+  relativePointB: {x: 5, y: 0}
   showGizmo: 1
 --- !u!4 &2084827508
 Transform:
@@ -12874,3 +13133,9 @@ SceneRoots:
   - {fileID: 1653266330}
   - {fileID: 159672158}
   - {fileID: 2034682762}
+  - {fileID: 141301640}
+  - {fileID: 854778410}
+  - {fileID: 173770745}
+  - {fileID: 802065237}
+  - {fileID: 1432219432}
+  - {fileID: 1291755008}

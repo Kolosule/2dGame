@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: EnemyStats_1
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Red
-  maxHealth: 10
-  attackDamage: 1
+  maxHealth: 25
+  attackDamage: 5
   attackCooldown: 1
-  moveSpeed: 10
+  moveSpeed: 5
   level: 1
   enemyTeam: 

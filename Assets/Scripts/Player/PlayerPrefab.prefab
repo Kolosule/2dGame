@@ -370,8 +370,8 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 128
   damageAmount: 25
-  knockbackStrength: 100
-  knockbackUpward: 100
+  knockbackStrength: 10
+  knockbackUpward: 5
   sideAttackPoint: {fileID: 8846297479289465317}
   upAttackPoint: {fileID: 3389257580738603586}
   downAttackPoint: {fileID: 598472603001116420}

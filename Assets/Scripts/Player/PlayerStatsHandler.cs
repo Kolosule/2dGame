@@ -1,17 +1,20 @@
 ﻿using UnityEngine;
+using Unity.Netcode;
 
 public class PlayerStatsHandler : MonoBehaviour
 {
-    [SerializeField] private PlayerStats stats; // reference to your ScriptableObject
+    [SerializeField] private PlayerStats stats;
 
     private float currentHealth;
     private float lastAttackTime;
-    private int playerID = -1; // Track this player's ID
-    private bool isDead = false; // Track if player is dead
+    private bool isDead = false;
+    private NetworkObject networkObject;
+    private int playerID = -1; // Track player ID for MultiplayerRespawnManager
 
     void Awake()
     {
         currentHealth = stats.maxHealth;
+        networkObject = GetComponent<NetworkObject>();
         Debug.Log($"Player initialized with {currentHealth} health");
     }
 
@@ -24,14 +27,12 @@ public class PlayerStatsHandler : MonoBehaviour
         Debug.Log($"Player ID set to: {playerID}");
     }
 
-    // ========== FIX #2: PROPER DEATH CHECK ==========
-    // Called when the player takes damage
     public void TakeDamage(float amount)
     {
         // Don't take damage if already dead
         if (isDead) return;
 
-        // Apply defensive territorial modifier
+        // Apply defensive territorial modifier if available
         PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
         if (teamComponent != null)
         {
@@ -46,12 +47,11 @@ public class PlayerStatsHandler : MonoBehaviour
         // FIX: Check if health has dropped to 0 or below
         if (currentHealth <= 0)
         {
-            currentHealth = 0; // Clamp to 0
+            currentHealth = 0;
             Die();
         }
     }
 
-    // Called when the player attacks an enemy
     public void Attack(Enemy enemy)
     {
         if (Time.time - lastAttackTime < stats.attackCooldown) return;
@@ -68,7 +68,7 @@ public class PlayerStatsHandler : MonoBehaviour
                 Debug.Log($"Player attack modified by territory: {damageModifier:F2}x");
             }
 
-            // If your Enemy has the 3-argument TakeDamage, pass knockback + hitPoint
+            // Apply damage with knockback
             Vector2 knockbackForce = new Vector2(transform.localScale.x * stats.attackForce, 2f);
             Vector2 hitPoint = enemy.transform.position;
 
@@ -106,24 +106,14 @@ public class PlayerStatsHandler : MonoBehaviour
             sprite.color = color;
         }
 
-        // Trigger respawn after short delay
+        // Trigger respawn after 2 seconds
         Invoke(nameof(Respawn), 2f);
     }
 
     private void Respawn()
     {
-        // Try to find MultiplayerRespawnManager first
-        MultiplayerRespawnManager respawnManager = FindObjectOfType<MultiplayerRespawnManager>();
-
-        if (respawnManager != null && playerID >= 0)
-        {
-            // Use multiplayer respawn if available
-            respawnManager.RespawnPlayer(playerID);
-            return;
-        }
-
-        // Simple fallback respawn - just reset the player
-        Debug.Log("Using simple respawn (MultiplayerRespawnManager not found)");
+        Debug.Log("=== RESPAWN DEBUG START ===");
+        Debug.Log("Respawning player...");
 
         isDead = false;
         currentHealth = stats.maxHealth;
@@ -144,30 +134,89 @@ public class PlayerStatsHandler : MonoBehaviour
             sprite.color = color;
         }
 
-        // Move to spawn point (try to find PlayerTeamComponent for team spawn)
-        PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-        if (teamComponent != null && TeamManager.Instance != null)
+        // OPTION 1: Use MultiplayerRespawnManager if available
+        MultiplayerRespawnManager respawnManager = FindObjectOfType<MultiplayerRespawnManager>();
+        Debug.Log($"MultiplayerRespawnManager found: {respawnManager != null}, PlayerID: {playerID}");
+
+        if (respawnManager != null && playerID >= 0)
         {
-            TeamData teamData = TeamManager.Instance.GetTeamData(teamComponent.teamID);
-            if (teamData != null)
+            respawnManager.RespawnPlayer(playerID);
+            Debug.Log($"Using MultiplayerRespawnManager to respawn player {playerID}");
+            Debug.Log("=== RESPAWN DEBUG END ===");
+            return;
+        }
+
+        // OPTION 2: NETWORK MODE - Use NetworkedSpawnManager if available
+        Debug.Log($"NetworkedSpawnManager.Instance: {NetworkedSpawnManager.Instance != null}");
+        Debug.Log($"NetworkObject: {networkObject != null}");
+
+        if (NetworkedSpawnManager.Instance != null && networkObject != null)
+        {
+            // IMPORTANT: Refresh spawn points before getting position
+            Debug.Log("Calling RefreshSpawnPoints...");
+            NetworkedSpawnManager.Instance.RefreshSpawnPoints();
+
+            // Get spawn position from the spawner based on team
+            PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
+            Debug.Log($"PlayerTeamComponent found: {teamComponent != null}");
+
+            if (teamComponent != null)
             {
-                transform.position = teamData.basePosition;
-                Debug.Log($"Respawned at team base: {teamData.basePosition}");
+                Debug.Log($"Player teamID: {teamComponent.teamID}");
+                Vector3 spawnPos = NetworkedSpawnManager.Instance.GetSpawnPosition(teamComponent.teamID);
+                Debug.Log($"Got spawn position from NetworkedSpawnManager: {spawnPos}");
+                transform.position = spawnPos;
+                Debug.Log($"Network respawn at team spawn: {spawnPos}");
+                Debug.Log("=== RESPAWN DEBUG END ===");
+                return;
             }
         }
 
-        Debug.Log($"Player respawned with {currentHealth} health");
+        // OPTION 3: STANDALONE MODE - Try to respawn at team base if available
+        Debug.Log($"TeamManager.Instance: {TeamManager.Instance != null}");
+
+        PlayerTeamComponent teamComp = GetComponent<PlayerTeamComponent>();
+        Debug.Log($"PlayerTeamComponent (standalone check): {teamComp != null}");
+
+        if (teamComp != null && TeamManager.Instance != null)
+        {
+            Debug.Log($"Getting team data for: {teamComp.teamID}");
+            TeamData teamData = TeamManager.Instance.GetTeamData(teamComp.teamID);
+            Debug.Log($"TeamData found: {teamData != null}");
+
+            if (teamData != null)
+            {
+                Debug.Log($"Team base position: {teamData.basePosition}");
+                transform.position = teamData.basePosition;
+                Debug.Log($"Respawned at team base: {teamData.basePosition}");
+                Debug.Log("=== RESPAWN DEBUG END ===");
+                return;
+            }
+            else
+            {
+                Debug.LogError($"Could not find TeamData for teamID: '{teamComp.teamID}'");
+            }
+        }
+
+        // Fallback: respawn at current position
+        Debug.LogWarning("All respawn methods failed! Using fallback (current position)");
+        Debug.Log($"Current position: {transform.position}");
+        Debug.Log("=== RESPAWN DEBUG END ===");
     }
 
-    // Public method to get current health (useful for UI)
+    // Public getters for UI
     public float GetCurrentHealth()
     {
         return currentHealth;
     }
 
-    // Public method to get max health
     public float GetMaxHealth()
     {
         return stats.maxHealth;
+    }
+
+    public bool IsDead()
+    {
+        return isDead;
     }
 }
