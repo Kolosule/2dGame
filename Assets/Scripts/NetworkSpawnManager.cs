@@ -3,7 +3,8 @@ using UnityEngine;
 
 /// <summary>
 /// Handles spawn positions for networked players
-/// SETUP: Attach this to a GameObject in your Gameplay scene
+/// SETUP: Attach this to a GameObject in your MainMenu scene
+/// Spawn points will be found automatically in the Gameplay scene
 /// </summary>
 public class NetworkedSpawnManager : NetworkBehaviour
 {
@@ -16,7 +17,7 @@ public class NetworkedSpawnManager : NetworkBehaviour
     public class TeamSpawnPoints
     {
         public string teamName = "Team1";
-        [Tooltip("Create empty GameObjects in your scene and drag them here")]
+        [Tooltip("Spawn points will be found by tag - leave empty if using tags")]
         public Transform[] spawnPoints;
     }
 
@@ -25,6 +26,13 @@ public class NetworkedSpawnManager : NetworkBehaviour
 
     [Header("Team 2 Spawn Setup")]
     [SerializeField] private TeamSpawnPoints team2;
+
+    [Header("Spawn Point Tags (Alternative to manual assignment)")]
+    [Tooltip("Tag to find Team1 spawn points (e.g. 'Team1Spawn')")]
+    [SerializeField] private string team1SpawnTag = "Team1Spawn";
+    [Tooltip("Tag to find Team2 spawn points (e.g. 'Team2Spawn')")]
+    [SerializeField] private string team2SpawnTag = "Team2Spawn";
+    [SerializeField] private bool useSpawnTags = true;
 
     [Header("Settings")]
     [SerializeField] private bool autoBalanceTeams = true;
@@ -80,49 +88,86 @@ public class NetworkedSpawnManager : NetworkBehaviour
             }
         }
 
+        RefreshSpawnPoints();
+    }
+
+    /// <summary>
+    /// Find spawn points in the current scene (call this when Gameplay scene loads)
+    /// </summary>
+    public void RefreshSpawnPoints()
+    {
+        Debug.Log("=== Refreshing Spawn Points ===");
+
+        if (useSpawnTags)
+        {
+            // Find spawn points by tag
+            GameObject[] team1Objects = GameObject.FindGameObjectsWithTag(team1SpawnTag);
+            if (team1Objects.Length > 0)
+            {
+                team1.spawnPoints = new Transform[team1Objects.Length];
+                for (int i = 0; i < team1Objects.Length; i++)
+                {
+                    team1.spawnPoints[i] = team1Objects[i].transform;
+                }
+                Debug.Log($"✓ Found {team1.spawnPoints.Length} Team1 spawn points by tag '{team1SpawnTag}'");
+            }
+            else
+            {
+                Debug.LogWarning($"⚠️ No GameObjects found with tag '{team1SpawnTag}'");
+            }
+
+            GameObject[] team2Objects = GameObject.FindGameObjectsWithTag(team2SpawnTag);
+            if (team2Objects.Length > 0)
+            {
+                team2.spawnPoints = new Transform[team2Objects.Length];
+                for (int i = 0; i < team2Objects.Length; i++)
+                {
+                    team2.spawnPoints[i] = team2Objects[i].transform;
+                }
+                Debug.Log($"✓ Found {team2.spawnPoints.Length} Team2 spawn points by tag '{team2SpawnTag}'");
+            }
+            else
+            {
+                Debug.LogWarning($"⚠️ No GameObjects found with tag '{team2SpawnTag}'");
+            }
+        }
+
         // Validate spawn points
+        ValidateSpawnPoints();
+    }
+
+    private void ValidateSpawnPoints()
+    {
         if (team1.spawnPoints == null || team1.spawnPoints.Length == 0)
         {
-            Debug.LogError("⚠️ NO SPAWN POINTS SET FOR TEAM 1! Add spawn points in Inspector.");
+            Debug.LogError("⚠️ NO SPAWN POINTS SET FOR TEAM 1!");
         }
         else
         {
-            Debug.Log($"✓ Team 1 has {team1.spawnPoints.Length} spawn point(s) at positions:");
+            Debug.Log($"✓ Team 1 has {team1.spawnPoints.Length} spawn point(s):");
             foreach (var sp in team1.spawnPoints)
             {
-                if (sp != null) Debug.Log($"  - {sp.name}: {sp.position}");
+                if (sp != null)
+                    Debug.Log($"  - {sp.name}: {sp.position}");
+                else
+                    Debug.LogError("  - NULL SPAWN POINT!");
             }
         }
 
         if (team2.spawnPoints == null || team2.spawnPoints.Length == 0)
         {
-            Debug.LogError("⚠️ NO SPAWN POINTS SET FOR TEAM 2! Add spawn points in Inspector.");
+            Debug.LogError("⚠️ NO SPAWN POINTS SET FOR TEAM 2!");
         }
         else
         {
-            Debug.Log($"✓ Team 2 has {team2.spawnPoints.Length} spawn point(s) at positions:");
+            Debug.Log($"✓ Team 2 has {team2.spawnPoints.Length} spawn point(s):");
             foreach (var sp in team2.spawnPoints)
             {
-                if (sp != null) Debug.Log($"  - {sp.name}: {sp.position}");
+                if (sp != null)
+                    Debug.Log($"  - {sp.name}: {sp.position}");
+                else
+                    Debug.LogError("  - NULL SPAWN POINT!");
             }
-        }
-
-        // Double-check that callback is registered
-        if (NetworkManager.Singleton != null)
-        {
-            if (NetworkManager.Singleton.ConnectionApprovalCallback == null)
-            {
-                NetworkManager.Singleton.ConnectionApprovalCallback += ApprovalCheck;
-                Debug.Log("✓ Connection approval callback registered in Start (fallback)");
-            }
-            else
-            {
-                Debug.Log("✓ Connection approval callback already registered");
-            }
-        }
-        else
-        {
-            Debug.LogError("⚠️ NetworkManager.Singleton is still null in Start!");
         }
     }
 
@@ -131,6 +176,9 @@ public class NetworkedSpawnManager : NetworkBehaviour
         NetworkManager.ConnectionApprovalResponse response)
     {
         Debug.Log($"Server: Approving player connection for client {request.ClientNetworkId}...");
+
+        // Refresh spawn points in case scene just loaded
+        RefreshSpawnPoints();
 
         // Approve the connection
         response.Approved = true;
@@ -171,6 +219,14 @@ public class NetworkedSpawnManager : NetworkBehaviour
 
     private Vector3 GetSpawnPositionForTeam(int teamId)
     {
+        // Refresh spawn points before getting position
+        if (team1.spawnPoints == null || team1.spawnPoints.Length == 0 ||
+            team2.spawnPoints == null || team2.spawnPoints.Length == 0)
+        {
+            Debug.LogWarning("Spawn points not initialized, refreshing...");
+            RefreshSpawnPoints();
+        }
+
         TeamSpawnPoints teamSpawns = teamId == 0 ? team1 : team2;
         int teamCount = teamId == 0 ? team1PlayerCount : team2PlayerCount;
 
@@ -194,9 +250,6 @@ public class NetworkedSpawnManager : NetworkBehaviour
         return position;
     }
 
-    /// <summary>
-    /// Get the team ID that was assigned to a specific client
-    /// </summary>
     public int GetTeamForClient(ulong clientId)
     {
         if (clientTeams.ContainsKey(clientId))
@@ -210,25 +263,26 @@ public class NetworkedSpawnManager : NetworkBehaviour
 
     public Vector3 GetSpawnPosition(string teamName)
     {
+        // Refresh spawn points if needed
+        if (team1.spawnPoints == null || team1.spawnPoints.Length == 0 ||
+            team2.spawnPoints == null || team2.spawnPoints.Length == 0)
+        {
+            Debug.LogWarning("Spawn points not initialized for GetSpawnPosition, refreshing...");
+            RefreshSpawnPoints();
+        }
+
         int teamId = teamName == team1.teamName ? 0 : 1;
         return GetSpawnPositionForTeam(teamId);
     }
 
-    /// <summary>
-    /// Call this when a player spawns to set camera target
-    /// </summary>
     public void SetupPlayerCamera(GameObject player)
     {
-        // Try to use assigned camera first
         if (cameraFollow != null)
         {
             cameraFollow.SetTarget(player.transform);
             Debug.Log($"✓ Camera now following {player.name}");
             return;
         }
-
-        // If not assigned, search for it
-        Debug.LogWarning("⚠️ CameraFollow not assigned in SpawnManager - searching for camera...");
 
         CameraFollow cam = FindObjectOfType<CameraFollow>();
         if (cam != null)
@@ -243,12 +297,8 @@ public class NetworkedSpawnManager : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Get which team a player should be on based on their spawn position
-    /// </summary>
     public int GetTeamIDForPosition(Vector3 position)
     {
-        // Check which team's spawn points are closest
         float minDistTeam1 = float.MaxValue;
         float minDistTeam2 = float.MaxValue;
 

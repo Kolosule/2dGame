@@ -130,7 +130,7 @@ GameObject:
   - component: {fileID: 414371156}
   m_Layer: 0
   m_Name: Team2Spawn
-  m_TagString: Untagged
+  m_TagString: Team2Spawn
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -161,7 +161,7 @@ GameObject:
   - component: {fileID: 441099918}
   m_Layer: 0
   m_Name: Team1Spawn
-  m_TagString: Untagged
+  m_TagString: Team1Spawn
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -1148,6 +1148,9 @@ MonoBehaviour:
     teamName: Team2
     spawnPoints:
     - {fileID: 414371156}
+  team1SpawnTag: Team1Spawn
+  team2SpawnTag: Team2Spawn
+  useSpawnTags: 1
   autoBalanceTeams: 1
 --- !u!4 &1637765722
 Transform:

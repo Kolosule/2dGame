@@ -57,7 +57,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0.81, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5663252968765568551}
@@ -118,7 +118,7 @@ Transform:
   m_GameObject: {fileID: 3517853585374466949}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -1.5, z: 0}
+  m_LocalPosition: {x: 0, y: -0.16, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -345,7 +345,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMovement
   stats: {fileID: 11400000, guid: 210721b53ee27ce4d99595054d7e3477, type: 2}
   groundCheck: {fileID: 2240091569963034458}
-  groundCheckRadius: 0.6
+  groundCheckRadius: 2
   groundLayer:
     serializedVersion: 2
     m_Bits: 8
@@ -369,9 +369,9 @@ MonoBehaviour:
   attackableLayer:
     serializedVersion: 2
     m_Bits: 128
-  damageAmount: 50
-  knockbackStrength: 5
-  knockbackUpward: 2
+  damageAmount: 25
+  knockbackStrength: 10
+  knockbackUpward: 5
   sideAttackPoint: {fileID: 8846297479289465317}
   upAttackPoint: {fileID: 3389257580738603586}
   downAttackPoint: {fileID: 598472603001116420}

@@ -5,9 +5,9 @@ public class PlayerCombat : MonoBehaviour
     [Header("Combat Settings")]
     [SerializeField] private PlayerStats stats;
     [SerializeField] private LayerMask attackableLayer;
-    [SerializeField] private int damageAmount = 10;   // base damage
-    [SerializeField] private float knockbackStrength = 5f;
-    [SerializeField] private float knockbackUpward = 2f;
+    [SerializeField] private int damageAmount = 10;
+    [SerializeField] private float knockbackStrength = 10f;
+    [SerializeField] private float knockbackUpward = 3f;
 
     [Header("Attack Points")]
     [SerializeField] private Transform sideAttackPoint;
@@ -31,7 +31,7 @@ public class PlayerCombat : MonoBehaviour
 
         if (teamComponent == null)
         {
-            Debug.LogWarning("PlayerCombat: No PlayerTeamComponent found! Territorial bonuses won't apply.");
+            Debug.LogWarning("PlayerCombat: No PlayerTeamComponent found!");
         }
     }
 
@@ -45,6 +45,7 @@ public class PlayerCombat : MonoBehaviour
             timeSinceAttack = 0;
             anim.SetTrigger("Attack");
 
+            // Choose attack based on vertical input
             if (yAxis == 0 || (yAxis < 0 && IsGrounded()))
             {
                 PerformAttack(sideAttackPoint, sideAttackArea);
@@ -70,29 +71,37 @@ public class PlayerCombat : MonoBehaviour
             float damageModifier = teamComponent.GetDamageDealtModifier();
             finalDamage = Mathf.RoundToInt(damageAmount * damageModifier);
 
-            float territoryAdvantage = teamComponent.GetCurrentTerritorialAdvantage();
-            string territoryStatus = territoryAdvantage > 0.3f ? "own territory" :
-                                    territoryAdvantage < -0.3f ? "enemy territory" : "neutral ground";
-
-            Debug.Log($"Player attacking in {territoryStatus}: {damageAmount} → {finalDamage} damage (×{damageModifier:F2})");
+            string territoryStatus = GetTerritoryStatus();
+            Debug.Log($"Attacking in {territoryStatus}: {damageAmount} → {finalDamage} damage");
         }
 
-        // Raycast forward to detect enemy
-        RaycastHit2D hit = Physics2D.Raycast(transform.position, transform.right, 1.5f);
+        // Detect all enemies in attack area
+        Collider2D[] hitEnemies = Physics2D.OverlapBoxAll(
+            attackPoint.position,
+            attackArea,
+            0f,
+            attackableLayer
+        );
 
-        if (hit.collider != null)
+        Debug.Log($"Attack detected {hitEnemies.Length} enemies");
+
+        foreach (Collider2D hit in hitEnemies)
         {
-            Enemy enemy = hit.collider.GetComponent<Enemy>();
+            Enemy enemy = hit.GetComponent<Enemy>();
             if (enemy != null)
             {
-                // Calculate knockback relative to player facing direction
-                Vector2 knockbackForce = new Vector2(transform.localScale.x * knockbackStrength, knockbackUpward);
+                // Calculate knockback direction (away from player)
+                Vector2 knockbackDirection = new Vector2(transform.localScale.x, 0).normalized;
+                Vector2 knockbackForce = new Vector2(
+                    knockbackDirection.x * knockbackStrength,
+                    knockbackUpward
+                );
 
-                // Get hit point (use raycast hit point if available)
-                Vector2 hitPoint = hit.point;
+                Vector2 hitPoint = hit.bounds.center;
 
-                // Apply damage with knockback and hit point
+                // Apply damage with knockback
                 enemy.TakeDamage(finalDamage, knockbackForce, hitPoint);
+                Debug.Log($"Hit {enemy.name} for {finalDamage} damage!");
             }
         }
     }
@@ -102,11 +111,25 @@ public class PlayerCombat : MonoBehaviour
         return Physics2D.Raycast(transform.position, Vector2.down, 0.1f, LayerMask.GetMask("Ground"));
     }
 
+    private string GetTerritoryStatus()
+    {
+        if (teamComponent == null) return "unknown";
+
+        float advantage = teamComponent.GetCurrentTerritorialAdvantage();
+        if (advantage > 0.3f) return "own territory";
+        if (advantage < -0.3f) return "enemy territory";
+        return "neutral ground";
+    }
+
+    // Visualize attack areas in editor
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.red;
-        if (sideAttackPoint != null) Gizmos.DrawWireCube(sideAttackPoint.position, sideAttackArea);
-        if (upAttackPoint != null) Gizmos.DrawWireCube(upAttackPoint.position, upAttackArea);
-        if (downAttackPoint != null) Gizmos.DrawWireCube(downAttackPoint.position, downAttackArea);
+        if (sideAttackPoint != null)
+            Gizmos.DrawWireCube(sideAttackPoint.position, sideAttackArea);
+        if (upAttackPoint != null)
+            Gizmos.DrawWireCube(upAttackPoint.position, upAttackArea);
+        if (downAttackPoint != null)
+            Gizmos.DrawWireCube(downAttackPoint.position, downAttackArea);
     }
 }
