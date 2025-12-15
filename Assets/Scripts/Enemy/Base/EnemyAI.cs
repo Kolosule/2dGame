@@ -20,11 +20,27 @@ public class EnemyAI : MonoBehaviour
     private Enemy enemy;
     private PlayerStatsHandler lockedTarget;
 
+    // NEW: Track if we've logged the patrol point warning
+    private bool hasLoggedPatrolWarning = false;
+
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         enemy = GetComponent<Enemy>();
-        currentTargetPoint = pointA;
+    }
+
+    void Start()
+    {
+        // NEW: Set initial target point only if both points exist
+        if (pointA != null && pointB != null)
+        {
+            currentTargetPoint = pointA;
+            Debug.Log($"{gameObject.name}: Patrol points set! Will patrol between {pointA.position} and {pointB.position}");
+        }
+        else
+        {
+            Debug.LogWarning($"{gameObject.name}: Patrol points NOT set! Enemy will only stand still until player is detected.");
+        }
     }
 
     void Update()
@@ -41,16 +57,31 @@ public class EnemyAI : MonoBehaviour
         }
         else
         {
-            Patrol();
+            // NEW: Only patrol if we have valid points
+            if (pointA != null && pointB != null)
+            {
+                Patrol();
+            }
+            else
+            {
+                // Stand still and just detect
+                if (!hasLoggedPatrolWarning)
+                {
+                    Debug.LogWarning($"{gameObject.name}: Can't patrol - points not assigned!");
+                    hasLoggedPatrolWarning = true;
+                }
+                rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+            }
+
             DetectPlayer();
         }
     }
 
     private void Patrol()
     {
-        if (pointA == null || pointB == null)
+        // Safety check (should never happen now, but just in case)
+        if (pointA == null || pointB == null || currentTargetPoint == null)
         {
-            Debug.LogWarning($"{gameObject.name}: Patrol points not set!");
             return;
         }
 
@@ -134,6 +165,15 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
+    // NEW: Public method for spawner to assign points after spawn
+    public void SetPatrolPoints(Transform pointA, Transform pointB)
+    {
+        this.pointA = pointA;
+        this.pointB = pointB;
+        this.currentTargetPoint = pointA;
+        Debug.Log($"{gameObject.name}: Patrol points assigned by spawner!");
+    }
+
     // Show detection and attack ranges in editor
     private void OnDrawGizmosSelected()
     {
@@ -142,5 +182,14 @@ public class EnemyAI : MonoBehaviour
 
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, attackRange);
+
+        // Draw patrol path if points are assigned
+        if (pointA != null && pointB != null)
+        {
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawLine(pointA.position, pointB.position);
+            Gizmos.DrawWireSphere(pointA.position, 0.3f);
+            Gizmos.DrawWireSphere(pointB.position, 0.3f);
+        }
     }
 }
