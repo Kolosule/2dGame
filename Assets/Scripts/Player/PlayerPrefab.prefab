@@ -490,11 +490,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 3540110564427285031}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ecd08db489f55544e8b9dadaa1bd7d21, type: 3}
+  m_Script: {fileID: 11500000, guid: 8230fd0078dc5f44197062d7dea1648c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCoinCollector
-  carriedCoins: 0
-  bankedCoins: 0
+  playerTeam: 
+  maxCoins: 5
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0
