@@ -201,6 +201,10 @@ MonoBehaviour:
   playerLayer:
     serializedVersion: 2
     m_Bits: 256
+  enemyTeam: 
+  coinPrefab: {fileID: 9200945597610364576, guid: b914b9a97b825e44b8d33e985a4f427a, type: 3}
+  dropsCoin: 1
+  coinDropOffset: {x: 0, y: 0}
 --- !u!114 &1088235477252150459
 MonoBehaviour:
   m_ObjectHideFlags: 0

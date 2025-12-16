@@ -181,8 +181,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
   stats: {fileID: 11400000, guid: 51a36f1a17c87e949b21988706427905, type: 2}
-  coinPrefab: {fileID: 0}
-  coinDropCount: 3
 --- !u!114 &1057860978440285187
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -199,9 +197,14 @@ MonoBehaviour:
   pointA: {fileID: 0}
   pointB: {fileID: 0}
   detectionRange: 10
+  attackRange: 1.5
   playerLayer:
     serializedVersion: 2
     m_Bits: 256
+  enemyTeam: 
+  coinPrefab: {fileID: 6766347596837416061, guid: 4689e5bf175eac940bf3b4e400951a0e, type: 3}
+  dropsCoin: 1
+  coinDropOffset: {x: 0, y: 0}
 --- !u!114 &1088235477252150459
 MonoBehaviour:
   m_ObjectHideFlags: 0

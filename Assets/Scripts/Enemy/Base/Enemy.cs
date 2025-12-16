@@ -12,11 +12,15 @@ public class Enemy : MonoBehaviour
     private float knockbackEndTime = 0f;
     private Rigidbody2D rb;
 
+    // Reference to EnemyAI for coin dropping
+    private EnemyAI enemyAI;
+
     void Awake()
     {
         currentHealth = stats.maxHealth;
         teamComponent = GetComponent<EnemyTeamComponent>();
         rb = GetComponent<Rigidbody2D>();
+        enemyAI = GetComponent<EnemyAI>(); // Get reference to EnemyAI
 
         if (teamComponent == null)
         {
@@ -100,7 +104,19 @@ public class Enemy : MonoBehaviour
     private void Die()
     {
         Debug.Log($"{stats.enemyName} has died!");
-        Destroy(gameObject);
+
+        // IMPORTANT FIX: Call EnemyAI.OnDeath() to drop coin
+        if (enemyAI != null)
+        {
+            enemyAI.OnDeath();
+            // Note: OnDeath() will call Destroy(gameObject), so we don't need to do it here
+        }
+        else
+        {
+            // Fallback if no EnemyAI component
+            Debug.LogWarning($"{stats.enemyName} has no EnemyAI component - no coin will drop!");
+            Destroy(gameObject);
+        }
     }
 
     // Visual feedback for detection range
