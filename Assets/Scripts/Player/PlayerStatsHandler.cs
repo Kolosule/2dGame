@@ -83,7 +83,7 @@ public class PlayerStatsHandler : MonoBehaviour
     {
         isDead = true;
         Debug.Log("Player died!");
-        // ========== ADD THIS CODE ==========
+        
         // Drop flag if carrying one
         FlagCarrierMarker carrierMarker = GetComponent<FlagCarrierMarker>();
         if (carrierMarker != null && carrierMarker.IsCarryingFlag())
