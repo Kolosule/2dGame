@@ -15,30 +15,30 @@ public class CTFGameManager : NetworkBehaviour
     [Header("Flag References")]
     [Tooltip("Reference to Team1/Blue flag")]
     [SerializeField] private Flag team1Flag;
-    
+
     [Tooltip("Reference to Team2/Red flag")]
     [SerializeField] private Flag team2Flag;
 
     [Header("UI References")]
     [Tooltip("Text element for notifications")]
     [SerializeField] private TextMeshProUGUI notificationText;
-    
+
     [Tooltip("Panel for game over screen")]
     [SerializeField] private GameObject gameOverPanel;
-    
+
     [Tooltip("Text for winner announcement")]
     [SerializeField] private TextMeshProUGUI winnerText;
-    
+
     [Tooltip("Text for Team1/Blue flag status")]
     [SerializeField] private TextMeshProUGUI team1FlagStatusText;
-    
+
     [Tooltip("Text for Team2/Red flag status")]
     [SerializeField] private TextMeshProUGUI team2FlagStatusText;
 
     [Header("Flag Indicators")]
     [Tooltip("Transform showing Team1 flag location")]
     [SerializeField] private GameObject team1FlagIndicator;
-    
+
     [Tooltip("Transform showing Team2 flag location")]
     [SerializeField] private GameObject team2FlagIndicator;
 
@@ -105,6 +105,12 @@ public class CTFGameManager : NetworkBehaviour
 
         // Update flag indicators to point to flag locations
         UpdateFlagIndicators();
+
+        // SERVER: Continuously check win condition
+        if (IsServer && !gameIsOver.Value)
+        {
+            CheckWinCondition();
+        }
     }
 
     /// <summary>
@@ -153,26 +159,61 @@ public class CTFGameManager : NetworkBehaviour
         if (!IsServer) return;
         if (gameIsOver.Value) return;
 
-        // Check if both flags are at Team1's base
-        bool team1HasOwnFlag = team1Flag != null && team1Flag.State == Flag.FlagState.AtHome;
-        bool team1HasEnemyFlag = team2Flag != null && 
-                                  team2Flag.State == Flag.FlagState.AtHome && 
-                                  IsTeam1FlagAtTeam1Base();
-
-        // Check if both flags are at Team2's base
-        bool team2HasOwnFlag = team2Flag != null && team2Flag.State == Flag.FlagState.AtHome;
-        bool team2HasEnemyFlag = team1Flag != null && 
-                                  team1Flag.State == Flag.FlagState.AtHome && 
-                                  IsTeam2FlagAtTeam2Base();
-
-        // Win condition: team has both their own flag AND enemy flag in their base
-        if (team1HasOwnFlag && team2Flag != null && IsAtTeamBase(team2Flag.transform.position, "Team1"))
+        if (team1Flag == null || team2Flag == null)
         {
-            EndGame("Team1");
+            Debug.LogWarning("Cannot check win condition - flags are null!");
+            return;
         }
-        else if (team2HasOwnFlag && team1Flag != null && IsAtTeamBase(team1Flag.transform.position, "Team2"))
+
+        // Get current flag positions
+        Vector3 team1FlagPos = team1Flag.transform.position;
+        Vector3 team2FlagPos = team2Flag.transform.position;
+
+        // Get base positions
+        if (TeamManager.Instance == null)
         {
+            Debug.LogError("TeamManager.Instance is null!");
+            return;
+        }
+
+        TeamData team1Data = TeamManager.Instance.GetTeamData("Team1");
+        TeamData team2Data = TeamManager.Instance.GetTeamData("Team2");
+
+        if (team1Data == null || team2Data == null)
+        {
+            Debug.LogError("Team data is null!");
+            return;
+        }
+
+        Vector3 team1BasePos = team1Data.basePosition;
+        Vector3 team2BasePos = team2Data.basePosition;
+
+        float baseRadius = 5f; // Increased from 3f for more forgiving detection
+
+        // Check if BOTH flags are at Team1's base
+        float team1FlagDistToTeam1Base = Vector2.Distance(team1FlagPos, team1BasePos);
+        float team2FlagDistToTeam1Base = Vector2.Distance(team2FlagPos, team1BasePos);
+
+        if (team1FlagDistToTeam1Base < baseRadius && team2FlagDistToTeam1Base < baseRadius)
+        {
+            Debug.Log($"WIN CONDITION MET! Both flags at Team1 base:");
+            Debug.Log($"  Team1 flag distance: {team1FlagDistToTeam1Base}");
+            Debug.Log($"  Team2 flag distance: {team2FlagDistToTeam1Base}");
+            EndGame("Team1");
+            return;
+        }
+
+        // Check if BOTH flags are at Team2's base
+        float team1FlagDistToTeam2Base = Vector2.Distance(team1FlagPos, team2BasePos);
+        float team2FlagDistToTeam2Base = Vector2.Distance(team2FlagPos, team2BasePos);
+
+        if (team1FlagDistToTeam2Base < baseRadius && team2FlagDistToTeam2Base < baseRadius)
+        {
+            Debug.Log($"WIN CONDITION MET! Both flags at Team2 base:");
+            Debug.Log($"  Team1 flag distance: {team1FlagDistToTeam2Base}");
+            Debug.Log($"  Team2 flag distance: {team2FlagDistToTeam2Base}");
             EndGame("Team2");
+            return;
         }
     }
 
@@ -187,17 +228,7 @@ public class CTFGameManager : NetworkBehaviour
         if (teamData == null) return false;
 
         float distanceToBase = Vector2.Distance(position, teamData.basePosition);
-        return distanceToBase < 3f;
-    }
-
-    private bool IsTeam1FlagAtTeam1Base()
-    {
-        return IsAtTeamBase(team1Flag.transform.position, "Team1");
-    }
-
-    private bool IsTeam2FlagAtTeam2Base()
-    {
-        return IsAtTeamBase(team2Flag.transform.position, "Team2");
+        return distanceToBase < 5f; // Increased from 3f
     }
 
     /// <summary>
@@ -311,6 +342,7 @@ public class CTFGameManager : NetworkBehaviour
 
     /// <summary>
     /// Update flag indicator positions to point at flags
+    /// Show player's OWN flag indicator when it's not at their base
     /// </summary>
     private void UpdateFlagIndicators()
     {
@@ -318,16 +350,81 @@ public class CTFGameManager : NetworkBehaviour
         PlayerController localPlayer = FindLocalPlayer();
         if (localPlayer == null) return;
 
-        // Update Team1 flag indicator
-        if (team1FlagIndicator != null && team1Flag != null)
-        {
-            UpdateIndicator(team1FlagIndicator, team1Flag.transform.position, localPlayer.transform.position);
-        }
+        // Get local player's team
+        PlayerTeamComponent playerTeam = localPlayer.GetComponent<PlayerTeamComponent>();
+        if (playerTeam == null) return;
 
-        // Update Team2 flag indicator
-        if (team2FlagIndicator != null && team2Flag != null)
+        string myTeamId = playerTeam.teamID;
+
+        if (TeamManager.Instance == null) return;
+
+        // Get base positions to check if flags are home
+        TeamData team1Data = TeamManager.Instance.GetTeamData("Team1");
+        TeamData team2Data = TeamManager.Instance.GetTeamData("Team2");
+
+        if (team1Data == null || team2Data == null) return;
+
+        float baseRadius = 5f; // Same radius as win condition
+
+        if (myTeamId == "Team1" || myTeamId == "Blue")
         {
-            UpdateIndicator(team2FlagIndicator, team2Flag.transform.position, localPlayer.transform.position);
+            // I'm Team1 - show MY flag indicator if it's not at home
+
+            // Check if my flag is at home base
+            if (team1Flag != null)
+            {
+                float distToHome = Vector2.Distance(team1Flag.transform.position, team1Data.basePosition);
+                bool myFlagIsHome = distToHome < baseRadius;
+
+                if (team1FlagIndicator != null)
+                {
+                    if (!myFlagIsHome)
+                    {
+                        // My flag is NOT home - show indicator pointing to it
+                        team1FlagIndicator.SetActive(true);
+                        UpdateIndicator(team1FlagIndicator, team1Flag.transform.position, localPlayer.transform.position);
+                    }
+                    else
+                    {
+                        // My flag is home - hide indicator
+                        team1FlagIndicator.SetActive(false);
+                    }
+                }
+            }
+
+            // Always hide enemy flag indicator for now (you can change this if you want both)
+            if (team2FlagIndicator != null)
+                team2FlagIndicator.SetActive(false);
+        }
+        else if (myTeamId == "Team2" || myTeamId == "Red")
+        {
+            // I'm Team2 - show MY flag indicator if it's not at home
+
+            // Check if my flag is at home base
+            if (team2Flag != null)
+            {
+                float distToHome = Vector2.Distance(team2Flag.transform.position, team2Data.basePosition);
+                bool myFlagIsHome = distToHome < baseRadius;
+
+                if (team2FlagIndicator != null)
+                {
+                    if (!myFlagIsHome)
+                    {
+                        // My flag is NOT home - show indicator pointing to it
+                        team2FlagIndicator.SetActive(true);
+                        UpdateIndicator(team2FlagIndicator, team2Flag.transform.position, localPlayer.transform.position);
+                    }
+                    else
+                    {
+                        // My flag is home - hide indicator
+                        team2FlagIndicator.SetActive(false);
+                    }
+                }
+            }
+
+            // Always hide enemy flag indicator for now
+            if (team1FlagIndicator != null)
+                team1FlagIndicator.SetActive(false);
         }
     }
 
@@ -338,7 +435,7 @@ public class CTFGameManager : NetworkBehaviour
     {
         // Calculate direction to flag
         Vector2 direction = (targetPos - playerPos).normalized;
-        
+
         // Rotate indicator to point at flag
         float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
         indicator.transform.rotation = Quaternion.Euler(0, 0, angle);

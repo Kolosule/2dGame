@@ -15,17 +15,17 @@ public class Flag : NetworkBehaviour
     [Header("Flag Visuals")]
     [Tooltip("The sprite renderer for the flag")]
     [SerializeField] private SpriteRenderer flagSprite;
-    
+
     [Tooltip("Particle effect when flag is picked up")]
     [SerializeField] private ParticleSystem pickupEffect;
-    
+
     [Tooltip("Particle effect when flag is dropped")]
     [SerializeField] private ParticleSystem dropEffect;
 
     [Header("Flag Settings")]
     [Tooltip("Time in seconds before dropped flag auto-returns")]
     [SerializeField] private float autoReturnTime = 15f;
-    
+
     [Tooltip("Height offset when flag is carried above player")]
     [SerializeField] private float carrierOffset = 1.5f;
 
@@ -137,52 +137,15 @@ public class Flag : NetworkBehaviour
                 break;
 
             case FlagState.Dropped:
-                // Enemy team picks up dropped flag
-                if (playerTeam.teamID != owningTeam)
-                {
-                    PickupFlag(player, playerNetworkObject.OwnerClientId);
-                }
-                // Friendly team picks up dropped flag to return it
-                else if (playerTeam.teamID == owningTeam)
-                {
-                    PickupFlag(player, playerNetworkObject.OwnerClientId);
-                }
+                // Anyone can pick up dropped flag
+                PickupFlag(player, playerNetworkObject.OwnerClientId);
                 break;
 
             case FlagState.Carried:
-                // If friendly carrier enters their own base with enemy flag
-                if (playerTeam.teamID != owningTeam && carrier == player)
-                {
-                    // Check if player is in their own base
-                    if (IsPlayerInTheirBase(player, playerTeam.teamID))
-                    {
-                        CaptureFlag(playerTeam.teamID);
-                    }
-                }
-                // If friendly defender enters their base with their own dropped flag
-                else if (playerTeam.teamID == owningTeam && carrier == player)
-                {
-                    if (IsPlayerInTheirBase(player, playerTeam.teamID))
-                    {
-                        ReturnFlag();
-                    }
-                }
+                // Carried flag checks are handled by CTFGameManager
+                // based on position, not triggers
                 break;
         }
-    }
-
-    /// <summary>
-    /// Check if player is in their own base (for capture/return)
-    /// </summary>
-    private bool IsPlayerInTheirBase(GameObject player, string playerTeam)
-    {
-        if (TeamManager.Instance == null) return false;
-
-        TeamData teamData = TeamManager.Instance.GetTeamData(playerTeam);
-        if (teamData == null) return false;
-
-        float distanceToBase = Vector2.Distance(player.transform.position, teamData.basePosition);
-        return distanceToBase < 3f; // Within 3 units of base
     }
 
     /// <summary>
@@ -220,10 +183,10 @@ public class Flag : NetworkBehaviour
 
         // Notify clients
         PlayerTeamComponent playerTeam = player.GetComponent<PlayerTeamComponent>();
-        string notification = playerTeam.teamID != owningTeam 
+        string notification = playerTeam.teamID != owningTeam
             ? $"{GetTeamDisplayName(playerTeam.teamID)} team has captured {GetTeamDisplayName(owningTeam)}'s flag!"
             : $"{GetTeamDisplayName(owningTeam)} team is returning their flag!";
-        
+
         CTFGameManager.Instance?.ShowNotificationClientRpc(notification);
 
         Debug.Log($"✓ {owningTeam} flag picked up by {player.name} (Client {clientId})");
@@ -299,25 +262,6 @@ public class Flag : NetworkBehaviour
         );
 
         Debug.Log($"✓ {owningTeam} flag returned to home");
-    }
-
-    /// <summary>
-    /// SERVER: Flag has been captured (reached enemy base)
-    /// </summary>
-    private void CaptureFlag(string capturingTeam)
-    {
-        if (!IsServer) return;
-
-        // Notify game manager of capture
-        if (CTFGameManager.Instance != null)
-        {
-            CTFGameManager.Instance.OnFlagCaptured(owningTeam, capturingTeam);
-        }
-
-        // Return flag to home
-        ReturnFlag();
-
-        Debug.Log($"✓ {owningTeam} flag captured by {capturingTeam}!");
     }
 
     /// <summary>
