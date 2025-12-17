@@ -83,6 +83,22 @@ public class PlayerStatsHandler : MonoBehaviour
     {
         isDead = true;
         Debug.Log("Player died!");
+        // ========== ADD THIS CODE ==========
+        // Drop flag if carrying one
+        FlagCarrierMarker carrierMarker = GetComponent<FlagCarrierMarker>();
+        if (carrierMarker != null && carrierMarker.IsCarryingFlag())
+        {
+            // Find which flag this player is carrying
+            Flag[] flags = FindObjectsOfType<Flag>();
+            foreach (Flag flag in flags)
+            {
+                if (flag.Carrier == gameObject)
+                {
+                    flag.ForceDropServerRpc();
+                    break;
+                }
+            }
+        }
 
         // Disable combat/movement
         PlayerCombat combat = GetComponent<PlayerCombat>();
