@@ -89,7 +89,11 @@ public class PlayerMovement : MonoBehaviour
         }
 
         // Dash input
-        if (Input.GetKeyDown(KeyCode.LeftShift) && canDash)
+        FlagCarrierMarker carrierMarker = GetComponent<FlagCarrierMarker>();
+        bool isCarryingFlag = carrierMarker != null && carrierMarker.IsCarryingFlag();
+
+        if (Input.GetKeyDown(KeyCode.LeftShift) && canDash && !isCarryingFlag)
+
         {
             StartCoroutine(Dash(xAxis, yAxis));
         }
@@ -116,6 +120,15 @@ public class PlayerMovement : MonoBehaviour
     // ========== FIX #1: HORIZONTAL-ONLY DASH ==========
     private IEnumerator Dash(float xAxis, float yAxis)
     {
+        // Prevent dash if carrying flag
+        FlagCarrierMarker carrierMarker = GetComponent<FlagCarrierMarker>();
+        if (carrierMarker != null && carrierMarker.IsCarryingFlag())
+        {
+            Debug.Log("Cannot dash while carrying flag!");
+            yield break; // Exit coroutine early
+        }
+
+
         canDash = false;
         isDashing = true;
         anim.SetTrigger("Dashing");

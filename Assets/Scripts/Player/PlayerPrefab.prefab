@@ -147,6 +147,7 @@ GameObject:
   - component: {fileID: 791806707811693276}
   - component: {fileID: 274603642580577355}
   - component: {fileID: -4804353808761203150}
+  - component: {fileID: 7275137055155341575}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -419,7 +420,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2216731382
+  GlobalObjectIdHash: 1639142946
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -496,6 +497,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCoinCollector
   playerTeam: 
   maxCoins: 5
+--- !u!114 &7275137055155341575
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e031a6fe6f497514398747dc87660d35, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FlagCarrierMarker
+  flagIconPrefab: {fileID: 6264326754191315897, guid: f3cda0812fd9ef74b9123ee76a91116d, type: 3}
+  iconHeight: 2
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0
