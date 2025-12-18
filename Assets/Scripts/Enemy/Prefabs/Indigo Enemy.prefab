@@ -181,6 +181,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
   stats: {fileID: 11400000, guid: f97e49e176ff08749a64e5ab154b0769, type: 2}
+  useTelegraph: 1
+  telegraphDuration: 0.5
+  telegraphPrefab: {fileID: 1580462770250021328, guid: 12a1dd0461f3a954a8294e92faa3fae2, type: 3}
+  telegraphColor: {r: 1, g: 0.3, b: 0.3, a: 1}
+  attackCooldown: 1
+  hitEffectPrefab: {fileID: 6354563029965422019, guid: b79271f6077d45844b46f5903e0297db, type: 3}
+  hitFlashDuration: 0.1
 --- !u!114 &1057860978440285187
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -194,17 +201,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   stats: {fileID: 11400000, guid: f97e49e176ff08749a64e5ab154b0769, type: 2}
+  playerLayer:
+    serializedVersion: 2
+    m_Bits: 256
   pointA: {fileID: 0}
   pointB: {fileID: 0}
   detectionRange: 10
   attackRange: 1.5
-  playerLayer:
-    serializedVersion: 2
-    m_Bits: 256
-  enemyTeam: 
-  coinPrefab: {fileID: 6482532506220416653, guid: e217d2b2f0518cc4d8c907f4604dad9f, type: 3}
   dropsCoin: 1
-  coinDropOffset: {x: 0, y: 0}
+  coinPrefab: {fileID: 6482532506220416653, guid: e217d2b2f0518cc4d8c907f4604dad9f, type: 3}
 --- !u!114 &1088235477252150459
 MonoBehaviour:
   m_ObjectHideFlags: 0

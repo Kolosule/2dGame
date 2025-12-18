@@ -1,35 +1,41 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.UI; // for UI Image
+using UnityEngine.UI;
 
+/// <summary>
+/// Handles all player movement including walking, jumping, dashing, and physics.
+/// Cleaned up version with better organization and comments.
+/// </summary>
 public class PlayerMovement : MonoBehaviour
 {
+    [Header("References")]
     [SerializeField] private PlayerStats stats;
-
-    [Header("Ground Check")]
     [SerializeField] private Transform groundCheck;
+    [SerializeField] private Image dashCooldownBar; // Optional UI element for dash cooldown
+
+    [Header("Ground Detection")]
     [SerializeField] private float groundCheckRadius = 0.2f;
     [SerializeField] private LayerMask groundLayer;
 
     [Header("Jump Settings")]
-    [SerializeField] private int coyoteTimeFrames = 6;   // ~0.1s at 60fps
-    [SerializeField] private int jumpBufferFrames = 6;   // ~0.1s at 60fps
-    [SerializeField] private float jumpCutMultiplier = 0.5f; // short hop multiplier
+    [SerializeField] private int coyoteTimeFrames = 6;   // Frames of grace time after leaving platform (~0.1s at 60fps)
+    [SerializeField] private int jumpBufferFrames = 6;   // Frames to remember jump input (~0.1s at 60fps)
+    [SerializeField] private float jumpCutMultiplier = 0.5f; // Multiplier for releasing jump early (short hop)
 
-    [Header("UI")]
-    [SerializeField] private Image dashCooldownBar; // drag your UI Image here
-
+    // Component references
     private Rigidbody2D rb;
     private Animator anim;
+
+    // Dash state
     private bool canDash = true;
     private bool isDashing = false;
+    private float originalGravity;
+    private float originalDrag;
 
+    // Jump state
     private int remainingAirJumps;
     private int coyoteCounter;
     private int jumpBufferCounter;
-
-    private float originalGravity;
-    private float originalDrag;
 
     void Awake()
     {
@@ -38,8 +44,7 @@ public class PlayerMovement : MonoBehaviour
         remainingAirJumps = stats.maxAirJumps;
 
         if (dashCooldownBar != null)
-            dashCooldownBar.fillAmount = 1f; // full = dash ready
-
+            dashCooldownBar.fillAmount = 1f; // Full = dash ready
     }
 
     void Update()
@@ -48,37 +53,38 @@ public class PlayerMovement : MonoBehaviour
         UpdateJumpVariables();
         HandleVariableJumpHeight();
 
-        // Cancel dash instantly when Shift is released
+        // Allow canceling dash by releasing Shift
         if (isDashing && Input.GetKeyUp(KeyCode.LeftShift))
         {
-            Debug.Log("Dash canceled instantly by releasing Shift");
-            StopAllCoroutines(); // stop dash coroutine
+            StopAllCoroutines();
             EndDash();
-            StartCoroutine(DashCooldown()); // ensure cooldown still runs
+            StartCoroutine(DashCooldown());
         }
     }
 
     public void HandleInput()
     {
         float xAxis = Input.GetAxisRaw("Horizontal");
-        float yAxis = Input.GetAxisRaw("Vertical");
 
-        // Flip sprite
-        if (xAxis != 0) transform.localScale = new Vector2(Mathf.Sign(xAxis), 1);
+        // Flip sprite to face movement direction
+        if (xAxis != 0)
+        {
+            transform.localScale = new Vector2(Mathf.Sign(xAxis), 1);
+        }
 
-        // Only apply normal movement if not dashing
+        // Apply movement (unless dashing)
         if (!isDashing)
         {
             rb.linearVelocity = new Vector2(xAxis * stats.walkSpeed, rb.linearVelocity.y);
             anim.SetBool("Walking", xAxis != 0);
         }
 
-        // Buffer jump input
+        // Buffer jump input for responsive controls
         if (Input.GetButtonDown("Jump"))
         {
             jumpBufferCounter = jumpBufferFrames;
 
-            // Cancel dash if currently dashing
+            // Cancel dash and jump immediately if dashing
             if (isDashing)
             {
                 StopAllCoroutines();
@@ -88,14 +94,13 @@ public class PlayerMovement : MonoBehaviour
             }
         }
 
-        // Dash input
+        // Handle dash input
         FlagCarrierMarker carrierMarker = GetComponent<FlagCarrierMarker>();
         bool isCarryingFlag = carrierMarker != null && carrierMarker.IsCarryingFlag();
 
         if (Input.GetKeyDown(KeyCode.LeftShift) && canDash && !isCarryingFlag)
-
         {
-            StartCoroutine(Dash(xAxis, yAxis));
+            StartCoroutine(Dash(xAxis));
         }
     }
 
@@ -104,11 +109,14 @@ public class PlayerMovement : MonoBehaviour
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
         anim.SetTrigger("Jump");
 
-        // Consume buffered input and coyote time after a jump
+        // Consume buffered input and coyote time after jumping
         jumpBufferCounter = 0;
         coyoteCounter = 0;
     }
 
+    /// <summary>
+    /// Allows variable jump height by cutting velocity when jump button is released.
+    /// </summary>
     private void HandleVariableJumpHeight()
     {
         if (Input.GetButtonUp("Jump") && rb.linearVelocity.y > 0)
@@ -117,37 +125,36 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
-    // ========== FIX #1: HORIZONTAL-ONLY DASH ==========
-    private IEnumerator Dash(float xAxis, float yAxis)
+    /// <summary>
+    /// Horizontal-only dash with instant start and smooth physics.
+    /// </summary>
+    private IEnumerator Dash(float xAxis)
     {
-        // Prevent dash if carrying flag
+        // Double-check flag carrier status
         FlagCarrierMarker carrierMarker = GetComponent<FlagCarrierMarker>();
         if (carrierMarker != null && carrierMarker.IsCarryingFlag())
         {
-            Debug.Log("Cannot dash while carrying flag!");
-            yield break; // Exit coroutine early
+            yield break;
         }
-
 
         canDash = false;
         isDashing = true;
         anim.SetTrigger("Dashing");
 
+        // Store original physics values
         originalGravity = rb.gravityScale;
         originalDrag = rb.linearDamping;
 
+        // Disable gravity and drag during dash
         rb.gravityScale = 0f;
         rb.linearDamping = 0f;
 
-        // FORCE HORIZONTAL DASH ONLY - completely ignore yAxis
+        // Calculate dash direction (horizontal only)
         Vector2 dashDir = new Vector2(transform.localScale.x, 0); // Default to facing direction
-
-        // If player is pressing left/right, use that direction
         if (xAxis != 0)
         {
-            dashDir = new Vector2(xAxis, 0);
+            dashDir = new Vector2(xAxis, 0); // Use input if pressing a direction
         }
-        // Note: yAxis is completely ignored - no vertical dashing possible
 
         rb.linearVelocity = dashDir * stats.dashSpeed;
 
@@ -162,8 +169,6 @@ public class PlayerMovement : MonoBehaviour
         rb.gravityScale = originalGravity;
         rb.linearDamping = originalDrag;
         isDashing = false;
-
-        Debug.Log("EndDash triggered, gravity restored to: " + rb.gravityScale);
     }
 
     private IEnumerator DashCooldown()
@@ -171,7 +176,7 @@ public class PlayerMovement : MonoBehaviour
         if (dashCooldownBar != null)
         {
             dashCooldownBar.gameObject.SetActive(true);
-            dashCooldownBar.fillAmount = 1f; // start full
+            dashCooldownBar.fillAmount = 1f;
         }
 
         float elapsed = 0f;
@@ -191,13 +196,14 @@ public class PlayerMovement : MonoBehaviour
 
         if (dashCooldownBar != null)
         {
-            dashCooldownBar.fillAmount = 1f; // show full = ready
+            dashCooldownBar.fillAmount = 1f;
             dashCooldownBar.gameObject.SetActive(false);
         }
-
-        Debug.Log("Dash ready!");
     }
 
+    /// <summary>
+    /// Updates coyote time, jump buffer, and handles jump logic.
+    /// </summary>
     private void UpdateJumpVariables()
     {
         bool isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
@@ -212,14 +218,17 @@ public class PlayerMovement : MonoBehaviour
             coyoteCounter--;
         }
 
+        // Process buffered jump input
         if (jumpBufferCounter > 0)
         {
             jumpBufferCounter--;
 
+            // Ground jump (with coyote time)
             if (coyoteCounter > 0)
             {
                 Jump();
             }
+            // Air jump
             else if (remainingAirJumps > 0)
             {
                 remainingAirJumps--;

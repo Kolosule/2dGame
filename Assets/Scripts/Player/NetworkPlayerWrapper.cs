@@ -111,6 +111,8 @@ public class NetworkPlayerWrapper : NetworkBehaviour
 
     private void Update()
     {
+        // Debug.Log($"NetworkPlayerWrapper Update: IsOwner={IsOwner}, Position={transform.position}");
+
         if (IsOwner)
         {
             // Send position updates

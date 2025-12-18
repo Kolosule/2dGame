@@ -1,115 +1,99 @@
 ﻿using UnityEngine;
 
+/// <summary>
+/// AI controller for enemy patrol, detection, and combat behavior.
+/// Improved version with better state management and telegraph support.
+/// </summary>
 public class EnemyAI : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private EnemyStats stats;
+    [SerializeField] private LayerMask playerLayer;
 
     [Header("Patrol Points")]
-    [Tooltip("Assign these in the Inspector OR they will be set by EnemySpawner")]
     public Transform pointA;
     public Transform pointB;
 
     [Header("Detection")]
+    [Tooltip("Distance at which enemy can detect players")]
     [SerializeField] private float detectionRange = 5f;
+
+    [Tooltip("Distance at which enemy attacks players")]
     [SerializeField] private float attackRange = 1.5f;
-    [SerializeField] private LayerMask playerLayer;
 
     [Header("Coin Dropping")]
-    [Tooltip("Which team/color this enemy belongs to (Red, Blue, etc.)")]
-    [SerializeField] private string enemyTeam;
-
-    [Tooltip("Prefab of the coin to drop when enemy dies")]
-    [SerializeField] private GameObject coinPrefab;
-
-    [Tooltip("Should this enemy drop a coin when defeated?")]
+    [Tooltip("Does this enemy drop a coin when defeated?")]
     [SerializeField] private bool dropsCoin = true;
 
-    [Tooltip("Offset from enemy position where coin spawns")]
-    [SerializeField] private Vector2 coinDropOffset = Vector2.zero;
+    [Tooltip("Coin prefab to spawn on death")]
+    [SerializeField] private GameObject coinPrefab;
 
-    private Transform currentTargetPoint;
+    // Component references
     private Rigidbody2D rb;
     private Enemy enemy;
-    private PlayerStatsHandler lockedTarget;
 
-    // Track if we've logged the patrol point warning
-    private bool hasLoggedPatrolWarning = false;
+    // AI state
+    private enum AIState { Patrolling, Chasing, Attacking }
+    private AIState currentState = AIState.Patrolling;
+
+    private Transform currentTargetPoint;
+    private PlayerStatsHandler lockedTarget;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         enemy = GetComponent<Enemy>();
-    }
 
-    void Start()
-    {
-        // Set initial target point only if both points exist
-        if (pointA != null && pointB != null)
+        // Default patrol target
+        if (pointA != null)
         {
             currentTargetPoint = pointA;
-            Debug.Log($"{gameObject.name}: Patrol points set! Will patrol between {pointA.position} and {pointB.position}");
-        }
-        else
-        {
-            Debug.LogWarning($"{gameObject.name}: Patrol points NOT set! Enemy will only stand still until player is detected.");
-        }
-
-        // Validate coin dropping setup
-        if (dropsCoin && coinPrefab == null)
-        {
-            Debug.LogError($"Enemy {gameObject.name} is set to drop coins but has no coin prefab assigned!");
         }
     }
 
-    void Update()
+    void FixedUpdate()
     {
-        // CRITICAL: Don't override velocity during knockback!
-        if (enemy != null && enemy.IsKnockedBack())
+        // Don't move if knocked back or telegraphing attack
+        if (enemy != null && (enemy.IsKnockedBack() || enemy.IsTelegraphing()))
         {
+            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
             return;
         }
 
-        if (lockedTarget != null)
+        // Update AI behavior based on state
+        switch (currentState)
         {
-            ChaseTarget();
-        }
-        else
-        {
-            // Only patrol if we have valid points
-            if (pointA != null && pointB != null)
-            {
+            case AIState.Patrolling:
                 Patrol();
-            }
-            else
-            {
-                // Stand still and just detect
-                if (!hasLoggedPatrolWarning)
-                {
-                    Debug.LogWarning($"{gameObject.name}: Can't patrol - points not assigned!");
-                    hasLoggedPatrolWarning = true;
-                }
-                rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
-            }
+                DetectPlayer();
+                break;
 
-            DetectPlayer();
+            case AIState.Chasing:
+                ChaseTarget();
+                break;
+
+            case AIState.Attacking:
+                AttackTarget();
+                break;
         }
     }
 
+    /// <summary>
+    /// Patrol between two points.
+    /// </summary>
     private void Patrol()
     {
-        // Safety check (should never happen now, but just in case)
-        if (pointA == null || pointB == null || currentTargetPoint == null)
+        if (pointA == null || pointB == null)
         {
+            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
             return;
         }
 
+        // Check if reached patrol point
         float distance = Vector2.Distance(transform.position, currentTargetPoint.position);
-
-        // Switch patrol point when close enough
-        if (distance < 0.2f)
+        if (distance < 0.5f)
         {
-            currentTargetPoint = (currentTargetPoint == pointA) ? pointB : pointA;
+            currentTargetPoint = currentTargetPoint == pointA ? pointB : pointA;
         }
 
         // Move toward current patrol point
@@ -120,6 +104,9 @@ public class EnemyAI : MonoBehaviour
         Flip(direction.x);
     }
 
+    /// <summary>
+    /// Scan for nearby players.
+    /// </summary>
     private void DetectPlayer()
     {
         Collider2D playerCollider = Physics2D.OverlapCircle(transform.position, detectionRange, playerLayer);
@@ -135,15 +122,20 @@ public class EnemyAI : MonoBehaviour
             if (handler != null)
             {
                 lockedTarget = handler;
+                currentState = AIState.Chasing;
                 Debug.Log($"{gameObject.name} detected player!");
             }
         }
     }
 
+    /// <summary>
+    /// Chase the locked target player.
+    /// </summary>
     private void ChaseTarget()
     {
         if (lockedTarget == null)
         {
+            currentState = AIState.Patrolling;
             return;
         }
 
@@ -154,14 +146,14 @@ public class EnemyAI : MonoBehaviour
         {
             Debug.Log($"{gameObject.name} lost player target");
             lockedTarget = null;
+            currentState = AIState.Patrolling;
             return;
         }
 
-        // Attack if in range
+        // Switch to attacking if in range
         if (distanceToTarget <= attackRange)
         {
-            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
-            enemy.AttackPlayer(lockedTarget);
+            currentState = AIState.Attacking;
         }
         else
         {
@@ -172,6 +164,43 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Attack the target when in range.
+    /// </summary>
+    private void AttackTarget()
+    {
+        if (lockedTarget == null)
+        {
+            currentState = AIState.Patrolling;
+            return;
+        }
+
+        float distanceToTarget = Vector2.Distance(transform.position, lockedTarget.transform.position);
+
+        // Return to chasing if target moves out of attack range
+        if (distanceToTarget > attackRange * 1.2f)
+        {
+            currentState = AIState.Chasing;
+            return;
+        }
+
+        // Stop movement while attacking
+        rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+
+        // Face the target
+        float direction = lockedTarget.transform.position.x - transform.position.x;
+        Flip(direction);
+
+        // Attempt attack
+        if (enemy != null)
+        {
+            enemy.AttackPlayer(lockedTarget);
+        }
+    }
+
+    /// <summary>
+    /// Flip sprite to face movement/attack direction.
+    /// </summary>
     private void Flip(float direction)
     {
         if (direction > 0)
@@ -184,7 +213,9 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    // Public method for spawner to assign points after spawn
+    /// <summary>
+    /// Set patrol points (called by spawner after instantiation).
+    /// </summary>
     public void SetPatrolPoints(Transform pointA, Transform pointB)
     {
         this.pointA = pointA;
@@ -194,82 +225,53 @@ public class EnemyAI : MonoBehaviour
     }
 
     /// <summary>
-    /// NEW: Call this method when the enemy dies (from your Enemy.cs script or health system)
-    /// Add this call to wherever your enemy death is currently handled
+    /// Called when enemy dies (from Enemy.cs).
     /// </summary>
     public void OnDeath()
     {
         Debug.Log($"{gameObject.name} has been defeated!");
 
         // Drop coin if enabled
-        if (dropsCoin)
+        if (dropsCoin && coinPrefab != null)
         {
             DropCoin();
         }
-
-        // Your existing death logic can go here:
-        // - Play death animation
-        // - Spawn death particles/effects
-        // - Award XP to player
-        // - etc.
-
-        // Destroy the enemy GameObject
-        Destroy(gameObject);
     }
 
     /// <summary>
-    /// NEW: Spawns a coin at the enemy's position when defeated
+    /// Spawn a coin at enemy's death location.
     /// </summary>
     private void DropCoin()
     {
-        if (coinPrefab == null)
+        if (coinPrefab != null)
         {
-            Debug.LogError($"Cannot drop coin - no prefab assigned on {gameObject.name}");
-            return;
+            Instantiate(coinPrefab, transform.position, Quaternion.identity);
+            Debug.Log($"{gameObject.name} dropped a coin!");
         }
-
-        // Calculate spawn position with offset
-        Vector3 spawnPosition = transform.position + new Vector3(coinDropOffset.x, coinDropOffset.y, 0);
-
-        // Instantiate the coin
-        GameObject droppedCoin = Instantiate(coinPrefab, spawnPosition, Quaternion.identity);
-
-        // Optional: Add a small upward force for visual effect (bouncy coin drop)
-        Rigidbody2D coinRb = droppedCoin.GetComponent<Rigidbody2D>();
-        if (coinRb != null)
+        else
         {
-            // Random horizontal spread for variety
-            float randomX = Random.Range(-1f, 1f);
-            coinRb.AddForce(new Vector2(randomX, 3f), ForceMode2D.Impulse);
+            Debug.LogWarning($"{gameObject.name} wants to drop coin but coinPrefab is not assigned!");
         }
-
-        Debug.Log($"{gameObject.name} dropped a {enemyTeam} coin!");
     }
 
-    // Show detection and attack ranges in editor
+    // Visual debugging
     private void OnDrawGizmosSelected()
     {
+        // Detection range
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, detectionRange);
 
+        // Attack range
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, attackRange);
 
-        // Draw patrol path if points are assigned
+        // Patrol points
         if (pointA != null && pointB != null)
         {
-            Gizmos.color = Color.cyan;
+            Gizmos.color = Color.blue;
             Gizmos.DrawLine(pointA.position, pointB.position);
             Gizmos.DrawWireSphere(pointA.position, 0.3f);
             Gizmos.DrawWireSphere(pointB.position, 0.3f);
-        }
-
-        // NEW: Show coin drop position
-        if (dropsCoin)
-        {
-            Gizmos.color = Color.yellow;
-            Vector3 coinDropPos = transform.position + new Vector3(coinDropOffset.x, coinDropOffset.y, 0);
-            Gizmos.DrawWireSphere(coinDropPos, 0.2f);
         }
     }
 }
