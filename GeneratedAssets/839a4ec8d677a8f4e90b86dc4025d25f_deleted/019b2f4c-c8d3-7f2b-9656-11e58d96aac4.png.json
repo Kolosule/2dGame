@@ -1,0 +1,20 @@
+{
+    "asset": "839a4ec8d677a8f4e90b86dc4025d25f",
+    "fileName": "019b2f4c-c8d3-7f2b-9656-11e58d96aac4.png",
+    "prompt": "A telegraph effect for enemy AI. Shows when the AI is charging its attack. Simple. 2D Platformer. Exclamation Mark",
+    "negativePrompt": "",
+    "model": "5b5b2af1-6ea4-4266-b087-cc9f3bf4f450",
+    "modelName": "Flux.1 Dev",
+    "customSeed": -1,
+    "w3CTraceId": "c9605de8a51ad2e1f23e7d300ec18fc3",
+    "refinementMode": "Generation",
+    "pixelateTargetSize": 0,
+    "pixelateKeepImageSize": false,
+    "pixelatePixelBlockSize": 0,
+    "pixelateMode": 0,
+    "pixelateOutlineThickness": 0,
+    "doodles": {
+        "m_Items": []
+    },
+    "upscaleFactor": 0
+}

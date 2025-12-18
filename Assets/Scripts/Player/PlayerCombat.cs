@@ -1,5 +1,9 @@
 ﻿using UnityEngine;
 
+/// <summary>
+/// Handles player combat including directional attacks, damage dealing, and visual feedback.
+/// Improved version with hit markers and configurable attack speed.
+/// </summary>
 public class PlayerCombat : MonoBehaviour
 {
     [Header("Combat Settings")]
@@ -8,6 +12,10 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private int damageAmount = 10;
     [SerializeField] private float knockbackStrength = 10f;
     [SerializeField] private float knockbackUpward = 3f;
+
+    [Header("Attack Speed")]
+    [Tooltip("Time in seconds between attacks (lower = faster attacks)")]
+    [SerializeField] private float attackCooldown = 0.5f;
 
     [Header("Attack Points")]
     [SerializeField] private Transform sideAttackPoint;
@@ -19,8 +27,19 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private Vector2 upAttackArea = new Vector2(1f, 1f);
     [SerializeField] private Vector2 downAttackArea = new Vector2(1f, 1f);
 
+    [Header("Hit Marker Effects")]
+    [Tooltip("Particle effect to spawn when attacks hit enemies")]
+    [SerializeField] private GameObject hitMarkerPrefab;
+    [Tooltip("Color of hit marker for successful hits")]
+    [SerializeField] private Color hitMarkerColor = Color.white;
+    [Tooltip("Duration of hit marker effect in seconds")]
+    [SerializeField] private float hitMarkerDuration = 0.3f;
+
+    // Component references
     private Animator anim;
     private PlayerTeamComponent teamComponent;
+
+    // Combat state
     private float timeSinceAttack;
     private float yAxis;
 
@@ -35,105 +54,160 @@ public class PlayerCombat : MonoBehaviour
         }
     }
 
-    public void HandleInput()
+    void Update()
     {
         timeSinceAttack += Time.deltaTime;
+    }
+
+    public void HandleInput()
+    {
         yAxis = Input.GetAxisRaw("Vertical");
 
-        if (Input.GetMouseButtonDown(0) && timeSinceAttack >= stats.attackCooldown)
+        // Attack input
+        if (Input.GetButtonDown("Fire1") && timeSinceAttack >= attackCooldown)
         {
-            timeSinceAttack = 0;
-            anim.SetTrigger("Attack");
-
-            // Choose attack based on vertical input
-            if (yAxis == 0 || (yAxis < 0 && IsGrounded()))
-            {
-                PerformAttack(sideAttackPoint, sideAttackArea);
-            }
-            else if (yAxis > 0)
-            {
-                PerformAttack(upAttackPoint, upAttackArea);
-            }
-            else if (yAxis < 0 && !IsGrounded())
-            {
-                PerformAttack(downAttackPoint, downAttackArea);
-            }
+            Attack();
         }
     }
 
-    // ========== FIX #3: PROPER COLLISION DETECTION ==========
-    private void PerformAttack(Transform attackPoint, Vector2 attackArea)
+    private void Attack()
     {
-        // Apply territorial damage modifier
-        int finalDamage = damageAmount;
+        timeSinceAttack = 0;
 
-        if (teamComponent != null)
+        Transform attackTransform;
+        Vector2 attackArea;
+
+        // Determine attack direction based on input
+        if (yAxis > 0)
         {
-            float damageModifier = teamComponent.GetDamageDealtModifier();
-            finalDamage = Mathf.RoundToInt(damageAmount * damageModifier);
-
-            string territoryStatus = GetTerritoryStatus();
-            Debug.Log($"Attacking in {territoryStatus}: {damageAmount} → {finalDamage} damage");
+            // Up attack
+            anim.SetTrigger("Attack");
+            attackTransform = upAttackPoint;
+            attackArea = upAttackArea;
+        }
+        else if (yAxis < 0)
+        {
+            // Down attack
+            anim.SetTrigger("Attack");
+            attackTransform = downAttackPoint;
+            attackArea = downAttackArea;
+        }
+        else
+        {
+            // Side attack
+            anim.SetTrigger("Attack");
+            attackTransform = sideAttackPoint;
+            attackArea = sideAttackArea;
         }
 
-        // Detect all enemies in attack area
-        Collider2D[] hitEnemies = Physics2D.OverlapBoxAll(
-            attackPoint.position,
+        // Perform attack detection and damage
+        Hit(attackTransform, attackArea);
+    }
+
+    private void Hit(Transform attackTransform, Vector2 attackArea)
+    {
+        // Detect all colliders in the attack area
+        Collider2D[] objectsHit = Physics2D.OverlapBoxAll(
+            attackTransform.position,
             attackArea,
             0f,
             attackableLayer
         );
 
-        Debug.Log($"Attack detected {hitEnemies.Length} enemies");
+        bool hitSomething = false;
 
-        foreach (Collider2D hit in hitEnemies)
+        // Process each hit object
+        foreach (Collider2D hit in objectsHit)
         {
             Enemy enemy = hit.GetComponent<Enemy>();
             if (enemy != null)
             {
-                // Calculate knockback direction (away from player)
-                Vector2 knockbackDirection = new Vector2(transform.localScale.x, 0).normalized;
+                // Check if this enemy is on a different team
+                EnemyTeamComponent enemyTeam = enemy.GetComponent<EnemyTeamComponent>();
+                if (teamComponent != null && enemyTeam != null)
+                {
+                    if (teamComponent.teamID == enemyTeam.teamID)
+                    {
+                        continue; // Don't attack teammates
+                    }
+                }
+
+                // Calculate knockback direction
+                Vector2 knockbackDir = (enemy.transform.position - transform.position).normalized;
                 Vector2 knockbackForce = new Vector2(
-                    knockbackDirection.x * knockbackStrength,
+                    knockbackDir.x * knockbackStrength,
                     knockbackUpward
                 );
 
-                Vector2 hitPoint = hit.bounds.center;
+                // Deal damage
+                enemy.TakeDamage(damageAmount, knockbackForce, hit.transform.position);
 
-                // Apply damage with knockback
-                enemy.TakeDamage(finalDamage, knockbackForce, hitPoint);
-                Debug.Log($"Hit {enemy.name} for {finalDamage} damage!");
+                // Spawn hit marker effect
+                SpawnHitMarker(hit.transform.position);
+
+                hitSomething = true;
             }
         }
 
-        // Visual feedback - draw the attack area briefly
-        Debug.DrawLine(attackPoint.position - (Vector3)attackArea / 2, attackPoint.position + (Vector3)attackArea / 2, Color.red, 0.2f);
+        // Optional: Camera shake on hit
+        if (hitSomething)
+        {
+            CameraFollow cam = Camera.main?.GetComponent<CameraFollow>();
+            if (cam != null)
+            {
+                cam.ShakeCamera();
+            }
+        }
     }
 
-    private bool IsGrounded()
+    /// <summary>
+    /// Spawns a visual hit marker effect at the hit location.
+    /// </summary>
+    private void SpawnHitMarker(Vector2 hitPosition)
     {
-        return Physics2D.Raycast(transform.position, Vector2.down, 0.1f, LayerMask.GetMask("Ground"));
+        if (hitMarkerPrefab != null)
+        {
+            GameObject hitMarker = Instantiate(hitMarkerPrefab, hitPosition, Quaternion.identity);
+
+            // Try to set the color if it's a particle system
+            ParticleSystem ps = hitMarker.GetComponent<ParticleSystem>();
+            if (ps != null)
+            {
+                var main = ps.main;
+                main.startColor = hitMarkerColor;
+            }
+
+            // Try to set the color if it's a sprite renderer
+            SpriteRenderer sr = hitMarker.GetComponent<SpriteRenderer>();
+            if (sr != null)
+            {
+                sr.color = hitMarkerColor;
+            }
+
+            // Destroy after duration
+            Destroy(hitMarker, hitMarkerDuration);
+        }
     }
 
-    private string GetTerritoryStatus()
-    {
-        if (teamComponent == null) return "unknown";
-
-        float advantage = teamComponent.GetCurrentTerritorialAdvantage();
-        if (advantage > 0.3f) return "own territory";
-        if (advantage < -0.3f) return "enemy territory";
-        return "neutral ground";
-    }
-
-    // Visualize attack areas in editor
+    // Visual debugging for attack ranges
     private void OnDrawGizmosSelected()
     {
-        Gizmos.color = Color.red;
         if (sideAttackPoint != null)
+        {
+            Gizmos.color = Color.red;
             Gizmos.DrawWireCube(sideAttackPoint.position, sideAttackArea);
+        }
+
         if (upAttackPoint != null)
+        {
+            Gizmos.color = Color.blue;
             Gizmos.DrawWireCube(upAttackPoint.position, upAttackArea);
+        }
+
         if (downAttackPoint != null)
+        {
+            Gizmos.color = Color.green;
             Gizmos.DrawWireCube(downAttackPoint.position, downAttackArea);
+        }
     }
 }
