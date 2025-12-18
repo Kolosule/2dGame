@@ -182,10 +182,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
   stats: {fileID: 11400000, guid: 52e1b76a97b3db2469333e95486eaf98, type: 2}
   useTelegraph: 1
-  telegraphDuration: 0.5
+  telegraphDuration: 1.25
   telegraphPrefab: {fileID: 1580462770250021328, guid: 12a1dd0461f3a954a8294e92faa3fae2, type: 3}
   telegraphColor: {r: 1, g: 0.3, b: 0.3, a: 1}
   attackCooldown: 3
+  attackRange: 1.5
   hitEffectPrefab: {fileID: 6354563029965422019, guid: b79271f6077d45844b46f5903e0297db, type: 3}
   hitFlashDuration: 0.1
 --- !u!114 &1057860978440285187
