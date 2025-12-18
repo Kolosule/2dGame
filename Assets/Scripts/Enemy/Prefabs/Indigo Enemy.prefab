@@ -185,7 +185,7 @@ MonoBehaviour:
   telegraphDuration: 0.5
   telegraphPrefab: {fileID: 1580462770250021328, guid: 12a1dd0461f3a954a8294e92faa3fae2, type: 3}
   telegraphColor: {r: 1, g: 0.3, b: 0.3, a: 1}
-  attackCooldown: 1
+  attackCooldown: 2
   hitEffectPrefab: {fileID: 6354563029965422019, guid: b79271f6077d45844b46f5903e0297db, type: 3}
   hitFlashDuration: 0.1
 --- !u!114 &1057860978440285187

@@ -109,8 +109,7 @@ public class EnemySpawner : MonoBehaviour
             if (pointA != null && pointB != null)
             {
                 // Directly assign the public fields
-                enemyAI.pointA = pointA;
-                enemyAI.pointB = pointB;
+                enemyAI.SetPatrolPoints(pointA, pointB);
                 Debug.Log($"Assigned patrol points to {enemyObj.name}: {pointA.position} to {pointB.position}");
             }
             else
