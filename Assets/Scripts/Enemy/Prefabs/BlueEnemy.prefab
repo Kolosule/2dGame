@@ -105,7 +105,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 6200000, guid: 412a0ac4521483f459a863fa733cd124, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -167,7 +167,7 @@ Rigidbody2D:
   m_Interpolate: 0
   m_SleepingMode: 1
   m_CollisionDetection: 0
-  m_Constraints: 0
+  m_Constraints: 4
 --- !u!114 &7101480511692835348
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -187,7 +187,7 @@ MonoBehaviour:
   telegraphColor: {r: 1, g: 0.3, b: 0.3, a: 1}
   attackCooldown: 1
   attackRange: 1.5
-  hitEffectPrefab: {fileID: 7803984880113759807, guid: e3f5d2d81c1558545ac7ec47fc8526c9, type: 3}
+  hitEffectPrefab: {fileID: 6354563029965422019, guid: b79271f6077d45844b46f5903e0297db, type: 3}
   hitFlashDuration: 0.1
 --- !u!114 &1057860978440285187
 MonoBehaviour:

@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7aa9e57a891c0e4cb69219494ee71cb, type: 3}
   m_Name: DefaultPlayerStats
   m_EditorClassIdentifier: Assembly-CSharp::PlayerStats
-  walkSpeed: 20
-  jumpForce: 30
+  walkSpeed: 15
+  jumpForce: 25
   maxAirJumps: 1
-  dashSpeed: 60
+  dashSpeed: 50
   dashTime: 0.25
   dashCooldown: 0.75
   attackDamage: 1

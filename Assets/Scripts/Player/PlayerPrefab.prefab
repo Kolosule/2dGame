@@ -374,7 +374,7 @@ MonoBehaviour:
     m_Bits: 128
   damageAmount: 25
   knockbackStrength: 10
-  knockbackUpward: 5
+  knockbackUpward: 2
   attackCooldown: 0.1
   sideAttackPoint: {fileID: 8846297479289465317}
   upAttackPoint: {fileID: 3389257580738603586}
