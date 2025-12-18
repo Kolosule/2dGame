@@ -3,7 +3,7 @@ using System.Collections;
 
 /// <summary>
 /// Base enemy class handling health, damage, knockback, and combat.
-/// Improved version with telegraphed attacks and hit markers.
+/// FIXED VERSION - Now properly checks range after telegraph before dealing damage
 /// </summary>
 public class Enemy : MonoBehaviour
 {
@@ -23,9 +23,12 @@ public class Enemy : MonoBehaviour
     [Tooltip("Color to flash when telegraphing attack")]
     [SerializeField] private Color telegraphColor = new Color(1f, 0.3f, 0.3f, 1f);
 
-    [Header("Attack Cooldown")]
+    [Header("Attack Settings")]
     [Tooltip("Time between attacks in seconds")]
     [SerializeField] private float attackCooldown = 1f;
+
+    [Tooltip("Attack range - must be within this distance to deal damage")]
+    [SerializeField] private float attackRange = 1.5f;
 
     [Header("Hit Feedback")]
     [Tooltip("Particle effect when enemy takes damage")]
@@ -161,6 +164,7 @@ public class Enemy : MonoBehaviour
 
     /// <summary>
     /// Coroutine for telegraphed attack with warning indicator.
+    /// FIXED: Now checks range before dealing damage!
     /// </summary>
     private IEnumerator TelegraphedAttack(PlayerStatsHandler player)
     {
@@ -195,10 +199,24 @@ public class Enemy : MonoBehaviour
 
         isTelegraphing = false;
 
-        // Perform the actual attack
-        if (player != null) // Check player still exists
+        // ✅ FIX: Check if player still exists AND is in range before attacking
+        if (player != null)
         {
-            PerformAttack(player);
+            float distanceToPlayer = Vector2.Distance(transform.position, player.transform.position);
+
+            if (distanceToPlayer <= attackRange)
+            {
+                PerformAttack(player);
+                Debug.Log($"{stats.enemyName} attack connected! Distance: {distanceToPlayer:F2}");
+            }
+            else
+            {
+                Debug.Log($"{stats.enemyName} attack missed - player escaped! Distance: {distanceToPlayer:F2} (max: {attackRange})");
+            }
+        }
+        else
+        {
+            Debug.Log($"{stats.enemyName} attack cancelled - player no longer exists");
         }
     }
 
@@ -263,7 +281,7 @@ public class Enemy : MonoBehaviour
         Destroy(gameObject);
     }
 
-    // Visual feedback for detection range
+    // Visual feedback for detection and attack ranges
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.yellow;
@@ -271,8 +289,8 @@ public class Enemy : MonoBehaviour
 
         if (useTelegraph)
         {
-            Gizmos.color = telegraphColor;
-            Gizmos.DrawWireSphere(transform.position, 1f); // Attack range indicator
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(transform.position, attackRange); // Attack range indicator
         }
     }
 }
