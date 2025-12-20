@@ -89,19 +89,19 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
-        // Check if reached patrol point
-        float distance = Vector2.Distance(transform.position, currentTargetPoint.position);
-        if (distance < 0.5f)
+        // Check if reached patrol point (X only)
+        float distanceX = Mathf.Abs(transform.position.x - currentTargetPoint.position.x);
+        if (distanceX < 0.5f)
         {
             currentTargetPoint = currentTargetPoint == pointA ? pointB : pointA;
         }
 
-        // Move toward current patrol point
-        Vector2 direction = (currentTargetPoint.position - transform.position).normalized;
-        rb.linearVelocity = new Vector2(direction.x * stats.moveSpeed, rb.linearVelocity.y);
+        // Move toward current patrol point (X only)
+        float directionX = Mathf.Sign(currentTargetPoint.position.x - transform.position.x);
+        rb.linearVelocity = new Vector2(directionX * stats.moveSpeed, rb.linearVelocity.y);
 
         // Face movement direction
-        Flip(direction.x);
+        Flip(directionX);
     }
 
     /// <summary>
