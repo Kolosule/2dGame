@@ -1,4 +1,4 @@
-﻿using Unity.Netcode;
+﻿using Fusion;
 using UnityEngine;
 
 [RequireComponent(typeof(NetworkObject))]
@@ -11,35 +11,11 @@ public class NetworkPlayerWrapper : NetworkBehaviour
     [Header("Team Settings")]
     [SerializeField] private int teamId = 0;
 
-    // Network variables
-    private NetworkVariable<Vector3> networkPosition = new NetworkVariable<Vector3>(
-        default,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Owner
-    );
-
-    private NetworkVariable<Vector2> networkVelocity = new NetworkVariable<Vector2>(
-        default,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Owner
-    );
-
-    private NetworkVariable<float> networkScaleX = new NetworkVariable<float>(
-        1f,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Owner
-    );
-
-    private NetworkVariable<int> networkTeamId = new NetworkVariable<int>(
-        0,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-
-    private Vector3 positionVelocity;
-    private const float positionSmoothTime = 0.1f;
-    private float lastUpdateTime;
-    private const float updateInterval = 0.05f;
+    // Networked properties - Fusion handles sync and interpolation automatically!
+    [Networked] public Vector3 NetworkPosition { get; set; }
+    [Networked] public Vector2 NetworkVelocity { get; set; }
+    [Networked] public float NetworkScaleX { get; set; } = 1f;
+    [Networked] public int NetworkTeamId { get; set; }
 
     private void Awake()
     {
@@ -47,31 +23,23 @@ public class NetworkPlayerWrapper : NetworkBehaviour
             rb = GetComponent<Rigidbody2D>();
     }
 
-    public override void OnNetworkSpawn()
+    public override void Spawned()
     {
-        Debug.Log($"Player spawned! IsOwner: {IsOwner}, Position: {transform.position}");
+        Debug.Log($"Player spawned! HasInputAuthority: {HasInputAuthority}, Position: {transform.position}");
 
-        // SERVER: Assign team immediately based on what was decided in ApprovalCheck
-        if (IsServer)
+        // IMPORTANT: Team is set by NetworkedSpawnManager via PlayerTeamData
+        // PlayerTeamData then updates PlayerTeamComponent
+        // We sync from PlayerTeamComponent (which is always available)
+        if (HasStateAuthority)
         {
-            if (NetworkedSpawnManager.Instance != null)
-            {
-                // Get the team that was assigned during connection approval
-                int assignedTeam = NetworkedSpawnManager.Instance.GetTeamForClient(OwnerClientId);
-                networkTeamId.Value = assignedTeam;
-                Debug.Log($"✓ Server assigned team ID {assignedTeam} to client {OwnerClientId}");
-            }
-            else
-            {
-                Debug.LogError("⚠️ NetworkedSpawnManager.Instance is null on server!");
-                networkTeamId.Value = 0;
-            }
+            // Wait a frame for PlayerTeamData to update PlayerTeamComponent
+            StartCoroutine(SyncTeamFromComponent());
         }
 
         // Assign team component immediately (both server and client)
         StartCoroutine(AssignTeamComponent());
 
-        if (IsOwner)
+        if (HasInputAuthority)
         {
             // LOCAL PLAYER
             if (yourPlayerControllerScript != null)
@@ -94,85 +62,90 @@ public class NetworkPlayerWrapper : NetworkBehaviour
 
             Debug.Log("✓ Remote player - showing synced position");
         }
-
-        if (!IsOwner)
-        {
-            networkPosition.OnValueChanged += OnPositionChanged;
-        }
     }
 
-    public override void OnNetworkDespawn()
+    /// <summary>
+    /// Sync NetworkTeamId from PlayerTeamComponent after PlayerTeamData updates it
+    /// </summary>
+    private System.Collections.IEnumerator SyncTeamFromComponent()
     {
-        if (!IsOwner)
-        {
-            networkPosition.OnValueChanged -= OnPositionChanged;
-        }
-    }
+        // Wait a frame for PlayerTeamData to set the team
+        yield return null;
 
-    private void Update()
-    {
-        // Debug.Log($"NetworkPlayerWrapper Update: IsOwner={IsOwner}, Position={transform.position}");
-
-        if (IsOwner)
+        PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
+        if (teamComponent != null && !string.IsNullOrEmpty(teamComponent.teamID))
         {
-            // Send position updates
-            if (Time.time - lastUpdateTime >= updateInterval)
-            {
-                networkPosition.Value = transform.position;
-                networkVelocity.Value = rb.linearVelocity;
-                networkScaleX.Value = transform.localScale.x;
-                lastUpdateTime = Time.time;
-            }
+            // Convert team name to team number (Team1 = 0, Team2 = 1)
+            NetworkTeamId = teamComponent.teamID == "Team1" ? 0 : 1;
+            Debug.Log($"✓ Synced NetworkTeamId from PlayerTeamComponent: {teamComponent.teamID} → {NetworkTeamId}");
         }
         else
         {
-            // Interpolate to synced position
-            InterpolateToNetworkState();
+            Debug.LogWarning("⚠️ PlayerTeamComponent not found or teamID not set!");
+
+            // Fallback: try to get from NetworkedSpawnManager
+            if (NetworkedSpawnManager.Instance != null)
+            {
+                int assignedTeam = NetworkedSpawnManager.Instance.GetPlayerTeam(Object.InputAuthority);
+                NetworkTeamId = assignedTeam - 1; // Convert from 1/2 to 0/1
+                Debug.Log($"✓ Got team from NetworkedSpawnManager: Team {assignedTeam} → NetworkTeamId {NetworkTeamId}");
+            }
         }
     }
 
-    private void InterpolateToNetworkState()
+    public override void Despawned(NetworkRunner runner, bool hasState)
     {
-        transform.position = Vector3.SmoothDamp(
-            transform.position,
-            networkPosition.Value,
-            ref positionVelocity,
-            positionSmoothTime
-        );
+        // Cleanup if needed
+    }
 
-        if (rb != null)
+    public override void FixedUpdateNetwork()
+    {
+        // Physics-based movement input handling
+        if (HasInputAuthority)
         {
-            rb.linearVelocity = networkVelocity.Value;
+            // Update networked properties - Fusion automatically syncs and interpolates!
+            NetworkPosition = transform.position;
+            NetworkVelocity = rb.linearVelocity;
+            NetworkScaleX = transform.localScale.x;
         }
-
-        Vector3 scale = transform.localScale;
-        scale.x = networkScaleX.Value;
-        transform.localScale = scale;
     }
 
-    private void OnPositionChanged(Vector3 previousValue, Vector3 newValue)
+    public override void Render()
     {
-        // Position updated
+        // Apply networked state to visuals for remote players
+        if (!HasInputAuthority)
+        {
+            transform.position = NetworkPosition;
+
+            if (rb != null)
+            {
+                rb.linearVelocity = NetworkVelocity;
+            }
+
+            Vector3 scale = transform.localScale;
+            scale.x = NetworkScaleX;
+            transform.localScale = scale;
+        }
     }
 
     public void SetTeam(int team)
     {
         teamId = team;
-        if (IsServer)
+        if (HasStateAuthority)
         {
-            networkTeamId.Value = team;
+            NetworkTeamId = team;
         }
     }
 
     public int GetTeam()
     {
-        return networkTeamId.Value;
+        return NetworkTeamId;
     }
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
         var otherPlayer = collision.gameObject.GetComponent<NetworkPlayerWrapper>();
-        if (otherPlayer != null && networkTeamId.Value == otherPlayer.networkTeamId.Value)
+        if (otherPlayer != null && NetworkTeamId == otherPlayer.NetworkTeamId)
         {
             Physics2D.IgnoreCollision(
                 GetComponent<Collider2D>(),
@@ -191,95 +164,53 @@ public class NetworkPlayerWrapper : NetworkBehaviour
 
         int attempts = 0;
         int maxAttempts = 10;
-        bool cameraSet = false;
 
-        while (!cameraSet && attempts < maxAttempts)
+        while (attempts < maxAttempts)
         {
+            var cameraFollow = FindFirstObjectByType<CameraFollow>();
+            if (cameraFollow != null)
+            {
+                cameraFollow.SetTarget(transform);
+                Debug.Log("✓ Camera setup complete");
+                yield break;
+            }
+
             attempts++;
-
-            // Method 1: Use spawn manager
-            if (NetworkedSpawnManager.Instance != null && NetworkedSpawnManager.Instance.cameraFollow != null)
-            {
-                NetworkedSpawnManager.Instance.SetupPlayerCamera(gameObject);
-                cameraSet = true;
-                Debug.Log("✓ Camera setup via SpawnManager");
-                break;
-            }
-
-            // Method 2: Find camera directly
-            CameraFollow cam = FindObjectOfType<CameraFollow>();
-            if (cam != null)
-            {
-                cam.SetTarget(transform);
-                Debug.Log("✓ Camera setup via FindObjectOfType");
-                cameraSet = true;
-                break;
-            }
-
-            // Method 3: Find by tag
-            GameObject mainCam = GameObject.FindGameObjectWithTag("MainCamera");
-            if (mainCam != null)
-            {
-                cam = mainCam.GetComponent<CameraFollow>();
-                if (cam != null)
-                {
-                    cam.SetTarget(transform);
-                    Debug.Log("✓ Camera setup via tag search");
-                    cameraSet = true;
-                    break;
-                }
-            }
-
-            // Wait a bit before retrying
-            Debug.LogWarning($"Camera not found, retry attempt {attempts}/{maxAttempts}");
             yield return new WaitForSeconds(0.1f);
         }
 
-        if (!cameraSet)
-        {
-            Debug.LogError("⚠️ FAILED TO SETUP CAMERA after " + maxAttempts + " attempts!");
-            Debug.LogError("Make sure your Gameplay scene has a Main Camera with the CameraFollow script!");
-        }
+        Debug.LogWarning("⚠️ Could not find CameraFollow script after multiple attempts");
     }
 
     /// <summary>
-    /// Assign team to PlayerTeamComponent
+    /// Assign team component with retry logic
     /// </summary>
     private System.Collections.IEnumerator AssignTeamComponent()
     {
-        // Wait for network team ID to be set (clients need to wait for server)
-        int waitCount = 0;
-        while (networkTeamId.Value == teamId && !IsServer && waitCount < 20)
+        yield return null;
+
+        int attempts = 0;
+        int maxAttempts = 10;
+
+        while (attempts < maxAttempts)
         {
+            var teamComponent = GetComponent<PlayerTeamComponent>();
+            if (teamComponent != null)
+            {
+                // Convert team ID (0 or 1) to team name ("Team1" or "Team2")
+                string teamName = NetworkTeamId == 0 ? "Team1" : "Team2";
+
+                // PlayerTeamComponent uses a public field, not a method
+                teamComponent.teamID = teamName;
+
+                Debug.Log($"✓ Assigned {teamName} to PlayerTeamComponent");
+                yield break;
+            }
+
+            attempts++;
             yield return new WaitForSeconds(0.1f);
-            waitCount++;
         }
 
-        var playerTeamComponent = GetComponent<PlayerTeamComponent>();
-        if (playerTeamComponent == null)
-        {
-            Debug.LogError("⚠️ PlayerTeamComponent not found on player!");
-            yield break;
-        }
-
-        if (TeamManager.Instance == null)
-        {
-            Debug.LogError("⚠️ TeamManager not found in scene!");
-            yield break;
-        }
-
-        // Convert team ID (0 or 1) to team name ("Team1" or "Team2")
-        string teamName = networkTeamId.Value == 0 ? "Team1" : "Team2";
-
-        TeamData teamData = TeamManager.Instance.GetTeamData(teamName);
-        if (teamData != null)
-        {
-            playerTeamComponent.teamID = teamData.teamID;
-            Debug.Log($"✓ Player at {transform.position} assigned to {teamData.teamName} (ID: {playerTeamComponent.teamID})");
-        }
-        else
-        {
-            Debug.LogError($"⚠️ Failed to find team data for {teamName}");
-        }
+        Debug.LogWarning("⚠️ Could not find PlayerTeamComponent after multiple attempts");
     }
 }

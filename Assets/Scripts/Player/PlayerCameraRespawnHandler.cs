@@ -150,8 +150,6 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
         // Try to get respawn position from NetworkedSpawnManager
         if (NetworkedSpawnManager.Instance != null)
         {
-            // Refresh spawn points to ensure we have latest data
-            NetworkedSpawnManager.Instance.RefreshSpawnPoints();
 
             // Get player's team from their team component
             PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();

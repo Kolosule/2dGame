@@ -1,339 +1,402 @@
-﻿using Unity.Netcode;
-using UnityEngine;
+﻿using UnityEngine;
+using Fusion;
+using Fusion.Sockets;
+using System;
+using System.Collections.Generic;
 
 /// <summary>
-/// Handles spawn positions for networked players
-/// SETUP: Attach this to a GameObject in your MainMenu scene
-/// Spawn points will be found automatically in the Gameplay scene
+/// Manages player spawning for a PvPvE 2D platformer using Photon Fusion.
+/// Handles team assignment, spawn positions, and auto-balancing teams.
+/// COMPATIBLE WITH FUSION 2.0+ (all required callbacks implemented)
 /// </summary>
-public class NetworkedSpawnManager : NetworkBehaviour
+public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 {
+    #region Singleton Pattern
     public static NetworkedSpawnManager Instance { get; private set; }
+    #endregion
 
-    [Header("IMPORTANT: Drag your Main Camera here")]
-    public CameraFollow cameraFollow;
+    #region Serialized Fields
+    [Header("Player Prefab")]
+    [Tooltip("Drag your player prefab here - must have NetworkObject, PlayerTeamData, AND PlayerTeamComponent")]
+    [SerializeField] private NetworkObject playerPrefab;
 
-    [System.Serializable]
-    public class TeamSpawnPoints
-    {
-        public string teamName = "Team1";
-        [Tooltip("Spawn points will be found by tag - leave empty if using tags")]
-        public Transform[] spawnPoints;
-    }
+    [Header("Team 1 Spawn Points")]
+    [Tooltip("Drag all Team 1 spawn point transforms here")]
+    [SerializeField] private Transform[] team1SpawnPoints;
 
-    [Header("Team 1 Spawn Setup")]
-    [SerializeField] private TeamSpawnPoints team1;
+    [Header("Team 2 Spawn Points")]
+    [Tooltip("Drag all Team 2 spawn point transforms here")]
+    [SerializeField] private Transform[] team2SpawnPoints;
+    #endregion
 
-    [Header("Team 2 Spawn Setup")]
-    [SerializeField] private TeamSpawnPoints team2;
+    #region Private Fields
+    private Dictionary<PlayerRef, int> playerTeams = new Dictionary<PlayerRef, int>();
+    private int team1Count = 0;
+    private int team2Count = 0;
+    private NetworkRunner runner;
+    #endregion
 
-    [Header("Spawn Point Tags (Alternative to manual assignment)")]
-    [Tooltip("Tag to find Team1 spawn points (e.g. 'Team1Spawn')")]
-    [SerializeField] private string team1SpawnTag = "Team1Spawn";
-    [Tooltip("Tag to find Team2 spawn points (e.g. 'Team2Spawn')")]
-    [SerializeField] private string team2SpawnTag = "Team2Spawn";
-    [SerializeField] private bool useSpawnTags = true;
-
-    [Header("Settings")]
-    [SerializeField] private bool autoBalanceTeams = true;
-
-    private int team1PlayerCount = 0;
-    private int team2PlayerCount = 0;
-
-    // Track which team each client should be on
-    private System.Collections.Generic.Dictionary<ulong, int> clientTeams = new System.Collections.Generic.Dictionary<ulong, int>();
-
+    #region Unity Lifecycle
     private void Awake()
     {
-        // Initialize singleton FIRST before anything else
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
             return;
         }
+
         Instance = this;
-
-        // Make this persist across scenes
         DontDestroyOnLoad(gameObject);
-
-        Debug.Log("✓ NetworkedSpawnManager initialized and will persist across scenes");
-
-        // Validate camera reference
-        if (cameraFollow == null)
-        {
-            Debug.LogWarning("⚠️ CameraFollow not assigned in Inspector, will search when needed");
-        }
-
-        // IMPORTANT: Register connection approval callback in Awake, before anything spawns
-        if (NetworkManager.Singleton != null)
-        {
-            NetworkManager.Singleton.ConnectionApprovalCallback += ApprovalCheck;
-            Debug.Log("✓ Connection approval callback registered in Awake");
-        }
-        else
-        {
-            Debug.LogWarning("⚠️ NetworkManager.Singleton not found in Awake, will retry in Start");
-        }
-    }
-
-    private void Start()
-    {
-        // Search for camera if not already found
-        if (cameraFollow == null)
-        {
-            cameraFollow = FindObjectOfType<CameraFollow>();
-            if (cameraFollow != null)
-            {
-                Debug.Log("✓ CameraFollow found");
-            }
-        }
-
-        RefreshSpawnPoints();
-    }
-
-    /// <summary>
-    /// Find spawn points in the current scene (call this when Gameplay scene loads)
-    /// </summary>
-    public void RefreshSpawnPoints()
-    {
-        Debug.Log("=== Refreshing Spawn Points ===");
-
-        if (useSpawnTags)
-        {
-            // Find spawn points by tag
-            GameObject[] team1Objects = GameObject.FindGameObjectsWithTag(team1SpawnTag);
-            if (team1Objects.Length > 0)
-            {
-                team1.spawnPoints = new Transform[team1Objects.Length];
-                for (int i = 0; i < team1Objects.Length; i++)
-                {
-                    team1.spawnPoints[i] = team1Objects[i].transform;
-                }
-                Debug.Log($"✓ Found {team1.spawnPoints.Length} Team1 spawn points by tag '{team1SpawnTag}'");
-            }
-            else
-            {
-                Debug.LogWarning($"⚠️ No GameObjects found with tag '{team1SpawnTag}'");
-            }
-
-            GameObject[] team2Objects = GameObject.FindGameObjectsWithTag(team2SpawnTag);
-            if (team2Objects.Length > 0)
-            {
-                team2.spawnPoints = new Transform[team2Objects.Length];
-                for (int i = 0; i < team2Objects.Length; i++)
-                {
-                    team2.spawnPoints[i] = team2Objects[i].transform;
-                }
-                Debug.Log($"✓ Found {team2.spawnPoints.Length} Team2 spawn points by tag '{team2SpawnTag}'");
-            }
-            else
-            {
-                Debug.LogWarning($"⚠️ No GameObjects found with tag '{team2SpawnTag}'");
-            }
-        }
-
-        // Validate spawn points
-        ValidateSpawnPoints();
-    }
-
-    private void ValidateSpawnPoints()
-    {
-        if (team1.spawnPoints == null || team1.spawnPoints.Length == 0)
-        {
-            Debug.LogError("⚠️ NO SPAWN POINTS SET FOR TEAM 1!");
-        }
-        else
-        {
-            Debug.Log($"✓ Team 1 has {team1.spawnPoints.Length} spawn point(s):");
-            foreach (var sp in team1.spawnPoints)
-            {
-                if (sp != null)
-                    Debug.Log($"  - {sp.name}: {sp.position}");
-                else
-                    Debug.LogError("  - NULL SPAWN POINT!");
-            }
-        }
-
-        if (team2.spawnPoints == null || team2.spawnPoints.Length == 0)
-        {
-            Debug.LogError("⚠️ NO SPAWN POINTS SET FOR TEAM 2!");
-        }
-        else
-        {
-            Debug.Log($"✓ Team 2 has {team2.spawnPoints.Length} spawn point(s):");
-            foreach (var sp in team2.spawnPoints)
-            {
-                if (sp != null)
-                    Debug.Log($"  - {sp.name}: {sp.position}");
-                else
-                    Debug.LogError("  - NULL SPAWN POINT!");
-            }
-        }
-    }
-
-    private void ApprovalCheck(
-        NetworkManager.ConnectionApprovalRequest request,
-        NetworkManager.ConnectionApprovalResponse response)
-    {
-        Debug.Log($"Server: Approving player connection for client {request.ClientNetworkId}...");
-
-        // Refresh spawn points in case scene just loaded
-        RefreshSpawnPoints();
-
-        // Approve the connection
-        response.Approved = true;
-        response.CreatePlayerObject = true;
-
-        // Determine which team (0 = Team1, 1 = Team2)
-        int teamId = autoBalanceTeams ? GetBalancedTeamId() : 0;
-        string assignedTeam = teamId == 0 ? team1.teamName : team2.teamName;
-
-        // Store this client's team assignment
-        clientTeams[request.ClientNetworkId] = teamId;
-
-        // Get spawn position for this team
-        Vector3 spawnPosition = GetSpawnPositionForTeam(teamId);
-
-        // Set spawn position
-        response.Position = spawnPosition;
-        response.Rotation = Quaternion.identity;
-
-        Debug.Log($"✓ Client {request.ClientNetworkId} assigned to {assignedTeam} (ID: {teamId}) at {spawnPosition}");
-    }
-
-    private int GetBalancedTeamId()
-    {
-        if (team1PlayerCount <= team2PlayerCount)
-        {
-            team1PlayerCount++;
-            Debug.Log($"Assigned to Team1. Count: Team1={team1PlayerCount}, Team2={team2PlayerCount}");
-            return 0;
-        }
-        else
-        {
-            team2PlayerCount++;
-            Debug.Log($"Assigned to Team2. Count: Team1={team1PlayerCount}, Team2={team2PlayerCount}");
-            return 1;
-        }
-    }
-
-    private Vector3 GetSpawnPositionForTeam(int teamId)
-    {
-        // Refresh spawn points before getting position
-        if (team1.spawnPoints == null || team1.spawnPoints.Length == 0 ||
-            team2.spawnPoints == null || team2.spawnPoints.Length == 0)
-        {
-            Debug.LogWarning("Spawn points not initialized, refreshing...");
-            RefreshSpawnPoints();
-        }
-
-        TeamSpawnPoints teamSpawns = teamId == 0 ? team1 : team2;
-        int teamCount = teamId == 0 ? team1PlayerCount : team2PlayerCount;
-
-        if (teamSpawns.spawnPoints == null || teamSpawns.spawnPoints.Length == 0)
-        {
-            Debug.LogError($"⚠️ No spawn points for team {teamId}! Using Vector3.zero");
-            return Vector3.zero;
-        }
-
-        int spawnIndex = (teamCount - 1) % teamSpawns.spawnPoints.Length;
-
-        if (teamSpawns.spawnPoints[spawnIndex] == null)
-        {
-            Debug.LogError($"⚠️ Spawn point at index {spawnIndex} is null for team {teamId}!");
-            return Vector3.zero;
-        }
-
-        Vector3 position = teamSpawns.spawnPoints[spawnIndex].position;
-        Debug.Log($"✓ Spawn position for team {teamId}: {position} (using spawn point index {spawnIndex})");
-
-        return position;
-    }
-
-    public int GetTeamForClient(ulong clientId)
-    {
-        if (clientTeams.ContainsKey(clientId))
-        {
-            return clientTeams[clientId];
-        }
-
-        Debug.LogWarning($"No team assignment found for client {clientId}, defaulting to Team1");
-        return 0;
-    }
-
-    public Vector3 GetSpawnPosition(string teamName)
-    {
-        // Refresh spawn points if needed
-        if (team1.spawnPoints == null || team1.spawnPoints.Length == 0 ||
-            team2.spawnPoints == null || team2.spawnPoints.Length == 0)
-        {
-            Debug.LogWarning("Spawn points not initialized for GetSpawnPosition, refreshing...");
-            RefreshSpawnPoints();
-        }
-
-        int teamId = teamName == team1.teamName ? 0 : 1;
-        return GetSpawnPositionForTeam(teamId);
-    }
-
-    public void SetupPlayerCamera(GameObject player)
-    {
-        if (cameraFollow != null)
-        {
-            cameraFollow.SetTarget(player.transform);
-            Debug.Log($"✓ Camera now following {player.name}");
-            return;
-        }
-
-        CameraFollow cam = FindObjectOfType<CameraFollow>();
-        if (cam != null)
-        {
-            cam.SetTarget(player.transform);
-            cameraFollow = cam;
-            Debug.Log($"✓ Found camera and set target to {player.name}");
-        }
-        else
-        {
-            Debug.LogError("⚠️ Could not find CameraFollow script anywhere in scene!");
-        }
-    }
-
-    public int GetTeamIDForPosition(Vector3 position)
-    {
-        float minDistTeam1 = float.MaxValue;
-        float minDistTeam2 = float.MaxValue;
-
-        if (team1.spawnPoints != null)
-        {
-            foreach (var spawnPoint in team1.spawnPoints)
-            {
-                if (spawnPoint != null)
-                {
-                    float dist = Vector3.Distance(position, spawnPoint.position);
-                    if (dist < minDistTeam1) minDistTeam1 = dist;
-                }
-            }
-        }
-
-        if (team2.spawnPoints != null)
-        {
-            foreach (var spawnPoint in team2.spawnPoints)
-            {
-                if (spawnPoint != null)
-                {
-                    float dist = Vector3.Distance(position, spawnPoint.position);
-                    if (dist < minDistTeam2) minDistTeam2 = dist;
-                }
-            }
-        }
-
-        return minDistTeam1 < minDistTeam2 ? 0 : 1;
     }
 
     private void OnDestroy()
     {
-        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+        if (Instance == this)
         {
-            NetworkManager.Singleton.ConnectionApprovalCallback -= ApprovalCheck;
+            Instance = null;
+        }
+
+        if (runner != null)
+        {
+            runner.RemoveCallbacks(this);
         }
     }
+    #endregion
+
+    #region Fusion Lifecycle
+    public override void Spawned()
+    {
+        runner = Runner;
+
+        if (Runner.IsServer)
+        {
+            runner.AddCallbacks(this);
+            Debug.Log("NetworkedSpawnManager initialized on server");
+        }
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        if (runner != null)
+        {
+            runner.RemoveCallbacks(this);
+        }
+    }
+    #endregion
+
+    #region INetworkRunnerCallbacks - PLAYER CALLBACKS
+
+    /// <summary>
+    /// Called when a new player joins the game.
+    /// This is where we assign teams and spawn the player character.
+    /// </summary>
+    public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
+    {
+        if (!runner.IsServer)
+            return;
+
+        Debug.Log($"Player {player.PlayerId} joined the game");
+
+        // Step 1: Assign to team
+        int assignedTeam = AssignTeam(player);
+
+        // Step 2: Get spawn position
+        Vector3 spawnPosition = GetSpawnPosition(assignedTeam);
+
+        // Step 3: Spawn the player
+        SpawnPlayer(runner, player, spawnPosition, assignedTeam);
+    }
+
+    /// <summary>
+    /// Called when a player leaves the game.
+    /// We need to clean up their team assignment.
+    /// </summary>
+    public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
+    {
+        if (!runner.IsServer)
+            return;
+
+        if (playerTeams.TryGetValue(player, out int team))
+        {
+            playerTeams.Remove(player);
+
+            if (team == 1)
+                team1Count--;
+            else if (team == 2)
+                team2Count--;
+
+            Debug.Log($"Player {player.PlayerId} left. Team {team} now has {(team == 1 ? team1Count : team2Count)} players");
+        }
+    }
+
+    #endregion
+
+    #region INetworkRunnerCallbacks - INPUT CALLBACKS
+
+    public void OnInput(NetworkRunner runner, NetworkInput input)
+    {
+        // Input handling - implement if you need custom input
+    }
+
+    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input)
+    {
+        // Called when input is missing - usually can ignore
+    }
+
+    #endregion
+
+    #region INetworkRunnerCallbacks - CONNECTION CALLBACKS
+
+    public void OnConnectedToServer(NetworkRunner runner)
+    {
+        Debug.Log("Connected to server");
+    }
+
+    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
+    {
+        Debug.Log($"Disconnected from server: {reason}");
+    }
+
+    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
+    {
+        // Connection approval - can implement custom logic here
+    }
+
+    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason)
+    {
+        Debug.LogError($"Connect failed: {reason}");
+    }
+
+    #endregion
+
+    #region INetworkRunnerCallbacks - SESSION CALLBACKS
+
+    public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList)
+    {
+        // Session list updates - for lobby systems
+    }
+
+    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data)
+    {
+        // Custom authentication responses
+    }
+
+    public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken)
+    {
+        Debug.Log("Host migration occurred");
+    }
+
+    #endregion
+
+    #region INetworkRunnerCallbacks - RELIABLE DATA CALLBACKS
+
+    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data)
+    {
+        // Reliable data received - for custom reliable messages
+    }
+
+    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress)
+    {
+        // Progress updates for reliable data transfer
+    }
+
+    #endregion
+
+    #region INetworkRunnerCallbacks - SCENE CALLBACKS
+
+    public void OnSceneLoadDone(NetworkRunner runner)
+    {
+        Debug.Log("Scene load done");
+    }
+
+    public void OnSceneLoadStart(NetworkRunner runner)
+    {
+        Debug.Log("Scene load start");
+    }
+
+    #endregion
+
+    #region INetworkRunnerCallbacks - OBJECT CALLBACKS
+
+    public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player)
+    {
+        // Called when an object exits a player's Area of Interest
+        // Usually can ignore unless you have custom culling logic
+    }
+
+    public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player)
+    {
+        // Called when an object enters a player's Area of Interest
+        // Usually can ignore unless you have custom culling logic
+    }
+
+    #endregion
+
+    #region INetworkRunnerCallbacks - OTHER CALLBACKS
+
+    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
+    {
+        Debug.Log($"Shutdown: {shutdownReason}");
+    }
+
+    public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message)
+    {
+        // User simulation messages - for custom networking
+    }
+
+    #endregion
+
+    #region Team Assignment Logic
+
+    /// <summary>
+    /// Assigns a player to a team, automatically balancing teams.
+    /// Always puts new players on the team with fewer players.
+    /// </summary>
+    private int AssignTeam(PlayerRef player)
+    {
+        int assignedTeam;
+
+        // Auto-balance: assign to team with fewer players
+        if (team1Count <= team2Count)
+        {
+            assignedTeam = 1;
+            team1Count++;
+        }
+        else
+        {
+            assignedTeam = 2;
+            team2Count++;
+        }
+
+        // Store the team assignment
+        playerTeams[player] = assignedTeam;
+
+        Debug.Log($"Assigned Player {player.PlayerId} to Team {assignedTeam}. Team 1: {team1Count}, Team 2: {team2Count}");
+
+        return assignedTeam;
+    }
+
+    #endregion
+
+    #region Spawn Position Logic
+
+    /// <summary>
+    /// Gets a spawn position for the specified team.
+    /// Randomly selects from available spawn points.
+    /// </summary>
+    private Vector3 GetSpawnPosition(int team)
+    {
+        Transform[] spawnPoints = team == 1 ? team1SpawnPoints : team2SpawnPoints;
+
+        // Validate spawn points exist
+        if (spawnPoints == null || spawnPoints.Length == 0)
+        {
+            Debug.LogError($"No spawn points configured for Team {team}! Using default position.");
+            return Vector3.zero;
+        }
+
+        // Pick a random spawn point
+        int randomIndex = UnityEngine.Random.Range(0, spawnPoints.Length);
+        Vector3 position = spawnPoints[randomIndex].position;
+
+        Debug.Log($"Selected spawn position for Team {team}: {position}");
+        return position;
+    }
+
+    #endregion
+
+    #region Player Spawning
+
+    /// <summary>
+    /// Spawns the player character on the network.
+    /// </summary>
+    private void SpawnPlayer(NetworkRunner runner, PlayerRef player, Vector3 position, int team)
+    {
+        // Validate prefab
+        if (playerPrefab == null)
+        {
+            Debug.LogError("Player prefab is not assigned in NetworkedSpawnManager!");
+            return;
+        }
+
+        // Spawn the player using Fusion's Runner.Spawn method
+        NetworkObject playerObject = runner.Spawn(
+            playerPrefab,           // The prefab to spawn
+            position,               // Where to spawn it
+            Quaternion.identity,    // Default rotation (no rotation)
+            player,                 // Which player owns this object
+            (runner, obj) => OnPlayerSpawned(runner, obj, team) // Callback after spawn
+        );
+
+        Debug.Log($"Spawned player {player.PlayerId} for Team {team} at position {position}");
+    }
+
+    /// <summary>
+    /// Called after a player object has been spawned.
+    /// Sets the team in PlayerTeamData, which updates PlayerTeamComponent.
+    /// </summary>
+    private void OnPlayerSpawned(NetworkRunner runner, NetworkObject obj, int team)
+    {
+        // Get the PlayerRef for this spawned object
+        PlayerRef player = obj.InputAuthority;
+
+        // Get the PlayerTeamData component
+        PlayerTeamData teamData = obj.GetComponent<PlayerTeamData>();
+
+        if (teamData != null)
+        {
+            // Set the team - this will sync across network and update PlayerTeamComponent
+            teamData.SetTeam(team);
+            Debug.Log($"✓ Player {player.PlayerId} team set to {team} via PlayerTeamData");
+        }
+        else
+        {
+            Debug.LogError($"PlayerTeamData component not found on player prefab! Add it alongside PlayerTeamComponent.");
+        }
+
+        // Verify PlayerTeamComponent exists (for debugging)
+        PlayerTeamComponent legacyTeamComponent = obj.GetComponent<PlayerTeamComponent>();
+        if (legacyTeamComponent == null)
+        {
+            Debug.LogWarning("PlayerTeamComponent not found on player prefab. Territorial/damage systems won't work!");
+        }
+        else
+        {
+            Debug.Log($"✓ Player has both PlayerTeamData (networking) and PlayerTeamComponent (gameplay)");
+        }
+    }
+
+    #endregion
+
+    #region Public Helper Methods
+    /// <summary>
+    /// Gets spawn position by team name (backwards compatible)
+    /// </summary>
+    public Vector3 GetSpawnPosition(string teamName)
+    {
+        int team = teamName == "Team1" ? 1 : 2;
+        return GetSpawnPosition(team);
+    }
+    /// <summary>
+    /// Gets the team number for a specific player.
+    /// Returns -1 if player is not found.
+    /// </summary>
+    public int GetPlayerTeam(PlayerRef player)
+    {
+        if (playerTeams.TryGetValue(player, out int team))
+        {
+            return team;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Gets the current count for a specific team.
+    /// </summary>
+    public int GetTeamCount(int team)
+    {
+        return team == 1 ? team1Count : team2Count;
+    }
+
+    #endregion
 }

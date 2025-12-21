@@ -1,11 +1,12 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using Fusion;
 
 /// <summary>
 /// Attached to player GameObjects. Tracks coins the player is carrying.
-/// NOW COMPATIBLE WITH NETWORK TEAM ASSIGNMENT!
+/// PHOTON FUSION VERSION - Compatible with network team assignment
 /// </summary>
-public class PlayerInventory : MonoBehaviour
+public class PlayerInventory : NetworkBehaviour
 {
     [Header("Team Assignment")]
     [Tooltip("Leave empty if using NetworkPlayerWrapper - team will be auto-assigned")]
