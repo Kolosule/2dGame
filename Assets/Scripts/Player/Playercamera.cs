@@ -1,4 +1,4 @@
-﻿using Unity.Netcode;
+﻿using Fusion;
 using UnityEngine;
 
 /// <summary>
@@ -215,7 +215,7 @@ public class PlayerCamera : MonoBehaviour
         foreach (NetworkPlayerWrapper player in allPlayers)
         {
             // Check if this player is owned by the local client
-            if (player.IsOwner)
+            if (player.HasInputAuthority)
             {
                 // Found the local player!
                 targetPlayer = player.transform;

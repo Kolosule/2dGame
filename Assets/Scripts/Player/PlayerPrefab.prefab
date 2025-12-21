@@ -142,7 +142,7 @@ GameObject:
   - component: {fileID: 1629181840047361504}
   - component: {fileID: 1716746421360222117}
   - component: {fileID: 3938946417030660628}
-  - component: {fileID: 8457335594079492682}
+  - component: {fileID: 5249638385752750120}
   - component: {fileID: 465053131265936943}
   - component: {fileID: 791806707811693276}
   - component: {fileID: 274603642580577355}
@@ -414,7 +414,7 @@ MonoBehaviour:
   spriteRenderer: {fileID: 0}
   colorizePlayer: 0
   enableDetailedLogging: 1
---- !u!114 &8457335594079492682
+--- !u!114 &5249638385752750120
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -423,17 +423,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 3540110564427285031}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Script: {fileID: 0}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2216731382
+  GlobalObjectIdHash: 0
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
   AlwaysReplicateAsRoot: 0
-  SynchronizeTransform: 0
+  SynchronizeTransform: 1
   ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 0
+  SceneMigrationSynchronization: 1
   SpawnWithObservers: 1
   DontDestroyWithOwner: 0
   AutoObjectParentSync: 1

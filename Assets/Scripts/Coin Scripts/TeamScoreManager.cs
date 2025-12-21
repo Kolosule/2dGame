@@ -1,16 +1,17 @@
 using UnityEngine;
 using UnityEngine.Events;
+using Fusion;
 
 /// <summary>
 /// Singleton manager that tracks team scores and unlocks territory buffs.
 /// Place this on an empty GameObject in your scene (only one needed).
-/// NOW COMPATIBLE WITH NETWORK TEAM NAMES (Team1/Team2)
+/// PHOTON FUSION VERSION - Compatible with network team names (Team1/Team2)
 /// </summary>
-public class TeamScoreManager : MonoBehaviour
+public class TeamScoreManager : NetworkBehaviour
 {
     [Header("Score Tracking")]
-    [SerializeField] private int team1Score = 0;
-    [SerializeField] private int team2Score = 0;
+    [Networked] public int Team1Score { get; set; }
+    [Networked] public int Team2Score { get; set; }
 
     [Header("Milestone Thresholds")]
     [Tooltip("Score needed to unlock damage buff (removes 0.5x territory debuff)")]
@@ -20,10 +21,10 @@ public class TeamScoreManager : MonoBehaviour
     [SerializeField] private int defenseBuffThreshold = 100;
 
     [Header("Buff Status")]
-    [SerializeField] private bool team1DamageBuff = false;
-    [SerializeField] private bool team2DamageBuff = false;
-    [SerializeField] private bool team1DefenseBuff = false;
-    [SerializeField] private bool team2DefenseBuff = false;
+    [Networked] public bool Team1DamageBuff { get; set; }
+    [Networked] public bool Team2DamageBuff { get; set; }
+    [Networked] public bool Team1DefenseBuff { get; set; }
+    [Networked] public bool Team2DefenseBuff { get; set; }
 
     // Events that fire when milestones are reached (optional, for effects/UI)
     public UnityEvent<string> onDamageBuffUnlocked;
@@ -31,6 +32,8 @@ public class TeamScoreManager : MonoBehaviour
 
     // Singleton instance
     private static TeamScoreManager instance;
+
+    public static TeamScoreManager Instance => instance;
 
     private void Awake()
     {
@@ -49,34 +52,47 @@ public class TeamScoreManager : MonoBehaviour
     /// <summary>
     /// Adds points to a team's score and checks for milestone unlocks
     /// Handles multiple team naming conventions: Team1/Blue and Team2/Red
+    /// RPC so any client can request adding points, but only server executes
     /// </summary>
     /// <param name="team">The team receiving points</param>
     /// <param name="points">Number of points to add</param>
-    public void AddPoints(string team, int points)
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_AddPoints(string team, int points)
     {
+        // Only execute on server/state authority
+        if (!HasStateAuthority) return;
+
         // Normalize team name
         bool isTeam1 = IsTeam1(team);
         bool isTeam2 = IsTeam2(team);
 
         if (isTeam1)
         {
-            team1Score += points;
-            //Debug.Log($"Team1 score: {team1Score} (+{points})");
+            Team1Score += points;
+            //Debug.Log($"Team1 score: {Team1Score} (+{points})");
             CheckMilestones("Team1");
         }
         else if (isTeam2)
         {
-            team2Score += points;
-           // Debug.Log($"Team2 score: {team2Score} (+{points})");
+            Team2Score += points;
+            //Debug.Log($"Team2 score: {Team2Score} (+{points})");
             CheckMilestones("Team2");
         }
         else
         {
-           // Debug.LogError($"Unrecognized team: '{team}'. Expected Team1, Team2, Blue, or Red.");
+            //Debug.LogError($"Unrecognized team: '{team}'. Expected Team1, Team2, Blue, or Red.");
         }
 
-        // Update UI
+        // Update UI on all clients
         UpdateUI();
+    }
+
+    /// <summary>
+    /// Local version for backward compatibility - calls RPC
+    /// </summary>
+    public void AddPoints(string team, int points)
+    {
+        RPC_AddPoints(team, points);
     }
 
     /// <summary>
@@ -101,24 +117,27 @@ public class TeamScoreManager : MonoBehaviour
 
     /// <summary>
     /// Checks if team has reached any milestones and unlocks buffs
+    /// Only runs on server/state authority
     /// </summary>
     private void CheckMilestones(string team)
     {
+        if (!HasStateAuthority) return;
+
         bool isTeam1 = team == "Team1";
-        int teamScore = isTeam1 ? team1Score : team2Score;
+        int teamScore = isTeam1 ? Team1Score : Team2Score;
 
         // Check damage buff milestone (50 points)
         if (teamScore >= damageBuffThreshold)
         {
-            if (isTeam1 && !team1DamageBuff)
+            if (isTeam1 && !Team1DamageBuff)
             {
-                team1DamageBuff = true;
+                Team1DamageBuff = true;
                 //Debug.Log("<color=blue>TEAM 1 UNLOCKED DAMAGE BUFF!</color> Territory damage now 1.0x");
                 onDamageBuffUnlocked?.Invoke("Team1");
             }
-            else if (!isTeam1 && !team2DamageBuff)
+            else if (!isTeam1 && !Team2DamageBuff)
             {
-                team2DamageBuff = true;
+                Team2DamageBuff = true;
                 //Debug.Log("<color=red>TEAM 2 UNLOCKED DAMAGE BUFF!</color> Territory damage now 1.0x");
                 onDamageBuffUnlocked?.Invoke("Team2");
             }
@@ -127,15 +146,15 @@ public class TeamScoreManager : MonoBehaviour
         // Check defense buff milestone (100 points)
         if (teamScore >= defenseBuffThreshold)
         {
-            if (isTeam1 && !team1DefenseBuff)
+            if (isTeam1 && !Team1DefenseBuff)
             {
-                team1DefenseBuff = true;
+                Team1DefenseBuff = true;
                 //Debug.Log("<color=blue>TEAM 1 UNLOCKED DEFENSE BUFF!</color> Territory damage taken now 1.0x");
                 onDefenseBuffUnlocked?.Invoke("Team1");
             }
-            else if (!isTeam1 && !team2DefenseBuff)
+            else if (!isTeam1 && !Team2DefenseBuff)
             {
-                team2DefenseBuff = true;
+                Team2DefenseBuff = true;
                 //Debug.Log("<color=red>TEAM 2 UNLOCKED DEFENSE BUFF!</color> Territory damage taken now 1.0x");
                 onDefenseBuffUnlocked?.Invoke("Team2");
             }
@@ -151,11 +170,11 @@ public class TeamScoreManager : MonoBehaviour
 
         if (isTeam1)
         {
-            return team1DamageBuff ? 1.0f : 0.5f;
+            return Team1DamageBuff ? 1.0f : 0.5f;
         }
         else
         {
-            return team2DamageBuff ? 1.0f : 0.5f;
+            return Team2DamageBuff ? 1.0f : 0.5f;
         }
     }
 
@@ -168,11 +187,11 @@ public class TeamScoreManager : MonoBehaviour
 
         if (isTeam1)
         {
-            return team1DefenseBuff ? 1.0f : 0.5f;
+            return Team1DefenseBuff ? 1.0f : 0.5f;
         }
         else
         {
-            return team2DefenseBuff ? 1.0f : 0.5f;
+            return Team2DefenseBuff ? 1.0f : 0.5f;
         }
     }
 
@@ -182,26 +201,16 @@ public class TeamScoreManager : MonoBehaviour
     public int GetTeamScore(string team)
     {
         bool isTeam1 = IsTeam1(team);
-        return isTeam1 ? team1Score : team2Score;
+        return isTeam1 ? Team1Score : Team2Score;
     }
 
-    /// <summary>
-    /// Public properties for easy access
-    /// </summary>
-    public int Team1Score => team1Score;
-    public int Team2Score => team2Score;
-    public bool Team1DamageBuff => team1DamageBuff;
-    public bool Team2DamageBuff => team2DamageBuff;
-    public bool Team1DefenseBuff => team1DefenseBuff;
-    public bool Team2DefenseBuff => team2DefenseBuff;
-
     // Legacy property names for backward compatibility
-    public int RedTeamScore => team2Score;
-    public int BlueTeamScore => team1Score;
-    public bool RedTeamDamageBuff => team2DamageBuff;
-    public bool BlueTeamDamageBuff => team1DamageBuff;
-    public bool RedTeamDefenseBuff => team2DefenseBuff;
-    public bool BlueTeamDefenseBuff => team1DefenseBuff;
+    public int RedTeamScore => Team2Score;
+    public int BlueTeamScore => Team1Score;
+    public bool RedTeamDamageBuff => Team2DamageBuff;
+    public bool BlueTeamDamageBuff => Team1DamageBuff;
+    public bool RedTeamDefenseBuff => Team2DefenseBuff;
+    public bool BlueTeamDefenseBuff => Team1DefenseBuff;
 
     /// <summary>
     /// Updates the UI display

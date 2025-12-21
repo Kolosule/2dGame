@@ -99,7 +99,7 @@ public class CameraFollow : MonoBehaviour
             NetworkPlayerWrapper[] players = FindObjectsOfType<NetworkPlayerWrapper>();
             foreach (var playerWrapper in players)
             {
-                if (playerWrapper.IsOwner)
+                if (playerWrapper.HasInputAuthority)
                 {
                     SetTarget(playerWrapper.transform);
                     Debug.Log($"✓ CameraFollow: Found local player via NetworkPlayerWrapper: {playerWrapper.name}");

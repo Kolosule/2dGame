@@ -1,10 +1,11 @@
-using Unity.Netcode;
+using Fusion;
 using UnityEngine;
 using System.Collections;
 
 /// <summary>
 /// Manages flag state and interactions for Capture the Flag mode
 /// Attach this to each team's flag GameObject
+/// CONVERTED TO PHOTON FUSION - FIXED VERSION
 /// </summary>
 public class Flag : NetworkBehaviour
 {
@@ -33,27 +34,18 @@ public class Flag : NetworkBehaviour
     [Tooltip("Trigger collider for flag pickup")]
     [SerializeField] private Collider2D triggerCollider;
 
-    // Network variables to sync flag state across all clients
-    private NetworkVariable<FlagState> currentState = new NetworkVariable<FlagState>(
-        FlagState.AtHome,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    // Network properties to sync flag state across all clients
+    [Networked, OnChangedRender(nameof(OnStateChanged))]
+    public FlagState CurrentState { get; set; }
 
-    private NetworkVariable<ulong> carrierClientId = new NetworkVariable<ulong>(
-        ulong.MaxValue, // MaxValue = no carrier
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    [Networked, OnChangedRender(nameof(OnCarrierPlayerRefChanged))]
+    public PlayerRef CarrierPlayerRef { get; set; }
 
-    private NetworkVariable<Vector3> homePosition = new NetworkVariable<Vector3>(
-        Vector3.zero,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    [Networked]
+    public Vector3 HomePosition { get; set; }
 
     // Local references
-    private GameObject carrier;
+    private GameObject carrierGameObject; // RENAMED from 'carrier' to avoid conflict
     private Coroutine autoReturnCoroutine;
     private Vector3 dropPosition;
 
@@ -67,8 +59,8 @@ public class Flag : NetworkBehaviour
 
     // Public properties
     public string OwningTeam => owningTeam;
-    public FlagState State => currentState.Value;
-    public GameObject Carrier => carrier;
+    public FlagState State => CurrentState;
+    public GameObject Carrier => carrierGameObject; // Use the renamed variable
 
     private void Awake()
     {
@@ -82,40 +74,34 @@ public class Flag : NetworkBehaviour
             flagSprite = GetComponent<SpriteRenderer>();
     }
 
-    public override void OnNetworkSpawn()
+    public override void Spawned()
     {
         // Server sets the home position when flag spawns
-        if (IsServer)
+        if (HasStateAuthority)
         {
-            homePosition.Value = transform.position;
-            currentState.Value = FlagState.AtHome;
-            Debug.Log($"✓ {owningTeam} flag spawned at {homePosition.Value}");
+            HomePosition = transform.position;
+            CurrentState = FlagState.AtHome;
+            CarrierPlayerRef = PlayerRef.None;
+            Debug.Log($"✓ {owningTeam} flag spawned at {HomePosition}");
         }
 
-        // Subscribe to state changes on all clients
-        currentState.OnValueChanged += OnStateChanged;
-        carrierClientId.OnValueChanged += OnCarrierChanged;
-    }
-
-    public override void OnNetworkDespawn()
-    {
-        currentState.OnValueChanged -= OnStateChanged;
-        carrierClientId.OnValueChanged -= OnCarrierChanged;
+        // Initialize visuals on all clients based on current state
+        OnStateChanged();
     }
 
     private void Update()
     {
         // If flag is being carried, follow the carrier
-        if (currentState.Value == FlagState.Carried && carrier != null)
+        if (CurrentState == FlagState.Carried && carrierGameObject != null)
         {
-            transform.position = carrier.transform.position + Vector3.up * carrierOffset;
+            transform.position = carrierGameObject.transform.position + Vector3.up * carrierOffset;
         }
     }
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
         // Only process on server
-        if (!IsServer) return;
+        if (!HasStateAuthority) return;
 
         // Get player components
         GameObject player = collision.gameObject;
@@ -126,19 +112,19 @@ public class Flag : NetworkBehaviour
             return;
 
         // Handle different flag states
-        switch (currentState.Value)
+        switch (CurrentState)
         {
             case FlagState.AtHome:
                 // Enemy team can pick up flag from home
                 if (playerTeam.teamID != owningTeam)
                 {
-                    PickupFlag(player, playerNetworkObject.OwnerClientId);
+                    PickupFlag(player, playerNetworkObject.InputAuthority);
                 }
                 break;
 
             case FlagState.Dropped:
                 // Anyone can pick up dropped flag
-                PickupFlag(player, playerNetworkObject.OwnerClientId);
+                PickupFlag(player, playerNetworkObject.InputAuthority);
                 break;
 
             case FlagState.Carried:
@@ -151,9 +137,9 @@ public class Flag : NetworkBehaviour
     /// <summary>
     /// SERVER: Pick up the flag
     /// </summary>
-    private void PickupFlag(GameObject player, ulong clientId)
+    private void PickupFlag(GameObject player, PlayerRef playerRef)
     {
-        if (!IsServer) return;
+        if (!HasStateAuthority) return;
 
         // Cancel auto-return if it was running
         if (autoReturnCoroutine != null)
@@ -163,18 +149,23 @@ public class Flag : NetworkBehaviour
         }
 
         // Set flag state
-        currentState.Value = FlagState.Carried;
-        carrierClientId.Value = clientId;
-        carrier = player;
+        CurrentState = FlagState.Carried;
+        CarrierPlayerRef = playerRef;
+        carrierGameObject = player;
 
-        // Disable player's dash
+        // Disable player's dash (if you have this component)
         PlayerMovement movement = player.GetComponent<PlayerMovement>();
         if (movement != null)
         {
             movement.enabled = false; // Will re-enable when flag is dropped
             movement.enabled = true;
-            // Set a flag carrier marker
-            player.GetComponent<FlagCarrierMarker>()?.SetCarryingFlag(true);
+        }
+
+        // Set flag carrier marker (if you have this component)
+        FlagCarrierMarker marker = player.GetComponent<FlagCarrierMarker>();
+        if (marker != null)
+        {
+            marker.SetCarryingFlag(true);
         }
 
         // Play pickup effect
@@ -187,9 +178,13 @@ public class Flag : NetworkBehaviour
             ? $"{GetTeamDisplayName(playerTeam.teamID)} team has captured {GetTeamDisplayName(owningTeam)}'s flag!"
             : $"{GetTeamDisplayName(owningTeam)} team is returning their flag!";
 
-        CTFGameManager.Instance?.ShowNotificationClientRpc(notification);
+        // Notify clients via CTFGameManager
+        if (CTFGameManager.Instance != null && HasStateAuthority)
+        {
+            CTFGameManager.Instance.RPC_ShowNotification(notification);
+        }
 
-        Debug.Log($"✓ {owningTeam} flag picked up by {player.name} (Client {clientId})");
+        Debug.Log($"✓ {owningTeam} flag picked up by {player.name} (Player {playerRef})");
     }
 
     /// <summary>
@@ -197,23 +192,27 @@ public class Flag : NetworkBehaviour
     /// </summary>
     public void DropFlag()
     {
-        if (!IsServer) return;
-        if (currentState.Value != FlagState.Carried) return;
+        if (!HasStateAuthority) return;
+        if (CurrentState != FlagState.Carried) return;
 
         // Save drop position
         dropPosition = transform.position;
 
         // Clear carrier
-        if (carrier != null)
+        if (carrierGameObject != null)
         {
             // Re-enable dash
-            carrier.GetComponent<FlagCarrierMarker>()?.SetCarryingFlag(false);
-            carrier = null;
+            FlagCarrierMarker marker = carrierGameObject.GetComponent<FlagCarrierMarker>();
+            if (marker != null)
+            {
+                marker.SetCarryingFlag(false);
+            }
+            carrierGameObject = null;
         }
 
         // Update state
-        currentState.Value = FlagState.Dropped;
-        carrierClientId.Value = ulong.MaxValue;
+        CurrentState = FlagState.Dropped;
+        CarrierPlayerRef = PlayerRef.None;
 
         // Play drop effect
         if (dropEffect != null)
@@ -223,134 +222,190 @@ public class Flag : NetworkBehaviour
         autoReturnCoroutine = StartCoroutine(AutoReturnTimer());
 
         // Notify clients
-        CTFGameManager.Instance?.ShowNotificationClientRpc(
-            $"{GetTeamDisplayName(owningTeam)} flag has been dropped!"
-        );
+        if (CTFGameManager.Instance != null && HasStateAuthority)
+        {
+            CTFGameManager.Instance.RPC_ShowNotification($"{GetTeamDisplayName(owningTeam)} flag has been dropped!");
+        }
 
         Debug.Log($"✓ {owningTeam} flag dropped at {dropPosition}");
     }
 
     /// <summary>
-    /// SERVER: Return flag to home base
+    /// SERVER: Return flag to home position
     /// </summary>
     public void ReturnFlag()
     {
-        if (!IsServer) return;
+        if (!HasStateAuthority) return;
 
-        // Cancel auto-return timer
+        // Cancel auto-return if running
         if (autoReturnCoroutine != null)
         {
             StopCoroutine(autoReturnCoroutine);
             autoReturnCoroutine = null;
         }
 
-        // Clear carrier if returning while carried
-        if (carrier != null)
+        // Clear carrier
+        if (carrierGameObject != null)
         {
-            carrier.GetComponent<FlagCarrierMarker>()?.SetCarryingFlag(false);
-            carrier = null;
+            FlagCarrierMarker marker = carrierGameObject.GetComponent<FlagCarrierMarker>();
+            if (marker != null)
+            {
+                marker.SetCarryingFlag(false);
+            }
+            carrierGameObject = null;
         }
 
-        // Reset position and state
-        transform.position = homePosition.Value;
-        currentState.Value = FlagState.AtHome;
-        carrierClientId.Value = ulong.MaxValue;
+        // Reset state
+        CurrentState = FlagState.AtHome;
+        CarrierPlayerRef = PlayerRef.None;
+        transform.position = HomePosition;
 
         // Notify clients
-        CTFGameManager.Instance?.ShowNotificationClientRpc(
-            $"{GetTeamDisplayName(owningTeam)} flag has been returned!"
-        );
+        if (CTFGameManager.Instance != null && HasStateAuthority)
+        {
+            CTFGameManager.Instance.RPC_ShowNotification($"{GetTeamDisplayName(owningTeam)} flag has been returned!");
+        }
 
         Debug.Log($"✓ {owningTeam} flag returned to home");
     }
 
     /// <summary>
-    /// Auto-return timer for dropped flags
+    /// Auto-return timer coroutine
     /// </summary>
     private IEnumerator AutoReturnTimer()
     {
         yield return new WaitForSeconds(autoReturnTime);
 
-        if (currentState.Value == FlagState.Dropped)
+        if (CurrentState == FlagState.Dropped)
         {
             ReturnFlag();
-            Debug.Log($"✓ {owningTeam} flag auto-returned after timeout");
         }
-
-        autoReturnCoroutine = null;
     }
 
     /// <summary>
-    /// Called when flag state changes (runs on all clients)
+    /// Called when flag state changes (via OnChangedRender attribute)
     /// </summary>
-    private void OnStateChanged(FlagState oldState, FlagState newState)
+    private void OnStateChanged()
     {
-        Debug.Log($"{owningTeam} flag state changed: {oldState} → {newState}");
-
-        // Update visuals based on state
-        switch (newState)
-        {
-            case FlagState.AtHome:
-                if (flagSprite != null)
-                    flagSprite.color = Color.white;
-                transform.position = homePosition.Value;
-                break;
-
-            case FlagState.Carried:
-                if (flagSprite != null)
-                    flagSprite.color = Color.yellow;
-                break;
-
-            case FlagState.Dropped:
-                if (flagSprite != null)
-                    flagSprite.color = Color.red;
-                break;
-        }
+        UpdateVisuals();
     }
 
     /// <summary>
-    /// Called when carrier changes (runs on all clients)
+    /// Called when carrier PlayerRef changes (via OnChangedRender attribute)
     /// </summary>
-    private void OnCarrierChanged(ulong oldCarrier, ulong newCarrier)
+    private void OnCarrierPlayerRefChanged()
     {
         // Find carrier GameObject on client
-        if (newCarrier != ulong.MaxValue)
+        if (CarrierPlayerRef != PlayerRef.None)
         {
-            // Find the player with this client ID
-            foreach (var networkClient in NetworkManager.Singleton.ConnectedClients.Values)
+            // Try to find the player with this PlayerRef
+            foreach (PlayerRef player in Runner.ActivePlayers)
             {
-                if (networkClient.ClientId == newCarrier && networkClient.PlayerObject != null)
+                if (player == CarrierPlayerRef)
                 {
-                    carrier = networkClient.PlayerObject.gameObject;
-                    break;
+                    // Get the network object for this player
+                    if (Runner.TryGetPlayerObject(player, out NetworkObject networkObject))
+                    {
+                        carrierGameObject = networkObject.gameObject;
+                        Debug.Log($"Found carrier: {carrierGameObject.name}");
+                        break;
+                    }
                 }
             }
         }
         else
         {
-            carrier = null;
+            carrierGameObject = null;
         }
     }
 
     /// <summary>
-    /// Get display name for team
+    /// Update visual feedback based on current state
     /// </summary>
-    private string GetTeamDisplayName(string teamId)
+    private void UpdateVisuals()
     {
-        if (teamId == "Team1") return "Blue";
-        if (teamId == "Team2") return "Red";
-        return teamId;
+        if (flagSprite == null) return;
+
+        switch (CurrentState)
+        {
+            case FlagState.AtHome:
+                flagSprite.color = Color.white;
+                flagSprite.enabled = true;
+                break;
+
+            case FlagState.Carried:
+                flagSprite.color = new Color(1f, 1f, 1f, 0.7f); // Slightly transparent
+                flagSprite.enabled = true;
+                break;
+
+            case FlagState.Dropped:
+                flagSprite.color = new Color(1f, 0.5f, 0.5f); // Reddish tint
+                flagSprite.enabled = true;
+                break;
+        }
     }
 
     /// <summary>
-    /// Public method for forcing flag drop (called when carrier dies)
+    /// SERVER RPC: Request to drop the flag
+    /// Called when carrier dies or manually drops
     /// </summary>
-    [ServerRpc(RequireOwnership = false)]
-    public void ForceDropServerRpc()
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void DropFlagRpc()
     {
-        if (currentState.Value == FlagState.Carried)
+        DropFlag();
+    }
+
+    /// <summary>
+    /// SERVER RPC: Request to return flag
+    /// </summary>
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void ReturnFlagRpc()
+    {
+        ReturnFlag();
+    }
+
+    /// <summary>
+    /// Get display name for a team
+    /// </summary>
+    private string GetTeamDisplayName(string teamId)
+    {
+        switch (teamId)
         {
-            DropFlag();
+            case "Team1":
+            case "Blue":
+                return "Blue";
+            case "Team2":
+            case "Red":
+                return "Red";
+            default:
+                return teamId;
+        }
+    }
+
+    /// <summary>
+    /// Check if a specific player is carrying this flag
+    /// </summary>
+    public bool IsCarriedBy(PlayerRef playerRef)
+    {
+        return CurrentState == FlagState.Carried && CarrierPlayerRef == playerRef;
+    }
+
+    /// <summary>
+    /// Get the distance to home position
+    /// </summary>
+    public float GetDistanceToHome()
+    {
+        return Vector3.Distance(transform.position, HomePosition);
+    }
+
+    private void OnDrawGizmos()
+    {
+        // Draw home position in editor
+        if (Application.isPlaying && HomePosition != Vector3.zero)
+        {
+            Gizmos.color = owningTeam == "Team1" ? Color.blue : Color.red;
+            Gizmos.DrawWireSphere(HomePosition, 0.5f);
+            Gizmos.DrawLine(transform.position, HomePosition);
         }
     }
 }

@@ -1,7 +1,8 @@
-using Unity.Netcode;
+using Fusion;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Linq;
 
 /// <summary>
 /// Manages Capture the Flag game mode
@@ -46,25 +47,15 @@ public class CTFGameManager : NetworkBehaviour
     [Tooltip("Time in seconds to show notifications")]
     [SerializeField] private float notificationDuration = 3f;
 
-    // Network variable to track if game is over
-    private NetworkVariable<bool> gameIsOver = new NetworkVariable<bool>(
-        false,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    // Networked properties with OnChanged callbacks
+    [Networked]
+    public bool GameIsOver { get; set; }
 
-    // Track flags at each base
-    private NetworkVariable<bool> team1HasBothFlags = new NetworkVariable<bool>(
-        false,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    [Networked]
+    public bool Team1HasBothFlags { get; set; }
 
-    private NetworkVariable<bool> team2HasBothFlags = new NetworkVariable<bool>(
-        false,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    [Networked]
+    public bool Team2HasBothFlags { get; set; }
 
     private void Awake()
     {
@@ -81,35 +72,50 @@ public class CTFGameManager : NetworkBehaviour
             gameOverPanel.SetActive(false);
     }
 
-    public override void OnNetworkSpawn()
+    public override void Spawned()
     {
-        // Subscribe to game state changes
-        gameIsOver.OnValueChanged += OnGameOverChanged;
+        base.Spawned();
 
         // Find flags if not assigned
         if (team1Flag == null || team2Flag == null)
         {
             FindFlags();
         }
+
+        // Initialize UI on all clients
+        UpdateFlagStatusUI();
     }
 
-    public override void OnNetworkDespawn()
+    private void OnDestroy()
     {
-        gameIsOver.OnValueChanged -= OnGameOverChanged;
+        // Clean up singleton
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     private void Update()
     {
-        // Update flag status UI
-        UpdateFlagStatusUI();
-
-        // Update flag indicators to point to flag locations
+        // Update flag indicator positions (all clients)
         UpdateFlagIndicators();
 
+        // Update flag status UI
+        UpdateFlagStatusUI();
+    }
+
+    public override void FixedUpdateNetwork()
+    {
         // SERVER: Continuously check win condition
-        if (IsServer && !gameIsOver.Value)
+        if (HasStateAuthority && !GameIsOver)
         {
             CheckWinCondition();
+        }
+
+        // Check for game over state change on all clients
+        if (GameIsOver && gameOverPanel != null && !gameOverPanel.activeSelf)
+        {
+            gameOverPanel.SetActive(true);
         }
     }
 
@@ -118,7 +124,7 @@ public class CTFGameManager : NetworkBehaviour
     /// </summary>
     private void FindFlags()
     {
-        Flag[] flags = FindObjectsOfType<Flag>();
+        Flag[] flags = FindObjectsByType<Flag>(FindObjectsSortMode.None);
         foreach (Flag flag in flags)
         {
             if (flag.OwningTeam == "Team1" || flag.OwningTeam == "Blue")
@@ -138,26 +144,9 @@ public class CTFGameManager : NetworkBehaviour
             Debug.LogError("⚠️ Team2 flag not found!");
     }
 
-    /// <summary>
-    /// SERVER: Called when a flag is captured (brought to enemy base)
-    /// </summary>
-    public void OnFlagCaptured(string flagOwner, string capturingTeam)
-    {
-        if (!IsServer) return;
-
-        Debug.Log($"Flag captured! {flagOwner} flag captured by {capturingTeam}");
-
-        // Check if capturing team now has both flags in their base
-        CheckWinCondition();
-    }
-
-    /// <summary>
-    /// SERVER: Check if either team has both flags and should win
-    /// </summary>
     private void CheckWinCondition()
     {
-        if (!IsServer) return;
-        if (gameIsOver.Value) return;
+        if (!HasStateAuthority || GameIsOver) return;
 
         if (team1Flag == null || team2Flag == null)
         {
@@ -165,11 +154,7 @@ public class CTFGameManager : NetworkBehaviour
             return;
         }
 
-        // Get current flag positions
-        Vector3 team1FlagPos = team1Flag.transform.position;
-        Vector3 team2FlagPos = team2Flag.transform.position;
-
-        // Get base positions
+        // Get base positions from TeamManager
         if (TeamManager.Instance == null)
         {
             Debug.LogError("TeamManager.Instance is null!");
@@ -188,334 +173,162 @@ public class CTFGameManager : NetworkBehaviour
         Vector3 team1BasePos = team1Data.basePosition;
         Vector3 team2BasePos = team2Data.basePosition;
 
-        float baseRadius = 5f; // Increased from 3f for more forgiving detection
+        // Check if team1 has both flags at their base
+        bool team1FlagAtTeam1Base = Vector3.Distance(team1Flag.transform.position, team1BasePos) < 2f;
+        bool team2FlagAtTeam1Base = Vector3.Distance(team2Flag.transform.position, team1BasePos) < 2f;
+        Team1HasBothFlags = team1FlagAtTeam1Base && team2FlagAtTeam1Base;
 
-        // Check if BOTH flags are at Team1's base
-        float team1FlagDistToTeam1Base = Vector2.Distance(team1FlagPos, team1BasePos);
-        float team2FlagDistToTeam1Base = Vector2.Distance(team2FlagPos, team1BasePos);
+        // Check if team2 has both flags at their base
+        bool team1FlagAtTeam2Base = Vector3.Distance(team1Flag.transform.position, team2BasePos) < 2f;
+        bool team2FlagAtTeam2Base = Vector3.Distance(team2Flag.transform.position, team2BasePos) < 2f;
+        Team2HasBothFlags = team1FlagAtTeam2Base && team2FlagAtTeam2Base;
 
-        if (team1FlagDistToTeam1Base < baseRadius && team2FlagDistToTeam1Base < baseRadius)
+        // Check for win
+        if (Team1HasBothFlags)
         {
-            Debug.Log($"WIN CONDITION MET! Both flags at Team1 base:");
-            Debug.Log($"  Team1 flag distance: {team1FlagDistToTeam1Base}");
-            Debug.Log($"  Team2 flag distance: {team2FlagDistToTeam1Base}");
-            EndGame("Team1");
-            return;
+            EndGame(1);
         }
-
-        // Check if BOTH flags are at Team2's base
-        float team1FlagDistToTeam2Base = Vector2.Distance(team1FlagPos, team2BasePos);
-        float team2FlagDistToTeam2Base = Vector2.Distance(team2FlagPos, team2BasePos);
-
-        if (team1FlagDistToTeam2Base < baseRadius && team2FlagDistToTeam2Base < baseRadius)
+        else if (Team2HasBothFlags)
         {
-            Debug.Log($"WIN CONDITION MET! Both flags at Team2 base:");
-            Debug.Log($"  Team1 flag distance: {team1FlagDistToTeam2Base}");
-            Debug.Log($"  Team2 flag distance: {team2FlagDistToTeam2Base}");
-            EndGame("Team2");
-            return;
+            EndGame(2);
         }
     }
 
-    /// <summary>
-    /// Check if a position is at a specific team's base
-    /// </summary>
-    private bool IsAtTeamBase(Vector3 position, string teamId)
+    private void EndGame(int winningTeam)
     {
-        if (TeamManager.Instance == null) return false;
+        if (!HasStateAuthority || GameIsOver) return;
 
-        TeamData teamData = TeamManager.Instance.GetTeamData(teamId);
-        if (teamData == null) return false;
-
-        float distanceToBase = Vector2.Distance(position, teamData.basePosition);
-        return distanceToBase < 5f; // Increased from 3f
+        GameIsOver = true;
+        AnnounceWinnerRpc(winningTeam);
     }
 
-    /// <summary>
-    /// SERVER: End the game with a winner
-    /// </summary>
-    private void EndGame(string winningTeam)
-    {
-        if (!IsServer) return;
-
-        gameIsOver.Value = true;
-
-        string teamDisplayName = winningTeam == "Team1" ? "Blue" : "Red";
-        ShowGameOverClientRpc(teamDisplayName);
-
-        Debug.Log($"✓ GAME OVER! {teamDisplayName} team wins!");
-    }
-
-    /// <summary>
-    /// CLIENT RPC: Show game over screen on all clients
-    /// </summary>
-    [ClientRpc]
-    private void ShowGameOverClientRpc(string winningTeamName)
-    {
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.SetActive(true);
-        }
-
-        if (winnerText != null)
-        {
-            winnerText.text = $"{winningTeamName} Team WINS!";
-        }
-
-        // Disable player controls
-        PlayerController[] players = FindObjectsOfType<PlayerController>();
-        foreach (PlayerController player in players)
-        {
-            player.enabled = false;
-        }
-
-        Debug.Log($"Game Over displayed: {winningTeamName} team wins!");
-    }
-
-    /// <summary>
-    /// CLIENT RPC: Show notification to all players
-    /// </summary>
-    [ClientRpc]
-    public void ShowNotificationClientRpc(string message)
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    public void RPC_ShowNotification(string message)
     {
         if (notificationText != null)
         {
             notificationText.text = message;
             notificationText.gameObject.SetActive(true);
-
-            // Cancel previous hide coroutine if running
-            StopAllCoroutines();
-            StartCoroutine(HideNotificationAfterDelay());
+            CancelInvoke(nameof(HideNotification));
+            Invoke(nameof(HideNotification), notificationDuration);
         }
-
-        Debug.Log($"Notification: {message}");
     }
 
-    /// <summary>
-    /// Hide notification after delay
-    /// </summary>
-    private System.Collections.IEnumerator HideNotificationAfterDelay()
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void AnnounceWinnerRpc(int winningTeam)
     {
-        yield return new WaitForSeconds(notificationDuration);
+        if (winnerText != null)
+        {
+            winnerText.text = $"Team {winningTeam} Wins!";
+        }
 
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.SetActive(true);
+        }
+
+        // Show final notification
+        if (notificationText != null)
+        {
+            notificationText.text = $"Game Over! Team {winningTeam} Wins!";
+            notificationText.gameObject.SetActive(true);
+        }
+    }
+
+    private void HideNotification()
+    {
         if (notificationText != null)
         {
             notificationText.gameObject.SetActive(false);
         }
     }
 
-    /// <summary>
-    /// Update flag status text on UI
-    /// </summary>
     private void UpdateFlagStatusUI()
     {
+        // Update Team1 flag status
         if (team1FlagStatusText != null && team1Flag != null)
         {
-            string status = GetFlagStatusString(team1Flag);
-            team1FlagStatusText.text = $"Blue Flag: {status}";
+            if (team1Flag.State == Flag.FlagState.AtHome)
+            {
+                team1FlagStatusText.text = "🏴 At Base";
+                team1FlagStatusText.color = Color.green;
+            }
+            else if (team1Flag.State == Flag.FlagState.Carried)
+            {
+                team1FlagStatusText.text = "⚠️ Taken!";
+                team1FlagStatusText.color = Color.red;
+            }
+            else
+            {
+                team1FlagStatusText.text = "📍 Dropped";
+                team1FlagStatusText.color = Color.yellow;
+            }
         }
 
+        // Update Team2 flag status
         if (team2FlagStatusText != null && team2Flag != null)
         {
-            string status = GetFlagStatusString(team2Flag);
-            team2FlagStatusText.text = $"Red Flag: {status}";
+            if (team2Flag.State == Flag.FlagState.AtHome)
+            {
+                team2FlagStatusText.text = "🏴 At Base";
+                team2FlagStatusText.color = Color.green;
+            }
+            else if (team2Flag.State == Flag.FlagState.Carried)
+            {
+                team2FlagStatusText.text = "⚠️ Taken!";
+                team2FlagStatusText.color = Color.red;
+            }
+            else
+            {
+                team2FlagStatusText.text = "📍 Dropped";
+                team2FlagStatusText.color = Color.yellow;
+            }
         }
     }
 
-    /// <summary>
-    /// Get human-readable flag status
-    /// </summary>
-    private string GetFlagStatusString(Flag flag)
-    {
-        switch (flag.State)
-        {
-            case Flag.FlagState.AtHome:
-                return "AT BASE";
-            case Flag.FlagState.Carried:
-                return "CARRIED";
-            case Flag.FlagState.Dropped:
-                return "DROPPED";
-            default:
-                return "UNKNOWN";
-        }
-    }
-
-    /// <summary>
-    /// Update flag indicator positions to point at flags
-    /// Show player's OWN flag indicator when it's not at their base
-    /// </summary>
     private void UpdateFlagIndicators()
     {
-        // Find local player
-        PlayerController localPlayer = FindLocalPlayer();
-        if (localPlayer == null) return;
-
-        // Get local player's team
-        PlayerTeamComponent playerTeam = localPlayer.GetComponent<PlayerTeamComponent>();
-        if (playerTeam == null) return;
-
-        string myTeamId = playerTeam.teamID;
-
-        if (TeamManager.Instance == null) return;
-
-        // Get base positions to check if flags are home
-        TeamData team1Data = TeamManager.Instance.GetTeamData("Team1");
-        TeamData team2Data = TeamManager.Instance.GetTeamData("Team2");
-
-        if (team1Data == null || team2Data == null) return;
-
-        float baseRadius = 5f; // Same radius as win condition
-
-        if (myTeamId == "Team1" || myTeamId == "Blue")
+        // Update Team1 flag indicator
+        if (team1FlagIndicator != null && team1Flag != null)
         {
-            // I'm Team1 - show MY flag indicator if it's not at home
-
-            // Check if my flag is at home base
-            if (team1Flag != null)
-            {
-                float distToHome = Vector2.Distance(team1Flag.transform.position, team1Data.basePosition);
-                bool myFlagIsHome = distToHome < baseRadius;
-
-                if (team1FlagIndicator != null)
-                {
-                    if (!myFlagIsHome)
-                    {
-                        // My flag is NOT home - show indicator pointing to it
-                        team1FlagIndicator.SetActive(true);
-                        UpdateIndicator(team1FlagIndicator, team1Flag.transform.position, localPlayer.transform.position);
-                    }
-                    else
-                    {
-                        // My flag is home - hide indicator
-                        team1FlagIndicator.SetActive(false);
-                    }
-                }
-            }
-
-            // Always hide enemy flag indicator for now (you can change this if you want both)
-            if (team2FlagIndicator != null)
-                team2FlagIndicator.SetActive(false);
+            team1FlagIndicator.transform.position = team1Flag.transform.position;
+            team1FlagIndicator.SetActive(team1Flag.State != Flag.FlagState.AtHome);
         }
-        else if (myTeamId == "Team2" || myTeamId == "Red")
+
+        // Update Team2 flag indicator
+        if (team2FlagIndicator != null && team2Flag != null)
         {
-            // I'm Team2 - show MY flag indicator if it's not at home
-
-            // Check if my flag is at home base
-            if (team2Flag != null)
-            {
-                float distToHome = Vector2.Distance(team2Flag.transform.position, team2Data.basePosition);
-                bool myFlagIsHome = distToHome < baseRadius;
-
-                if (team2FlagIndicator != null)
-                {
-                    if (!myFlagIsHome)
-                    {
-                        // My flag is NOT home - show indicator pointing to it
-                        team2FlagIndicator.SetActive(true);
-                        UpdateIndicator(team2FlagIndicator, team2Flag.transform.position, localPlayer.transform.position);
-                    }
-                    else
-                    {
-                        // My flag is home - hide indicator
-                        team2FlagIndicator.SetActive(false);
-                    }
-                }
-            }
-
-            // Always hide enemy flag indicator for now
-            if (team1FlagIndicator != null)
-                team1FlagIndicator.SetActive(false);
+            team2FlagIndicator.transform.position = team2Flag.transform.position;
+            team2FlagIndicator.SetActive(team2Flag.State != Flag.FlagState.AtHome);
         }
     }
+
+    #region Public Getters
+
+    public bool IsGameOver() => GameIsOver;
+
+    public int GetPlayerCount()
+    {
+        if (Runner == null) return 0;
+        return Runner.ActivePlayers.Count();
+    }
+
+    #endregion
+
+    #region Public Methods (called by Flag script or other systems)
 
     /// <summary>
-    /// Update a single indicator to point at target
+    /// SERVER: Called when a flag is captured (brought to enemy base)
     /// </summary>
-    private void UpdateIndicator(GameObject indicator, Vector3 targetPos, Vector3 playerPos)
+    public void OnFlagCaptured(string flagOwner, string capturingTeam)
     {
-        // Calculate direction to flag
-        Vector2 direction = (targetPos - playerPos).normalized;
+        if (!HasStateAuthority) return;
 
-        // Rotate indicator to point at flag
-        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-        indicator.transform.rotation = Quaternion.Euler(0, 0, angle);
+        Debug.Log($"Flag captured! {flagOwner} flag captured by {capturingTeam}");
 
-        // Optional: Hide indicator if flag is very close
-        float distance = Vector2.Distance(playerPos, targetPos);
-        indicator.SetActive(distance > 2f);
+        // Check if capturing team now has both flags in their base
+        CheckWinCondition();
     }
 
-    /// <summary>
-    /// Find the local player controlled by this client
-    /// </summary>
-    private PlayerController FindLocalPlayer()
-    {
-        PlayerController[] players = FindObjectsOfType<PlayerController>();
-        foreach (PlayerController player in players)
-        {
-            NetworkObject netObj = player.GetComponent<NetworkObject>();
-            if (netObj != null && netObj.IsOwner)
-            {
-                return player;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Called when game over state changes
-    /// </summary>
-    private void OnGameOverChanged(bool wasOver, bool isOver)
-    {
-        if (isOver)
-        {
-            Debug.Log("Game is now over!");
-        }
-    }
-
-    /// <summary>
-    /// SERVER: Restart the game (call this from a restart button)
-    /// </summary>
-    [ServerRpc(RequireOwnership = false)]
-    public void RestartGameServerRpc()
-    {
-        if (!IsServer) return;
-
-        // Reset game state
-        gameIsOver.Value = false;
-
-        // Return both flags to home
-        if (team1Flag != null)
-            team1Flag.ReturnFlag();
-        if (team2Flag != null)
-            team2Flag.ReturnFlag();
-
-        // Hide game over panel on all clients
-        HideGameOverClientRpc();
-
-        Debug.Log("✓ Game restarted");
-    }
-
-    /// <summary>
-    /// CLIENT RPC: Hide game over screen
-    /// </summary>
-    [ClientRpc]
-    private void HideGameOverClientRpc()
-    {
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.SetActive(false);
-        }
-
-        // Re-enable player controls
-        PlayerController[] players = FindObjectsOfType<PlayerController>();
-        foreach (PlayerController player in players)
-        {
-            NetworkObject netObj = player.GetComponent<NetworkObject>();
-            if (netObj != null && netObj.IsOwner)
-            {
-                player.enabled = true;
-            }
-        }
-    }
+    #endregion
 }
