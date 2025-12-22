@@ -38,7 +38,7 @@ public class NetworkedEnemySpawner : NetworkBehaviour
     // Network state
     [Networked] private int CurrentEnemyCount { get; set; }
     [Networked] private TickTimer NextSpawnTimer { get; set; }
-
+     
     private Transform autoPatrolPointA;
     private Transform autoPatrolPointB;
 
@@ -221,17 +221,34 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             Gizmos.DrawLine(pointA.position, pointB.position);
         }
 
-        // Draw enemy count info
+        // Draw enemy count info - ONLY if the object has been spawned on the network
 #if UNITY_EDITOR
-        UnityEditor.Handles.Label(
-            transform.position + Vector3.up * 1.5f,
-            $"{teamID}\nEnemies: {CurrentEnemyCount}/{maxEnemies}",
-            new GUIStyle()
-            {
-                normal = new GUIStyleState() { textColor = Color.white },
-                alignment = TextAnchor.MiddleCenter
-            }
-        );
+        // Check if Object is valid and spawned before accessing networked properties
+        if (Object != null && Object.IsValid)
+        {
+            UnityEditor.Handles.Label(
+                transform.position + Vector3.up * 1.5f,
+                $"{teamID}\nEnemies: {CurrentEnemyCount}/{maxEnemies}",
+                new GUIStyle()
+                {
+                    normal = new GUIStyleState() { textColor = Color.white },
+                    alignment = TextAnchor.MiddleCenter
+                }
+            );
+        }
+        else
+        {
+            // Show static info when not spawned (in editor)
+            UnityEditor.Handles.Label(
+                transform.position + Vector3.up * 1.5f,
+                $"{teamID}\nMax: {maxEnemies}",
+                new GUIStyle()
+                {
+                    normal = new GUIStyleState() { textColor = Color.gray },
+                    alignment = TextAnchor.MiddleCenter
+                }
+            );
+        }
 #endif
     }
 }

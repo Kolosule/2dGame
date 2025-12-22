@@ -209,7 +209,7 @@ MonoBehaviour:
   detectionRange: 10
   attackRange: 1.5
   dropsCoin: 1
-  coinPrefab: {fileID: 9200945597610364576, guid: b914b9a97b825e44b8d33e985a4f427a, type: 3}
+  coinPrefab: {fileID: 5136239110909564780, guid: b914b9a97b825e44b8d33e985a4f427a, type: 3}
   coinDropCount: 1
   scatterRadius: 0.5
 --- !u!114 &1088235477252150459

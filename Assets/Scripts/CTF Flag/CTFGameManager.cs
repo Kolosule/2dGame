@@ -248,40 +248,48 @@ public class CTFGameManager : NetworkBehaviour
         // Update Team1 flag status
         if (team1FlagStatusText != null && team1Flag != null)
         {
-            if (team1Flag.State == Flag.FlagState.AtHome)
+            // Check if flag is spawned before accessing its State
+            if (team1Flag.Object != null && team1Flag.Object.IsValid)
             {
-                team1FlagStatusText.text = "🏴 At Base";
-                team1FlagStatusText.color = Color.green;
-            }
-            else if (team1Flag.State == Flag.FlagState.Carried)
-            {
-                team1FlagStatusText.text = "⚠️ Taken!";
-                team1FlagStatusText.color = Color.red;
-            }
-            else
-            {
-                team1FlagStatusText.text = "📍 Dropped";
-                team1FlagStatusText.color = Color.yellow;
+                if (team1Flag.State == Flag.FlagState.AtHome)
+                {
+                    team1FlagStatusText.text = "🏴 At Base";
+                    team1FlagStatusText.color = Color.green;
+                }
+                else if (team1Flag.State == Flag.FlagState.Carried)
+                {
+                    team1FlagStatusText.text = "⚠️ Taken!";
+                    team1FlagStatusText.color = Color.red;
+                }
+                else
+                {
+                    team1FlagStatusText.text = "📍 Dropped";
+                    team1FlagStatusText.color = Color.yellow;
+                }
             }
         }
 
         // Update Team2 flag status
         if (team2FlagStatusText != null && team2Flag != null)
         {
-            if (team2Flag.State == Flag.FlagState.AtHome)
+            // Check if flag is spawned before accessing its State
+            if (team2Flag.Object != null && team2Flag.Object.IsValid)
             {
-                team2FlagStatusText.text = "🏴 At Base";
-                team2FlagStatusText.color = Color.green;
-            }
-            else if (team2Flag.State == Flag.FlagState.Carried)
-            {
-                team2FlagStatusText.text = "⚠️ Taken!";
-                team2FlagStatusText.color = Color.red;
-            }
-            else
-            {
-                team2FlagStatusText.text = "📍 Dropped";
-                team2FlagStatusText.color = Color.yellow;
+                if (team2Flag.State == Flag.FlagState.AtHome)
+                {
+                    team2FlagStatusText.text = "🏴 At Base";
+                    team2FlagStatusText.color = Color.green;
+                }
+                else if (team2Flag.State == Flag.FlagState.Carried)
+                {
+                    team2FlagStatusText.text = "⚠️ Taken!";
+                    team2FlagStatusText.color = Color.red;
+                }
+                else
+                {
+                    team2FlagStatusText.text = "📍 Dropped";
+                    team2FlagStatusText.color = Color.yellow;
+                }
             }
         }
     }
@@ -291,15 +299,23 @@ public class CTFGameManager : NetworkBehaviour
         // Update Team1 flag indicator
         if (team1FlagIndicator != null && team1Flag != null)
         {
-            team1FlagIndicator.transform.position = team1Flag.transform.position;
-            team1FlagIndicator.SetActive(team1Flag.State != Flag.FlagState.AtHome);
+            // Check if flag is spawned before accessing its State
+            if (team1Flag.Object != null && team1Flag.Object.IsValid)
+            {
+                team1FlagIndicator.transform.position = team1Flag.transform.position;
+                team1FlagIndicator.SetActive(team1Flag.State != Flag.FlagState.AtHome);
+            }
         }
 
         // Update Team2 flag indicator
         if (team2FlagIndicator != null && team2Flag != null)
         {
-            team2FlagIndicator.transform.position = team2Flag.transform.position;
-            team2FlagIndicator.SetActive(team2Flag.State != Flag.FlagState.AtHome);
+            // Check if flag is spawned before accessing its State
+            if (team2Flag.Object != null && team2Flag.Object.IsValid)
+            {
+                team2FlagIndicator.transform.position = team2Flag.transform.position;
+                team2FlagIndicator.SetActive(team2Flag.State != Flag.FlagState.AtHome);
+            }
         }
     }
 

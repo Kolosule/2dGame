@@ -54,6 +54,10 @@ public class NetworkedCoinPickup : NetworkBehaviour
     /// </summary>
     private void OnTriggerEnter2D(Collider2D collision)
     {
+        // IMPORTANT: Only access networked properties if the object has been spawned
+        if (Object == null || !Object.IsValid)
+            return;
+
         // Only process if this coin hasn't been collected yet
         if (IsCollected) return;
 
@@ -68,6 +72,22 @@ public class NetworkedCoinPickup : NetworkBehaviour
                 // Request pickup from server
                 RPC_RequestPickup(player.Object.InputAuthority);
             }
+        }
+    }
+
+    /// <summary>
+    /// Optional: Makes coins slowly rotate for visual appeal
+    /// </summary>
+    private void Update()
+    {
+        // IMPORTANT: Only access networked properties if the object has been spawned
+        if (Object == null || !Object.IsValid)
+            return;
+
+        if (rotateVisual && !IsCollected)
+        {
+            // Rotate the coin around the Z axis (for 2D)
+            transform.Rotate(0, 0, rotationSpeed * Time.deltaTime);
         }
     }
 
@@ -121,17 +141,5 @@ public class NetworkedCoinPickup : NetworkBehaviour
 
         // You can add particle effects here
         // Example: Instantiate(pickupEffect, transform.position, Quaternion.identity);
-    }
-
-    /// <summary>
-    /// Optional: Makes coins slowly rotate for visual appeal
-    /// </summary>
-    private void Update()
-    {
-        if (rotateVisual && !IsCollected)
-        {
-            // Rotate the coin around the Z axis (for 2D)
-            transform.Rotate(0, 0, rotationSpeed * Time.deltaTime);
-        }
     }
 }
