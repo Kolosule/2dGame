@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 8218730904485661642}
   - component: {fileID: 1706721363637706096}
   - component: {fileID: 6083212669708869805}
+  - component: {fileID: 7855422076092450678}
   m_Layer: 10
   m_Name: BlueCoin
   m_TagString: Untagged
@@ -142,3 +143,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CoinPickup
   coinData: {fileID: 11400000, guid: 07f0058832c94eb43b1854e45ee3f66d, type: 2}
   pickupSound: {fileID: 0}
+  rotateVisual: 1
+  rotationSpeed: 90
+--- !u!114 &7855422076092450678
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6402157569859009823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 3482010873
+  ObjectInterest: 0
+  Flags: 786433
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 6083212669708869805}
+  ForceRemoteRenderTimeframe: 0

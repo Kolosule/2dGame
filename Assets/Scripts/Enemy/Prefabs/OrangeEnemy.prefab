@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 7101480511692835348}
   - component: {fileID: 1057860978440285187}
   - component: {fileID: 1088235477252150459}
+  - component: {fileID: 6087132018943254329}
   m_Layer: 7
   m_Name: OrangeEnemy
   m_TagString: Untagged
@@ -181,14 +182,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
   stats: {fileID: 11400000, guid: 4dd6850bce08b664ca4971fd1e79eea2, type: 2}
-  useTelegraph: 1
-  telegraphDuration: 1
-  telegraphPrefab: {fileID: 1580462770250021328, guid: 12a1dd0461f3a954a8294e92faa3fae2, type: 3}
-  telegraphColor: {r: 1, g: 0.3, b: 0.3, a: 1}
+  spriteRenderer: {fileID: 0}
   attackCooldown: 1
-  attackRange: 1.5
+  telegraphDuration: 1
   hitEffectPrefab: {fileID: 6354563029965422019, guid: b79271f6077d45844b46f5903e0297db, type: 3}
   hitFlashDuration: 0.1
+  _CurrentHealth: 0
 --- !u!114 &1057860978440285187
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -211,6 +210,8 @@ MonoBehaviour:
   attackRange: 1.5
   dropsCoin: 1
   coinPrefab: {fileID: 6264326754191315897, guid: f3cda0812fd9ef74b9123ee76a91116d, type: 3}
+  coinDropCount: 1
+  scatterRadius: 0.5
 --- !u!114 &1088235477252150459
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -226,3 +227,23 @@ MonoBehaviour:
   teamID: Enemy
   territorialAdvantage: 0
   spriteRenderer: {fileID: 0}
+--- !u!114 &6087132018943254329
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8054919171351746083}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 54048911
+  ObjectInterest: 0
+  Flags: 786433
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 7101480511692835348}
+  - {fileID: 1057860978440285187}
+  ForceRemoteRenderTimeframe: 0

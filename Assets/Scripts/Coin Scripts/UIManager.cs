@@ -1,124 +1,160 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro; // If using TextMeshPro (recommended)
+using Fusion;
 
 /// <summary>
 /// Manages UI display for team scores and player coin count.
+/// UPDATED: Now works with NetworkedPlayerInventory for Photon Fusion.
 /// Attach this to a UI Canvas GameObject.
 /// </summary>
 public class UIManager : MonoBehaviour
 {
     [Header("Team Score Display")]
-    [Tooltip("Text element for Red team score")]
-    [SerializeField] private TextMeshProUGUI redScoreText; // Or Text if not using TextMeshPro
-    
-    [Tooltip("Text element for Blue team score")]
-    [SerializeField] private TextMeshProUGUI blueScoreText;
-    
+    [Tooltip("Text element for Team1/Blue team score")]
+    [SerializeField] private TextMeshProUGUI team1ScoreText; // Or Text if not using TextMeshPro
+
+    [Tooltip("Text element for Team2/Red team score")]
+    [SerializeField] private TextMeshProUGUI team2ScoreText;
+
     [Header("Player Coin Display")]
     [Tooltip("Text element for player's coin count")]
     [SerializeField] private TextMeshProUGUI playerCoinText;
-    
+
     [Tooltip("Text element for player's coin value (optional)")]
     [SerializeField] private TextMeshProUGUI playerCoinValueText;
-    
+
     [Header("Buff Indicators (Optional)")]
-    [Tooltip("Image/Icon that shows when Red team has damage buff")]
-    [SerializeField] private GameObject redDamageBuffIcon;
-    
-    [Tooltip("Image/Icon that shows when Red team has defense buff")]
-    [SerializeField] private GameObject redDefenseBuffIcon;
-    
-    [Tooltip("Image/Icon that shows when Blue team has damage buff")]
-    [SerializeField] private GameObject blueDamageBuffIcon;
-    
-    [Tooltip("Image/Icon that shows when Blue team has defense buff")]
-    [SerializeField] private GameObject blueDefenseBuffIcon;
-    
+    [Tooltip("Image/Icon that shows when Team1 has damage buff")]
+    [SerializeField] private GameObject team1DamageBuffIcon;
+
+    [Tooltip("Image/Icon that shows when Team1 has defense buff")]
+    [SerializeField] private GameObject team1DefenseBuffIcon;
+
+    [Tooltip("Image/Icon that shows when Team2 has damage buff")]
+    [SerializeField] private GameObject team2DamageBuffIcon;
+
+    [Tooltip("Image/Icon that shows when Team2 has defense buff")]
+    [SerializeField] private GameObject team2DefenseBuffIcon;
+
+    [Header("Update Settings")]
+    [Tooltip("How often to update the UI (in seconds)")]
+    [SerializeField] private float updateInterval = 0.1f;
+
     // Reference to the local player (for coin count display)
-    private PlayerInventory localPlayer;
-    
+    private NetworkedPlayerInventory localPlayer;
+    private float nextUpdateTime;
+
     private void Start()
     {
         // Hide buff icons initially
-        if (redDamageBuffIcon != null) redDamageBuffIcon.SetActive(false);
-        if (redDefenseBuffIcon != null) redDefenseBuffIcon.SetActive(false);
-        if (blueDamageBuffIcon != null) blueDamageBuffIcon.SetActive(false);
-        if (blueDefenseBuffIcon != null) blueDefenseBuffIcon.SetActive(false);
-        
-        // Update displays
+        if (team1DamageBuffIcon != null) team1DamageBuffIcon.SetActive(false);
+        if (team1DefenseBuffIcon != null) team1DefenseBuffIcon.SetActive(false);
+        if (team2DamageBuffIcon != null) team2DamageBuffIcon.SetActive(false);
+        if (team2DefenseBuffIcon != null) team2DefenseBuffIcon.SetActive(false);
+
+        // Try to find local player
+        FindLocalPlayer();
+
+        // Initial update
         UpdateTeamScores();
-        UpdatePlayerCoinDisplay(null);
+        UpdatePlayerCoinDisplay();
     }
-    
+
+    private void Update()
+    {
+        // Update UI at regular intervals
+        if (Time.time >= nextUpdateTime)
+        {
+            UpdateTeamScores();
+            UpdatePlayerCoinDisplay();
+            nextUpdateTime = Time.time + updateInterval;
+        }
+    }
+
+    /// <summary>
+    /// Find the local player's inventory component
+    /// </summary>
+    private void FindLocalPlayer()
+    {
+        if (localPlayer != null) return;
+
+        // Find all player inventories
+        NetworkedPlayerInventory[] allPlayers = FindObjectsByType<NetworkedPlayerInventory>(FindObjectsSortMode.None);
+
+        foreach (NetworkedPlayerInventory player in allPlayers)
+        {
+            // Check if this is the local player (has input authority)
+            if (player.HasInputAuthority)
+            {
+                localPlayer = player;
+                Debug.Log("UIManager: Found local player inventory");
+                break;
+            }
+        }
+    }
+
     /// <summary>
     /// Updates the team score displays
     /// </summary>
     public void UpdateTeamScores()
     {
-        TeamScoreManager scoreManager = FindObjectOfType<TeamScoreManager>();
+        TeamScoreManager scoreManager = TeamScoreManager.Instance;
         if (scoreManager == null) return;
-        
-        // Update Red team score
-        if (redScoreText != null)
+
+        // Update Team1 score
+        if (team1ScoreText != null)
         {
-            redScoreText.text = $"Red: {scoreManager.RedTeamScore}";
+            team1ScoreText.text = $"Team1: {scoreManager.Team1Score}";
         }
-        
-        // Update Blue team score
-        if (blueScoreText != null)
+
+        // Update Team2 score
+        if (team2ScoreText != null)
         {
-            blueScoreText.text = $"Blue: {scoreManager.BlueTeamScore}";
+            team2ScoreText.text = $"Team2: {scoreManager.Team2Score}";
         }
-        
+
         // Update buff indicators
         UpdateBuffIndicators(scoreManager);
     }
-    
+
     /// <summary>
     /// Updates buff indicator icons based on team progress
     /// </summary>
     private void UpdateBuffIndicators(TeamScoreManager scoreManager)
     {
-        if (redDamageBuffIcon != null)
+        if (team1DamageBuffIcon != null)
         {
-            redDamageBuffIcon.SetActive(scoreManager.RedTeamDamageBuff);
+            team1DamageBuffIcon.SetActive(scoreManager.Team1DamageBuff);
         }
-        
-        if (redDefenseBuffIcon != null)
+
+        if (team1DefenseBuffIcon != null)
         {
-            redDefenseBuffIcon.SetActive(scoreManager.RedTeamDefenseBuff);
+            team1DefenseBuffIcon.SetActive(scoreManager.Team1DefenseBuff);
         }
-        
-        if (blueDamageBuffIcon != null)
+
+        if (team2DamageBuffIcon != null)
         {
-            blueDamageBuffIcon.SetActive(scoreManager.BlueTeamDamageBuff);
+            team2DamageBuffIcon.SetActive(scoreManager.Team2DamageBuff);
         }
-        
-        if (blueDefenseBuffIcon != null)
+
+        if (team2DefenseBuffIcon != null)
         {
-            blueDefenseBuffIcon.SetActive(scoreManager.BlueTeamDefenseBuff);
+            team2DefenseBuffIcon.SetActive(scoreManager.Team2DefenseBuff);
         }
     }
-    
+
     /// <summary>
     /// Updates the player's coin count display
     /// </summary>
-    /// <param name="player">The player whose coins to display</param>
-    public void UpdatePlayerCoinDisplay(PlayerInventory player)
+    public void UpdatePlayerCoinDisplay()
     {
-        // Cache the player reference
-        if (player != null)
-        {
-            localPlayer = player;
-        }
-        
-        // If we don't have a player reference, try to find one
+        // Try to find local player if we don't have one
         if (localPlayer == null)
         {
-            localPlayer = FindObjectOfType<PlayerInventory>();
+            FindLocalPlayer();
         }
-        
+
         // Update coin count text
         if (playerCoinText != null)
         {
@@ -131,14 +167,13 @@ public class UIManager : MonoBehaviour
                 playerCoinText.text = "Coins: 0";
             }
         }
-        
+
         // Update coin value text (optional)
         if (playerCoinValueText != null)
         {
             if (localPlayer != null)
             {
-                int value = localPlayer.GetCurrentCoinValue();
-                playerCoinValueText.text = $"Value: {value}";
+                playerCoinValueText.text = $"Value: {localPlayer.TotalCoinValue}";
             }
             else
             {
@@ -146,17 +181,35 @@ public class UIManager : MonoBehaviour
             }
         }
     }
-    
+
     /// <summary>
-    /// Optional: Set which player the UI should track (for multiplayer)
+    /// Manually set which player the UI should track
+    /// Useful if you need to override the automatic detection
     /// </summary>
-    public void SetTrackedPlayer(PlayerInventory player)
+    public void SetTrackedPlayer(NetworkedPlayerInventory player)
     {
         localPlayer = player;
-        UpdatePlayerCoinDisplay(player);
+        UpdatePlayerCoinDisplay();
+    }
+
+    // ===== LEGACY COMPATIBILITY =====
+    // These methods maintain compatibility with old code that might call them
+
+    /// <summary>
+    /// Legacy method - kept for compatibility
+    /// </summary>
+    public void UpdatePlayerCoinDisplay(NetworkedPlayerInventory player)
+    {
+        if (player != null && player.HasInputAuthority)
+        {
+            localPlayer = player;
+        }
+        UpdatePlayerCoinDisplay();
     }
 }
 
 // ===== IF NOT USING TEXTMESHPRO =====
-// Replace all "TextMeshProUGUI" with "Text" in the script above
-// and add "using UnityEngine.UI;" at the top
+// If you're not using TextMeshPro:
+// 1. Remove "using TMPro;" at the top
+// 2. Replace all "TextMeshProUGUI" with "Text"
+// 3. Make sure you have "using UnityEngine.UI;" at the top

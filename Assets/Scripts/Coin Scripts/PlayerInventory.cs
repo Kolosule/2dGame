@@ -3,20 +3,32 @@ using UnityEngine;
 using Fusion;
 
 /// <summary>
-/// Attached to player GameObjects. Tracks coins the player is carrying.
-/// PHOTON FUSION VERSION - Compatible with network team assignment
+/// Networked player inventory for Photon Fusion.
+/// Tracks coins the player is carrying with network synchronization.
 /// </summary>
-public class PlayerInventory : NetworkBehaviour
+public class NetworkedPlayerInventory : NetworkBehaviour
 {
-    [Header("Team Assignment")]
-    [Tooltip("Leave empty if using NetworkPlayerWrapper - team will be auto-assigned")]
-    [SerializeField] private string playerTeam = "";
-
     [Header("Inventory Settings")]
     [Tooltip("Maximum number of coins player can carry at once (0 = unlimited)")]
     [SerializeField] private int maxCoins = 0; // 0 means unlimited
 
-    // List to store the coins the player is currently carrying
+    [Header("Audio (Optional)")]
+    [Tooltip("Sound to play when picking up a coin")]
+    [SerializeField] private AudioClip coinPickupSound;
+
+    [Tooltip("Sound to play when depositing coins")]
+    [SerializeField] private AudioClip depositSound;
+
+    // Network property to sync coin count across all clients
+    [Networked]
+    public int CoinCount { get; private set; }
+
+    // Network property to sync total coin value
+    [Networked]
+    public int TotalCoinValue { get; private set; }
+
+    // Local list to store coin data (not networked, only on server)
+    // Client uses CoinCount for display only
     private List<CoinData> heldCoins = new List<CoinData>();
 
     // Cache for team component
@@ -25,19 +37,12 @@ public class PlayerInventory : NetworkBehaviour
 
     /// <summary>
     /// Public property to get the player's team
-    /// Checks multiple sources: manual assignment, PlayerTeamComponent, or NetworkPlayerWrapper
     /// </summary>
     public string PlayerTeam
     {
         get
         {
-            // If manually assigned, use that
-            if (!string.IsNullOrEmpty(playerTeam))
-            {
-                return playerTeam;
-            }
-
-            // Try to get from PlayerTeamComponent (works with both networked and local)
+            // Try to get from PlayerTeamComponent
             if (!teamComponentChecked)
             {
                 teamComponent = GetComponent<PlayerTeamComponent>();
@@ -46,27 +51,34 @@ public class PlayerInventory : NetworkBehaviour
 
             if (teamComponent != null)
             {
-                // PlayerTeamComponent uses team names like "Team1" or "Team2"
                 return teamComponent.teamID;
             }
 
-            // Fallback: return empty string
+            // Fallback: try PlayerTeamData (networked version)
+            PlayerTeamData teamData = GetComponent<PlayerTeamData>();
+            if (teamData != null)
+            {
+                // Convert team number to team name
+                return teamData.Team == 1 ? "Team1" : "Team2";
+            }
+
             return "";
         }
     }
 
     /// <summary>
-    /// Public property to get current coin count
+    /// SERVER ONLY: Adds a coin to the player's inventory
+    /// Called by NetworkedCoinPickup via RPC
     /// </summary>
-    public int CoinCount => heldCoins.Count;
-
-    /// <summary>
-    /// Attempts to add a coin to the player's inventory
-    /// </summary>
-    /// <param name="coin">The coin being picked up</param>
-    /// <returns>True if coin was added, false if inventory is full</returns>
-    public bool AddCoin(CoinPickup coin)
+    public bool ServerAddCoin(CoinData coinData)
     {
+        // This should only be called on the server
+        if (!HasStateAuthority)
+        {
+            Debug.LogError("ServerAddCoin called on client! This should only be called on server.");
+            return false;
+        }
+
         // Check if player has reached max capacity
         if (maxCoins > 0 && heldCoins.Count >= maxCoins)
         {
@@ -75,46 +87,83 @@ public class PlayerInventory : NetworkBehaviour
         }
 
         // Add the coin's data to inventory
-        heldCoins.Add(coin.CoinDataProperty);
+        heldCoins.Add(coinData);
 
-        Debug.Log($"{gameObject.name} picked up a {coin.CoinDataProperty.coinTeam} coin. Total coins: {heldCoins.Count}");
+        // Update networked properties
+        CoinCount = heldCoins.Count;
+        TotalCoinValue = CalculateTotalValue();
 
-        // Update UI if it exists
-        UpdateUI();
+        Debug.Log($"[SERVER] {gameObject.name} picked up a {coinData.coinTeam} coin. Total: {CoinCount}");
+
+        // Notify clients to play sound/effects
+        RPC_OnCoinAdded();
 
         return true;
     }
 
     /// <summary>
-    /// Deposits all held coins and returns the total point value for this player's team
+    /// RPC to notify all clients that a coin was added (for visual/audio feedback)
     /// </summary>
-    /// <returns>Total points to add to team score</returns>
-    public int DepositCoins()
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnCoinAdded()
     {
-        int totalPoints = 0;
-        string team = PlayerTeam;
-
-        // Calculate points for each coin based on player's team
-        foreach (CoinData coin in heldCoins)
+        if (coinPickupSound != null && HasInputAuthority)
         {
-            totalPoints += coin.GetValueForTeam(team);
+            AudioSource.PlayClipAtPoint(coinPickupSound, transform.position);
+        }
+    }
+
+    /// <summary>
+    /// Deposits all held coins and returns the total point value.
+    /// Called by NetworkedHomeBase when player enters their base.
+    /// SERVER ONLY.
+    /// </summary>
+    public int ServerDepositCoins()
+    {
+        // This should only be called on the server
+        if (!HasStateAuthority)
+        {
+            Debug.LogError("ServerDepositCoins called on client! This should only be called on server.");
+            return 0;
         }
 
-        Debug.Log($"{gameObject.name} deposited {heldCoins.Count} coins for {totalPoints} points!");
+        if (heldCoins.Count == 0)
+        {
+            return 0;
+        }
+
+        // Calculate total points
+        int totalPoints = CalculateTotalValue();
+
+        Debug.Log($"[SERVER] {gameObject.name} deposited {heldCoins.Count} coins for {totalPoints} points!");
 
         // Clear the inventory
         heldCoins.Clear();
+        CoinCount = 0;
+        TotalCoinValue = 0;
 
-        // Update UI
-        UpdateUI();
+        // Notify clients
+        RPC_OnCoinsDeposited();
 
         return totalPoints;
     }
 
     /// <summary>
-    /// Returns the current total value of held coins (for display purposes)
+    /// RPC to notify all clients that coins were deposited (for visual/audio feedback)
     /// </summary>
-    public int GetCurrentCoinValue()
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnCoinsDeposited()
+    {
+        if (depositSound != null && HasInputAuthority)
+        {
+            AudioSource.PlayClipAtPoint(depositSound, transform.position);
+        }
+    }
+
+    /// <summary>
+    /// Calculates the total point value of all held coins for this player's team
+    /// </summary>
+    private int CalculateTotalValue()
     {
         int totalValue = 0;
         string team = PlayerTeam;
@@ -123,56 +172,55 @@ public class PlayerInventory : NetworkBehaviour
         {
             totalValue += coin.GetValueForTeam(team);
         }
+
         return totalValue;
     }
 
     /// <summary>
-    /// Updates the UI display (if UIManager exists)
+    /// Called when player dies - drops all coins
     /// </summary>
-    private void UpdateUI()
+    public void OnPlayerDeath(Vector3 deathPosition)
     {
-        UIManager uiManager = FindObjectOfType<UIManager>();
-        if (uiManager != null)
-        {
-            uiManager.UpdatePlayerCoinDisplay(this);
-        }
+        // Only server handles dropping coins
+        if (!HasStateAuthority) return;
+
+        if (heldCoins.Count == 0) return;
+
+        Debug.Log($"[SERVER] {gameObject.name} died and dropped {heldCoins.Count} coins!");
+
+        // TODO: If you want coins to drop on death, spawn them here
+        // For now, we'll just clear the inventory
+
+        heldCoins.Clear();
+        CoinCount = 0;
+        TotalCoinValue = 0;
     }
 
     private void Start()
     {
         // Wait a frame to let network team assignment happen
-        StartCoroutine(ValidateTeamAssignment());
+        if (HasStateAuthority)
+        {
+            StartCoroutine(ValidateTeamAssignment());
+        }
     }
 
     /// <summary>
-    /// Validates team assignment after a short delay (allows network sync)
+    /// Validates team assignment after a short delay
     /// </summary>
     private System.Collections.IEnumerator ValidateTeamAssignment()
     {
-        // Wait for network/team components to initialize
         yield return new WaitForSeconds(0.2f);
 
         string team = PlayerTeam;
 
-        // Validate team assignment
         if (string.IsNullOrEmpty(team))
         {
-            Debug.LogWarning($"PlayerInventory on {gameObject.name} has no team assigned! " +
-                           "Make sure PlayerTeamComponent is attached and initialized, " +
-                           "or manually set the team in Inspector.");
+            Debug.LogWarning($"NetworkedPlayerInventory on {gameObject.name} has no team assigned!");
         }
         else
         {
-            Debug.Log($"✓ {gameObject.name} team validated: {team}");
+            Debug.Log($"[SERVER] ✓ {gameObject.name} inventory initialized for team: {team}");
         }
-    }
-
-    /// <summary>
-    /// Manual team override (useful for testing or non-networked games)
-    /// </summary>
-    public void SetTeam(string team)
-    {
-        playerTeam = team;
-        Debug.Log($"✓ {gameObject.name} team manually set to: {team}");
     }
 }

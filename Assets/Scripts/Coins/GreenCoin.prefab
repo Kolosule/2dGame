@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 6197617797546094263}
   - component: {fileID: 4073492493844220095}
   - component: {fileID: 6291369826782159516}
+  - component: {fileID: 8156722694459025426}
   m_Layer: 10
   m_Name: GreenCoin
   m_TagString: Untagged
@@ -142,3 +143,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CoinPickup
   coinData: {fileID: 11400000, guid: a3cc6f5dec53b014ca70041a453b1043, type: 2}
   pickupSound: {fileID: 0}
+  rotateVisual: 1
+  rotationSpeed: 90
+--- !u!114 &8156722694459025426
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1432758890690770479}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 3747884298
+  ObjectInterest: 0
+  Flags: 786433
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 6291369826782159516}
+  ForceRemoteRenderTimeframe: 0

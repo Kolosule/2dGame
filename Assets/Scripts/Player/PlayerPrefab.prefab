@@ -142,7 +142,6 @@ GameObject:
   - component: {fileID: 1629181840047361504}
   - component: {fileID: 1716746421360222117}
   - component: {fileID: 3938946417030660628}
-  - component: {fileID: 5249638385752750120}
   - component: {fileID: 465053131265936943}
   - component: {fileID: 791806707811693276}
   - component: {fileID: 274603642580577355}
@@ -150,6 +149,8 @@ GameObject:
   - component: {fileID: 7275137055155341575}
   - component: {fileID: 3141066975475156066}
   - component: {fileID: 6913999319050724693}
+  - component: {fileID: 963116542380703858}
+  - component: {fileID: 3973079578160004190}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -398,6 +399,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   stats: {fileID: 11400000, guid: 210721b53ee27ce4d99595054d7e3477, type: 2}
+  _CurrentHealth: 0
+  _IsDead: 0
 --- !u!114 &3938946417030660628
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -414,31 +417,6 @@ MonoBehaviour:
   spriteRenderer: {fileID: 0}
   colorizePlayer: 0
   enableDetailedLogging: 1
---- !u!114 &5249638385752750120
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3540110564427285031}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 0}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 0
-  InScenePlacedSourceGlobalObjectIdHash: 0
-  DeferredDespawnTick: 0
-  Ownership: 1
-  AlwaysReplicateAsRoot: 0
-  SynchronizeTransform: 1
-  ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 1
-  SpawnWithObservers: 1
-  DontDestroyWithOwner: 0
-  AutoObjectParentSync: 1
-  SyncOwnerTransformWhenParented: 1
-  AllowOwnerToParent: 0
 --- !u!114 &465053131265936943
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -451,10 +429,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 32de5c78d40b762428c5df783c04d47d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkPlayerWrapper
-  ShowTopMostFoldoutHeaderGroup: 1
   yourPlayerControllerScript: {fileID: 4596838793308598492}
   rb: {fileID: 6614906323051471733}
   teamId: 0
+  _NetworkPosition: {x: 0, y: 0, z: 0}
+  _NetworkVelocity: {x: 0, y: 0}
+  _NetworkScaleX: 1
+  _NetworkTeamId: 0
 --- !u!114 &791806707811693276
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -550,6 +531,41 @@ MonoBehaviour:
   deathToCameraTransitionDelay: 0.5
   followDuringDeathDelay: 1
   showDebugMessages: 0
+--- !u!114 &963116542380703858
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 2767735258
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 1716746421360222117}
+  - {fileID: 465053131265936943}
+  - {fileID: -4804353808761203150}
+  - {fileID: 3973079578160004190}
+  ForceRemoteRenderTimeframe: 0
+--- !u!114 &3973079578160004190
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 33c2e4ee12fc41042a21787e2f689ae7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerTeamData
+  _Team: 0
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0

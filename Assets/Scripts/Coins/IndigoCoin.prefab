@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 1041048033388045722}
   - component: {fileID: 8507786950563370850}
   - component: {fileID: 3322176808936437940}
+  - component: {fileID: 8784847194437023549}
   m_Layer: 10
   m_Name: IndigoCoin
   m_TagString: Untagged
@@ -142,3 +143,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CoinPickup
   coinData: {fileID: 11400000, guid: 7b56e685f50c36a47a042f178b8204fd, type: 2}
   pickupSound: {fileID: 0}
+  rotateVisual: 1
+  rotationSpeed: 90
+--- !u!114 &8784847194437023549
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6482532506220416653}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 1060224331
+  ObjectInterest: 0
+  Flags: 786433
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 3322176808936437940}
+  ForceRemoteRenderTimeframe: 0
