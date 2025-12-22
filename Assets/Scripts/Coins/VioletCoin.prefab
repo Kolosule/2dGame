@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 1444606257302855232}
   - component: {fileID: 8809270261376702274}
   - component: {fileID: 5390241881327640293}
+  - component: {fileID: 5136239110909564780}
   m_Layer: 10
   m_Name: VioletCoin
   m_TagString: Untagged
@@ -142,3 +143,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CoinPickup
   coinData: {fileID: 11400000, guid: 71bce6cabe50ac74687f0a16d6fd923e, type: 2}
   pickupSound: {fileID: 0}
+  rotateVisual: 1
+  rotationSpeed: 90
+--- !u!114 &5136239110909564780
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9200945597610364576}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 2467247400
+  ObjectInterest: 0
+  Flags: 786433
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 5390241881327640293}
+  ForceRemoteRenderTimeframe: 0

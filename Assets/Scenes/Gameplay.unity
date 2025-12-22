@@ -540,6 +540,7 @@ GameObject:
   m_Component:
   - component: {fileID: 34990972}
   - component: {fileID: 34990971}
+  - component: {fileID: 34990973}
   m_Layer: 0
   m_Name: TeamScoreManager
   m_TagString: Untagged
@@ -559,14 +560,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3558a13e788f3db44b7a427852535a81, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TeamScoreManager
-  team1Score: 0
-  team2Score: 0
+  _Team1Score: 0
+  _Team2Score: 0
   damageBuffThreshold: 50
   defenseBuffThreshold: 100
-  team1DamageBuff: 0
-  team2DamageBuff: 0
-  team1DefenseBuff: 0
-  team2DefenseBuff: 0
+  _Team1DamageBuff: 0
+  _Team2DamageBuff: 0
+  _Team1DefenseBuff: 0
+  _Team2DefenseBuff: 0
   onDamageBuffUnlocked:
     m_PersistentCalls:
       m_Calls: []
@@ -588,6 +589,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &34990973
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 34990970}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 3699468870
+  ObjectInterest: 0
+  Flags: 786433
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 34990971}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &61311182
 GameObject:
   m_ObjectHideFlags: 0
@@ -598,6 +618,7 @@ GameObject:
   m_Component:
   - component: {fileID: 61311184}
   - component: {fileID: 61311185}
+  - component: {fileID: 61311186}
   m_Layer: 0
   m_Name: EnemySpawnerRed
   m_TagString: Untagged
@@ -643,6 +664,25 @@ MonoBehaviour:
   relativePointA: {x: -5, y: 0}
   relativePointB: {x: 5, y: 0}
   showGizmo: 1
+--- !u!114 &61311186
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 61311182}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 3239444829
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 61311185}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &64518173
 GameObject:
   m_ObjectHideFlags: 0
@@ -1201,6 +1241,7 @@ GameObject:
   m_Component:
   - component: {fileID: 90954303}
   - component: {fileID: 90954302}
+  - component: {fileID: 90954304}
   m_Layer: 0
   m_Name: EnemySpawnerBlue
   m_TagString: Untagged
@@ -1246,6 +1287,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &90954304
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 90954301}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 3510127807
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 90954302}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &107052246
 GameObject:
   m_ObjectHideFlags: 0
@@ -1443,6 +1503,75 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 530325726}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &141480356
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 141480359}
+  - component: {fileID: 141480358}
+  - component: {fileID: 141480357}
+  m_Layer: 0
+  m_Name: NetworkedSpawnManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &141480357
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 141480356}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 405834193
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 141480358}
+  ForceRemoteRenderTimeframe: 0
+--- !u!114 &141480358
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 141480356}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 770dccc92bac0a945a67ab38dcb1f0e4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkedSpawnManager
+  playerPrefab: {fileID: 963116542380703858, guid: 80341d7f6754cda42ad1c2633dfac90e, type: 3}
+  team1SpawnPoints:
+  - {fileID: 1356165867}
+  team2SpawnPoints:
+  - {fileID: 1208211533}
+--- !u!4 &141480359
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 141480356}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.60451, y: -5.43765, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &154701844
 GameObject:
@@ -1730,6 +1859,7 @@ GameObject:
   - component: {fileID: 159672161}
   - component: {fileID: 159672160}
   - component: {fileID: 159672159}
+  - component: {fileID: 159672162}
   m_Layer: 10
   m_Name: BlueHomeBase
   m_TagString: HomeBase
@@ -1746,7 +1876,7 @@ Transform:
   m_GameObject: {fileID: 159672156}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 195, y: 26, z: 0}
+  m_LocalPosition: {x: 195, y: 25, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1768,6 +1898,7 @@ MonoBehaviour:
   autoDeposit: 1
   depositKey: 101
   depositSound: {fileID: 0}
+  depositEffect: {fileID: 0}
 --- !u!60 &159672160
 PolygonCollider2D:
   m_ObjectHideFlags: 0
@@ -1876,6 +2007,25 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &159672162
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 159672156}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 834393013
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 159672159}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &167520091
 GameObject:
   m_ObjectHideFlags: 0
@@ -3787,6 +3937,7 @@ GameObject:
   m_Component:
   - component: {fileID: 408978074}
   - component: {fileID: 408978073}
+  - component: {fileID: 408978075}
   m_Layer: 0
   m_Name: EnemySpawnerIndigo
   m_TagString: Untagged
@@ -3832,6 +3983,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &408978075
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 408978072}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 467105386
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 408978073}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &429263680
 GameObject:
   m_ObjectHideFlags: 0
@@ -3981,6 +4151,7 @@ GameObject:
   - component: {fileID: 505788391}
   - component: {fileID: 505788390}
   - component: {fileID: 505788389}
+  - component: {fileID: 505788393}
   m_Layer: 10
   m_Name: RedHomeBase
   m_TagString: HomeBase
@@ -4004,6 +4175,7 @@ MonoBehaviour:
   autoDeposit: 1
   depositKey: 101
   depositSound: {fileID: 0}
+  depositEffect: {fileID: 0}
 --- !u!60 &505788390
 PolygonCollider2D:
   m_ObjectHideFlags: 0
@@ -4121,12 +4293,31 @@ Transform:
   m_GameObject: {fileID: 505788388}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -195, y: 26, z: 0}
+  m_LocalPosition: {x: -195, y: 25, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &505788393
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 505788388}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 4188716850
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 505788389}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &513301146
 GameObject:
   m_ObjectHideFlags: 0
@@ -4410,6 +4601,7 @@ GameObject:
   m_Component:
   - component: {fileID: 526135364}
   - component: {fileID: 526135363}
+  - component: {fileID: 526135365}
   m_Layer: 0
   m_Name: EnemySpawnerViolet (1)
   m_TagString: Untagged
@@ -4455,6 +4647,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &526135365
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 526135362}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 2326588345
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 526135363}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &530325725
 GameObject:
   m_ObjectHideFlags: 0
@@ -6082,14 +6293,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a060d3d0c0328849ac4cc66a4476906, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UIManager
-  redScoreText: {fileID: 2068378056}
-  blueScoreText: {fileID: 1454083668}
+  team1ScoreText: {fileID: 0}
+  team2ScoreText: {fileID: 0}
   playerCoinText: {fileID: 1601584217}
   playerCoinValueText: {fileID: 513301147}
-  redDamageBuffIcon: {fileID: 0}
-  redDefenseBuffIcon: {fileID: 0}
-  blueDamageBuffIcon: {fileID: 0}
-  blueDefenseBuffIcon: {fileID: 0}
+  team1DamageBuffIcon: {fileID: 0}
+  team1DefenseBuffIcon: {fileID: 0}
+  team2DamageBuffIcon: {fileID: 0}
+  team2DefenseBuffIcon: {fileID: 0}
+  updateInterval: 0.1
 --- !u!1 &731959677
 GameObject:
   m_ObjectHideFlags: 0
@@ -6100,6 +6312,7 @@ GameObject:
   m_Component:
   - component: {fileID: 731959679}
   - component: {fileID: 731959678}
+  - component: {fileID: 731959680}
   m_Layer: 0
   m_Name: EnemySpawnerOrange (1)
   m_TagString: Untagged
@@ -6145,6 +6358,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &731959680
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 731959677}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 928431431
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 731959678}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &736981105
 GameObject:
   m_ObjectHideFlags: 0
@@ -6155,6 +6387,7 @@ GameObject:
   m_Component:
   - component: {fileID: 736981107}
   - component: {fileID: 736981106}
+  - component: {fileID: 736981108}
   m_Layer: 0
   m_Name: EnemySpawnerYellow (1)
   m_TagString: Untagged
@@ -6200,6 +6433,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &736981108
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 736981105}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 2282928389
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 736981106}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &737868872
 GameObject:
   m_ObjectHideFlags: 0
@@ -7536,6 +7788,7 @@ GameObject:
   m_Component:
   - component: {fileID: 917896195}
   - component: {fileID: 917896194}
+  - component: {fileID: 917896196}
   m_Layer: 0
   m_Name: EnemySpawnerRed (1)
   m_TagString: Untagged
@@ -7581,6 +7834,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &917896196
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 917896193}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 3546083268
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 917896194}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &931223300
 GameObject:
   m_ObjectHideFlags: 0
@@ -8441,6 +8713,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1022191733}
   - component: {fileID: 1022191732}
+  - component: {fileID: 1022191734}
   m_Layer: 0
   m_Name: EnemySpawnerIndigo (1)
   m_TagString: Untagged
@@ -8486,6 +8759,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1022191734
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1022191731}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 1393463628
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 1022191732}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &1090232903
 GameObject:
   m_ObjectHideFlags: 0
@@ -9059,7 +9351,7 @@ Transform:
   m_GameObject: {fileID: 1208211532}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -205.4, y: 20.5, z: 0}
+  m_LocalPosition: {x: -195, y: 25, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -9402,6 +9694,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1325049997}
   - component: {fileID: 1325049996}
+  - component: {fileID: 1325049998}
   m_Layer: 0
   m_Name: EnemySpawnerYellow
   m_TagString: Untagged
@@ -9447,6 +9740,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1325049998
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1325049995}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 755998873
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 1325049996}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &1351418281
 GameObject:
   m_ObjectHideFlags: 0
@@ -9609,7 +9921,7 @@ Transform:
   m_GameObject: {fileID: 1356165866}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 204.96, y: 25.03, z: 0}
+  m_LocalPosition: {x: 195, y: 25, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -9899,6 +10211,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1376949269}
   - component: {fileID: 1376949268}
+  - component: {fileID: 1376949270}
   m_Layer: 0
   m_Name: EnemySpawnerGreen
   m_TagString: Untagged
@@ -9944,6 +10257,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1376949270
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1376949267}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 1956164841
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 1376949268}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &1380255784
 GameObject:
   m_ObjectHideFlags: 0
@@ -11869,6 +12201,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1720206372}
   - component: {fileID: 1720206371}
+  - component: {fileID: 1720206373}
   m_Layer: 0
   m_Name: EnemySpawnerGreen (1)
   m_TagString: Untagged
@@ -11914,6 +12247,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1720206373
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1720206370}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 1443557896
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 1720206371}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &1723887606
 GameObject:
   m_ObjectHideFlags: 0
@@ -11924,6 +12276,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1723887608}
   - component: {fileID: 1723887607}
+  - component: {fileID: 1723887609}
   m_Layer: 0
   m_Name: EnemySpawnerBlue (1)
   m_TagString: Untagged
@@ -11969,6 +12322,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1723887609
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1723887606}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 2738201191
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 1723887607}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &1740037542
 GameObject:
   m_ObjectHideFlags: 0
@@ -12695,6 +13067,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1891720200}
   - component: {fileID: 1891720199}
+  - component: {fileID: 1891720201}
   m_Layer: 0
   m_Name: EnemySpawnerOrange
   m_TagString: Untagged
@@ -12740,6 +13113,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1891720201
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1891720198}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 2989017389
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 1891720199}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &1898080897
 GameObject:
   m_ObjectHideFlags: 0
@@ -14149,6 +14541,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2084827508}
   - component: {fileID: 2084827507}
+  - component: {fileID: 2084827509}
   m_Layer: 0
   m_Name: EnemySpawnerViolet
   m_TagString: Untagged
@@ -14194,6 +14587,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 167520092}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2084827509
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2084827506}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 727862496
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 2084827507}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &2096870526
 GameObject:
   m_ObjectHideFlags: 0
@@ -14477,7 +14889,7 @@ Transform:
   m_GameObject: {fileID: 7862047424769601564}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 192.5, y: 25, z: 0}
+  m_LocalPosition: {x: 195, y: 25, z: 0}
   m_LocalScale: {x: 5, y: 5, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -14498,31 +14910,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2106896756354866767
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7862047424769601564}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1250435111
-  InScenePlacedSourceGlobalObjectIdHash: 2400649944
-  DeferredDespawnTick: 0
-  Ownership: 1
-  AlwaysReplicateAsRoot: 0
-  SynchronizeTransform: 1
-  ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 0
-  SpawnWithObservers: 1
-  DontDestroyWithOwner: 0
-  AutoObjectParentSync: 1
-  SyncOwnerTransformWhenParented: 1
-  AllowOwnerToParent: 0
 --- !u!212 &3638650706254270083
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -14581,31 +14968,6 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
---- !u!114 &4808710014747513274
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6937719197740284865}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2673670006
-  InScenePlacedSourceGlobalObjectIdHash: 710371633
-  DeferredDespawnTick: 0
-  Ownership: 1
-  AlwaysReplicateAsRoot: 0
-  SynchronizeTransform: 1
-  ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 0
-  SpawnWithObservers: 1
-  DontDestroyWithOwner: 0
-  AutoObjectParentSync: 1
-  SyncOwnerTransformWhenParented: 1
-  AllowOwnerToParent: 0
 --- !u!1 &4868426844053686543
 GameObject:
   m_ObjectHideFlags: 0
@@ -14617,6 +14979,7 @@ GameObject:
   - component: {fileID: 7065038410151508182}
   - component: {fileID: 8612025022324218104}
   - component: {fileID: 5933690063085526574}
+  - component: {fileID: 8612025022324218105}
   m_Layer: 0
   m_Name: CTFGameManager
   m_TagString: Untagged
@@ -14636,7 +14999,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 75b24466ff4290e4fbee70b7da1e484c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Flag
-  ShowTopMostFoldoutHeaderGroup: 1
   owningTeam: Team1
   flagSprite: {fileID: 0}
   pickupEffect: {fileID: 0}
@@ -14644,6 +15006,8 @@ MonoBehaviour:
   autoReturnTime: 15
   carrierOffset: 1.5
   triggerCollider: {fileID: 0}
+  _CurrentState: 0
+  _HomePosition: {x: 0, y: 0, z: 0}
 --- !u!114 &5899147913656068623
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -14656,7 +15020,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 75b24466ff4290e4fbee70b7da1e484c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Flag
-  ShowTopMostFoldoutHeaderGroup: 1
   owningTeam: Team2
   flagSprite: {fileID: 0}
   pickupEffect: {fileID: 0}
@@ -14664,6 +15027,8 @@ MonoBehaviour:
   autoReturnTime: 15
   carrierOffset: 1.5
   triggerCollider: {fileID: 0}
+  _CurrentState: 0
+  _HomePosition: {x: 0, y: 0, z: 0}
 --- !u!114 &5933690063085526574
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -14676,7 +15041,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5aa73fb402596a641835940cc7212b17, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CTFGameManager
-  ShowTopMostFoldoutHeaderGroup: 1
   team1Flag: {fileID: 5513339658241674972}
   team2Flag: {fileID: 5899147913656068623}
   notificationText: {fileID: 1706739594}
@@ -14687,6 +15051,9 @@ MonoBehaviour:
   team1FlagIndicator: {fileID: 1463380607}
   team2FlagIndicator: {fileID: 328316446}
   notificationDuration: 3
+  _GameIsOver: 0
+  _Team1HasBothFlags: 0
+  _Team2HasBothFlags: 0
 --- !u!212 &6859469528351059374
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -14754,10 +15121,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1675247199631377740}
-  - component: {fileID: 4808710014747513274}
   - component: {fileID: 5899147913656068623}
   - component: {fileID: 8653766133277180242}
   - component: {fileID: 3638650706254270083}
+  - component: {fileID: 8653766133277180243}
   m_Layer: 10
   m_Name: Team2Flag
   m_TagString: Untagged
@@ -14835,10 +15202,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 247141480450232699}
-  - component: {fileID: 2106896756354866767}
   - component: {fileID: 5513339658241674972}
   - component: {fileID: 6955762202970811500}
   - component: {fileID: 6859469528351059374}
+  - component: {fileID: 7862047424769601565}
   m_Layer: 10
   m_Name: Team1Flag
   m_TagString: Untagged
@@ -14846,6 +15213,25 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &7862047424769601565
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7862047424769601564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 1198902174
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 5513339658241674972}
+  ForceRemoteRenderTimeframe: 0
 --- !u!114 &8612025022324218104
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -14858,19 +15244,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2055477357
-  InScenePlacedSourceGlobalObjectIdHash: 2996453053
-  DeferredDespawnTick: 0
-  Ownership: 1
-  AlwaysReplicateAsRoot: 0
-  SynchronizeTransform: 1
-  ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 0
-  SpawnWithObservers: 1
-  DontDestroyWithOwner: 0
-  AutoObjectParentSync: 1
-  SyncOwnerTransformWhenParented: 1
-  AllowOwnerToParent: 0
+--- !u!114 &8612025022324218105
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4868426844053686543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 4267694078
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 5933690063085526574}
+  ForceRemoteRenderTimeframe: 0
 --- !u!61 &8653766133277180242
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -14917,6 +15309,25 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 1, y: 1}
   m_EdgeRadius: 0
+--- !u!114 &8653766133277180243
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6937719197740284865}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 2130435022
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 5899147913656068623}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -14937,3 +15348,4 @@ SceneRoots:
   - {fileID: 1675247199631377740}
   - {fileID: 7065038410151508182}
   - {fileID: 955214616}
+  - {fileID: 141480359}

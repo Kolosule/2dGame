@@ -1,12 +1,16 @@
 using UnityEngine;
+using Fusion;
 
 /// <summary>
-/// Spawner that automatically assigns team, territorial advantage, AND patrol points to spawned enemies
+/// Networked spawner that automatically assigns team, territorial advantage, AND patrol points to spawned enemies.
+/// PHOTON FUSION VERSION - Only server spawns enemies, all clients see them.
 /// </summary>
-public class EnemySpawner : MonoBehaviour
+public class NetworkedEnemySpawner : NetworkBehaviour
 {
     [Header("Spawn Settings")]
-    [SerializeField] private GameObject enemyPrefab;
+    [Tooltip("Enemy prefab - MUST have NetworkObject component!")]
+    [SerializeField] private NetworkObject enemyPrefab;
+
     [SerializeField] private float spawnInterval = 5f;
     [SerializeField] private int maxEnemies = 10;
 
@@ -31,20 +35,29 @@ public class EnemySpawner : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool showGizmo = true;
 
-    private float nextSpawnTime;
-    private int currentEnemyCount;
+    // Network state
+    [Networked] private int CurrentEnemyCount { get; set; }
+    [Networked] private TickTimer NextSpawnTimer { get; set; }
+
     private Transform autoPatrolPointA;
     private Transform autoPatrolPointB;
 
-    private void Start()
+    public override void Spawned()
     {
-        nextSpawnTime = Time.time + spawnInterval;
+        // Only server handles spawning
+        if (!HasStateAuthority) return;
+
+        // Initialize spawn timer
+        NextSpawnTimer = TickTimer.CreateFromSeconds(Runner, spawnInterval);
+        CurrentEnemyCount = 0;
 
         // Create automatic patrol points if using relative positioning
         if (useRelativePatrolPoints && (patrolPointA == null || patrolPointB == null))
         {
             CreateRelativePatrolPoints();
         }
+
+        Debug.Log($"[SERVER] NetworkedEnemySpawner initialized: {gameObject.name}");
     }
 
     private void CreateRelativePatrolPoints()
@@ -61,15 +74,19 @@ public class EnemySpawner : MonoBehaviour
         pointBObj.transform.parent = transform;
         autoPatrolPointB = pointBObj.transform;
 
-        Debug.Log($"Created automatic patrol points for {gameObject.name}");
+        Debug.Log($"[SERVER] Created automatic patrol points for {gameObject.name}");
     }
 
-    private void Update()
+    public override void FixedUpdateNetwork()
     {
-        if (Time.time >= nextSpawnTime && currentEnemyCount < maxEnemies)
+        // Only server spawns enemies
+        if (!HasStateAuthority) return;
+
+        // Check if it's time to spawn and we're under the limit
+        if (NextSpawnTimer.Expired(Runner) && CurrentEnemyCount < maxEnemies)
         {
             SpawnEnemy();
-            nextSpawnTime = Time.time + spawnInterval;
+            NextSpawnTimer = TickTimer.CreateFromSeconds(Runner, spawnInterval);
         }
     }
 
@@ -77,11 +94,32 @@ public class EnemySpawner : MonoBehaviour
     {
         if (enemyPrefab == null)
         {
-            Debug.LogError("Enemy prefab not assigned to spawner!");
+            Debug.LogError("[SERVER] Enemy prefab not assigned to spawner!");
             return;
         }
 
-        GameObject enemyObj = Instantiate(enemyPrefab, transform.position, Quaternion.identity);
+        // Spawn the networked enemy (only server can do this)
+        NetworkObject enemyNetObj = Runner.Spawn(
+            enemyPrefab,
+            transform.position,
+            Quaternion.identity,
+            null, // No specific player authority
+            (runner, obj) => {
+                // This callback is called after the object is spawned
+                InitializeEnemy(obj);
+            }
+        );
+
+        Debug.Log($"[SERVER] Spawned enemy at {transform.position}");
+    }
+
+    /// <summary>
+    /// Initialize the spawned enemy with team, territory, and patrol points
+    /// Called by the spawn callback on the server
+    /// </summary>
+    private void InitializeEnemy(NetworkObject enemyNetObj)
+    {
+        GameObject enemyObj = enemyNetObj.gameObject;
 
         // Assign team component values
         EnemyTeamComponent teamComponent = enemyObj.GetComponent<EnemyTeamComponent>();
@@ -89,17 +127,15 @@ public class EnemySpawner : MonoBehaviour
         {
             teamComponent.teamID = teamID;
             teamComponent.territorialAdvantage = territorialAdvantage;
+            Debug.Log($"[SERVER] Assigned team {teamID} to {enemyObj.name}");
         }
         else
         {
-            Debug.LogWarning($"Spawned enemy doesn't have EnemyTeamComponent! Adding one...");
-            teamComponent = enemyObj.AddComponent<EnemyTeamComponent>();
-            teamComponent.teamID = teamID;
-            teamComponent.territorialAdvantage = territorialAdvantage;
+            Debug.LogWarning($"[SERVER] Spawned enemy doesn't have EnemyTeamComponent!");
         }
 
         // Assign patrol points to AI
-        EnemyAI enemyAI = enemyObj.GetComponent<EnemyAI>();
+        NetworkedEnemyAI enemyAI = enemyObj.GetComponent<NetworkedEnemyAI>();
         if (enemyAI != null)
         {
             // Use manually assigned points if available, otherwise use auto-created ones
@@ -108,35 +144,39 @@ public class EnemySpawner : MonoBehaviour
 
             if (pointA != null && pointB != null)
             {
-                // Directly assign the public fields
                 enemyAI.SetPatrolPoints(pointA, pointB);
-                Debug.Log($"Assigned patrol points to {enemyObj.name}: {pointA.position} to {pointB.position}");
+                Debug.Log($"[SERVER] Assigned patrol points to {enemyObj.name}");
             }
             else
             {
-                Debug.LogWarning($"No patrol points available for {enemyObj.name}");
+                Debug.LogWarning($"[SERVER] No patrol points available for {enemyObj.name}");
             }
         }
         else
         {
-            Debug.LogWarning($"Spawned enemy doesn't have EnemyAI component!");
+            Debug.LogWarning($"[SERVER] Spawned enemy doesn't have NetworkedEnemyAI component!");
         }
 
         // Track enemy count
-        currentEnemyCount++;
+        CurrentEnemyCount++;
 
-        // Subscribe to enemy death to update count
-        Enemy enemy = enemyObj.GetComponent<Enemy>();
-        if (enemy != null)
-        {
-            StartCoroutine(WaitForEnemyDestruction(enemyObj));
-        }
+        // Subscribe to enemy despawn to update count
+        StartCoroutine(WaitForEnemyDespawn(enemyNetObj));
     }
 
-    private System.Collections.IEnumerator WaitForEnemyDestruction(GameObject enemy)
+    /// <summary>
+    /// Wait for enemy to be despawned and decrement counter
+    /// </summary>
+    private System.Collections.IEnumerator WaitForEnemyDespawn(NetworkObject enemy)
     {
-        yield return new WaitUntil(() => enemy == null);
-        currentEnemyCount--;
+        // Wait until enemy is despawned or destroyed
+        yield return new WaitUntil(() => enemy == null || !enemy.IsValid);
+
+        if (HasStateAuthority)
+        {
+            CurrentEnemyCount--;
+            Debug.Log($"[SERVER] Enemy despawned. Count: {CurrentEnemyCount}/{maxEnemies}");
+        }
     }
 
     private void OnDrawGizmos()
@@ -180,5 +220,18 @@ public class EnemySpawner : MonoBehaviour
             Gizmos.DrawWireSphere(pointB.position, 0.3f);
             Gizmos.DrawLine(pointA.position, pointB.position);
         }
+
+        // Draw enemy count info
+#if UNITY_EDITOR
+        UnityEditor.Handles.Label(
+            transform.position + Vector3.up * 1.5f,
+            $"{teamID}\nEnemies: {CurrentEnemyCount}/{maxEnemies}",
+            new GUIStyle()
+            {
+                normal = new GUIStyleState() { textColor = Color.white },
+                alignment = TextAnchor.MiddleCenter
+            }
+        );
+#endif
     }
 }

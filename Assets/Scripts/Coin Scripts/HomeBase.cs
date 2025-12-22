@@ -1,14 +1,15 @@
 using UnityEngine;
+using Fusion;
 
 /// <summary>
-/// Attached to home base GameObjects where players deposit coins.
-/// NOW COMPATIBLE WITH NETWORK TEAM NAMES (Team1/Team2)
+/// Networked home base for Photon Fusion.
+/// Players deposit coins here to score points for their team.
 /// </summary>
 [RequireComponent(typeof(Collider2D))]
-public class HomeBase : MonoBehaviour
+public class NetworkedHomeBase : NetworkBehaviour
 {
     [Header("Base Settings")]
-    [Tooltip("Which team this base belongs to: 'Team1'/'Blue' or 'Team2'/'Red'")]
+    [Tooltip("Which team this base belongs to: 'Team1' or 'Team2'")]
     [SerializeField] private string baseTeam;
 
     [Header("Deposit Settings")]
@@ -22,8 +23,12 @@ public class HomeBase : MonoBehaviour
     [Tooltip("Sound to play when coins are deposited")]
     [SerializeField] private AudioClip depositSound;
 
-    // Track which player is currently in the base zone
-    private PlayerInventory playerInZone = null;
+    [Header("Visual Feedback (Optional)")]
+    [Tooltip("Particle effect to spawn when depositing")]
+    [SerializeField] private GameObject depositEffect;
+
+    // Track which player is currently in the base zone (per client)
+    private NetworkedPlayerInventory playerInZone = null;
 
     private void Start()
     {
@@ -36,7 +41,7 @@ public class HomeBase : MonoBehaviour
 
         if (string.IsNullOrEmpty(baseTeam))
         {
-            Debug.LogError($"HomeBase on {gameObject.name} has no team assigned!");
+            Debug.LogError($"NetworkedHomeBase on {gameObject.name} has no team assigned!");
         }
     }
 
@@ -45,28 +50,32 @@ public class HomeBase : MonoBehaviour
     /// </summary>
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        PlayerInventory player = collision.GetComponent<PlayerInventory>();
+        NetworkedPlayerInventory player = collision.GetComponent<NetworkedPlayerInventory>();
 
         if (player != null)
         {
-            // Check if player is on the same team as this base
-            if (IsPlayerOnCorrectTeam(player))
+            // Only process for local player
+            if (player.HasInputAuthority)
             {
-                playerInZone = player;
-
-                // If auto-deposit is enabled, deposit immediately
-                if (autoDeposit)
+                // Check if player is on the same team as this base
+                if (IsPlayerOnCorrectTeam(player))
                 {
-                    DepositCoins(player);
+                    playerInZone = player;
+
+                    // If auto-deposit is enabled, deposit immediately
+                    if (autoDeposit)
+                    {
+                        RequestDeposit(player);
+                    }
+                    else
+                    {
+                        Debug.Log($"Press {depositKey} to deposit coins!");
+                    }
                 }
                 else
                 {
-                    Debug.Log($"Press {depositKey} to deposit coins!");
+                    Debug.Log($"Wrong team! This is {baseTeam}'s base.");
                 }
-            }
-            else
-            {
-                Debug.Log($"{player.gameObject.name} is on the wrong team! This is {baseTeam}'s base.");
             }
         }
     }
@@ -76,7 +85,7 @@ public class HomeBase : MonoBehaviour
     /// </summary>
     private void OnTriggerExit2D(Collider2D collision)
     {
-        PlayerInventory player = collision.GetComponent<PlayerInventory>();
+        NetworkedPlayerInventory player = collision.GetComponent<NetworkedPlayerInventory>();
 
         if (player != null && player == playerInZone)
         {
@@ -91,15 +100,101 @@ public class HomeBase : MonoBehaviour
     {
         if (!autoDeposit && playerInZone != null && Input.GetKeyDown(depositKey))
         {
-            DepositCoins(playerInZone);
+            RequestDeposit(playerInZone);
         }
+    }
+
+    /// <summary>
+    /// Requests a deposit from the client (sends RPC to server)
+    /// </summary>
+    private void RequestDeposit(NetworkedPlayerInventory player)
+    {
+        if (player.CoinCount == 0)
+        {
+            if (player.HasInputAuthority)
+            {
+                Debug.Log("No coins to deposit!");
+            }
+            return;
+        }
+
+        // Send RPC to server to handle deposit
+        RPC_RequestDeposit(player.Object.InputAuthority);
+    }
+
+    /// <summary>
+    /// RPC to request coin deposit. Called by client, executed on server.
+    /// </summary>
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestDeposit(PlayerRef player)
+    {
+        // Find the player's network object
+        NetworkObject playerNetObj;
+        if (Runner.TryGetPlayerObject(player, out playerNetObj))
+        {
+            NetworkedPlayerInventory inventory = playerNetObj.GetComponent<NetworkedPlayerInventory>();
+
+            if (inventory != null)
+            {
+                // Verify player is on correct team (server-side check)
+                if (!IsPlayerOnCorrectTeam(inventory))
+                {
+                    Debug.LogWarning($"[SERVER] Player tried to deposit at wrong base!");
+                    return;
+                }
+
+                // Get points from player's inventory
+                int points = inventory.ServerDepositCoins();
+
+                if (points > 0)
+                {
+                    // Add points to team score through the TeamScoreManager
+                    TeamScoreManager scoreManager = TeamScoreManager.Instance;
+                    if (scoreManager != null)
+                    {
+                        scoreManager.RPC_AddPoints(baseTeam, points);
+
+                        Debug.Log($"[SERVER] {playerNetObj.name} deposited coins at {baseTeam} base for {points} points!");
+
+                        // Notify all clients to play effects
+                        RPC_OnDeposit(playerNetObj.transform.position, points);
+                    }
+                    else
+                    {
+                        Debug.LogError("[SERVER] TeamScoreManager not found in scene!");
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// RPC to notify all clients that a deposit occurred (for visual/audio feedback)
+    /// </summary>
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnDeposit(Vector3 playerPosition, int points)
+    {
+        // Play deposit sound if assigned
+        if (depositSound != null)
+        {
+            AudioSource.PlayClipAtPoint(depositSound, transform.position);
+        }
+
+        // Spawn deposit effect if assigned
+        if (depositEffect != null)
+        {
+            GameObject effect = Instantiate(depositEffect, playerPosition, Quaternion.identity);
+            Destroy(effect, 2f);
+        }
+
+        Debug.Log($"Coins deposited! +{points} points for {baseTeam}");
     }
 
     /// <summary>
     /// Checks if player is on the correct team for this base
     /// Handles multiple team naming conventions
     /// </summary>
-    private bool IsPlayerOnCorrectTeam(PlayerInventory player)
+    private bool IsPlayerOnCorrectTeam(NetworkedPlayerInventory player)
     {
         string playerTeamName = player.PlayerTeam.ToLower().Trim();
         string baseTeamName = baseTeam.ToLower().Trim();
@@ -126,40 +221,5 @@ public class HomeBase : MonoBehaviour
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// Handles the coin deposit process
-    /// </summary>
-    private void DepositCoins(PlayerInventory player)
-    {
-        // Only deposit if player has coins
-        if (player.CoinCount == 0)
-        {
-            Debug.Log("No coins to deposit!");
-            return;
-        }
-
-        // Get points from player's inventory
-        int points = player.DepositCoins();
-
-        // Add points to team score through the TeamScoreManager
-        TeamScoreManager scoreManager = FindObjectOfType<TeamScoreManager>();
-        if (scoreManager != null)
-        {
-            scoreManager.AddPoints(baseTeam, points);
-        }
-        else
-        {
-            Debug.LogError("TeamScoreManager not found in scene!");
-        }
-
-        // Play deposit sound if assigned
-        if (depositSound != null)
-        {
-            AudioSource.PlayClipAtPoint(depositSound, transform.position);
-        }
-
-        Debug.Log($"{player.gameObject.name} deposited coins at {baseTeam} base for {points} points!");
     }
 }

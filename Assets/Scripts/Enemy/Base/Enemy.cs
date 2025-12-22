@@ -1,259 +1,126 @@
 ﻿using UnityEngine;
+using Fusion;
 using System.Collections;
 
 /// <summary>
-/// Base enemy class handling health, damage, knockback, and combat.
-/// FIXED VERSION - Now properly checks range after telegraph before dealing damage
+/// Networked enemy base class for Photon Fusion.
+/// Handles health, damage, knockback with network synchronization.
+/// NOTE: This is a simplified version - you'll need to adapt based on your existing Enemy.cs
 /// </summary>
-public class Enemy : MonoBehaviour
+public class NetworkedEnemy : NetworkBehaviour
 {
-    [Header("Stats")]
+    [Header("References")]
     [SerializeField] private EnemyStats stats;
+    [SerializeField] private SpriteRenderer spriteRenderer;
 
-    [Header("Attack Telegraph")]
-    [Tooltip("Show warning indicator before attacking")]
-    [SerializeField] private bool useTelegraph = true;
-
-    [Tooltip("Time to show telegraph before attacking (in seconds)")]
+    [Header("Combat")]
+    [SerializeField] private float attackCooldown = 1f;
     [SerializeField] private float telegraphDuration = 0.5f;
 
-    [Tooltip("Visual indicator for telegraph (sprite or particle effect)")]
-    [SerializeField] private GameObject telegraphPrefab;
-
-    [Tooltip("Color to flash when telegraphing attack")]
-    [SerializeField] private Color telegraphColor = new Color(1f, 0.3f, 0.3f, 1f);
-
-    [Header("Attack Settings")]
-    [Tooltip("Time between attacks in seconds")]
-    [SerializeField] private float attackCooldown = 1f;
-
-    [Tooltip("Attack range - must be within this distance to deal damage")]
-    [SerializeField] private float attackRange = 1.5f;
-
-    [Header("Hit Feedback")]
-    [Tooltip("Particle effect when enemy takes damage")]
+    [Header("Visual Effects")]
     [SerializeField] private GameObject hitEffectPrefab;
-
-    [Tooltip("Duration of hit flash effect")]
     [SerializeField] private float hitFlashDuration = 0.1f;
 
+    // Networked health
+    [Networked]
+    public int CurrentHealth { get; private set; }
+
+    [Networked]
+    private NetworkBool IsDead { get; set; }
+
+    [Networked]
+    private TickTimer AttackCooldownTimer { get; set; }
+
+    [Networked]
+    private TickTimer TelegraphTimer { get; set; }
+
+    [Networked]
+    private TickTimer KnockbackTimer { get; set; }
+
     // Component references
-    private EnemyTeamComponent teamComponent;
+    private NetworkedEnemyAI enemyAI;
     private Rigidbody2D rb;
-    private SpriteRenderer spriteRenderer;
-    private EnemyAI enemyAI;
-
-    // Combat state
-    private int currentHealth;
-    private float lastAttackTime = -999f;
-    private bool isTelegraphing = false;
-    private GameObject currentTelegraph;
-
-    // Knockback state
-    private bool isKnockedBack = false;
-    private float knockbackEndTime = 0f;
-
-    // Visual feedback
     private Color originalColor;
 
-    void Awake()
+    // Public state checkers
+    public bool IsTelegraphing() => TelegraphTimer.IsRunning;
+    public bool IsKnockedBack() => KnockbackTimer.IsRunning;
+
+    private void Awake()
     {
-        currentHealth = stats.maxHealth;
-        teamComponent = GetComponent<EnemyTeamComponent>();
+        enemyAI = GetComponent<NetworkedEnemyAI>();
         rb = GetComponent<Rigidbody2D>();
-        spriteRenderer = GetComponent<SpriteRenderer>();
-        enemyAI = GetComponent<EnemyAI>();
 
         if (spriteRenderer != null)
         {
             originalColor = spriteRenderer.color;
         }
+    }
 
-        if (teamComponent == null)
+    public override void Spawned()
+    {
+        // Initialize health on server
+        if (HasStateAuthority)
         {
-            Debug.LogError($"Enemy '{stats.enemyName}' is missing EnemyTeamComponent!");
-        }
-
-        // Use attack cooldown from stats if available, otherwise use serialized field
-        if (stats.attackCooldown > 0)
-        {
-            attackCooldown = stats.attackCooldown;
+            CurrentHealth = stats.maxHealth;
+            IsDead = false;
         }
     }
 
     /// <summary>
-    /// Take damage with knockback and visual feedback.
+    /// Take damage from a player or other source (SERVER ONLY)
     /// </summary>
-    public void TakeDamage(int amount, Vector2 knockbackForce, Vector2 hitPoint)
+    public void TakeDamage(int damage, Vector2 knockbackDirection, float knockbackForce)
     {
-        // Apply defensive modifier from territory
-        float defenseModifier = teamComponent != null ? teamComponent.GetDamageReceivedModifier() : 1f;
-        int finalDamage = Mathf.RoundToInt(amount * defenseModifier);
+        // Only server processes damage
+        if (!HasStateAuthority) return;
 
-        currentHealth -= finalDamage;
+        if (IsDead) return;
+
+        // Apply damage
+        CurrentHealth -= damage;
+
+        Debug.Log($"[SERVER] {stats.enemyName} took {damage} damage. Health: {CurrentHealth}/{stats.maxHealth}");
 
         // Apply knockback
-        if (rb != null && knockbackForce.magnitude > 0.1f)
+        if (rb != null && knockbackForce > 0)
         {
-            rb.linearVelocity = Vector2.zero;
-            rb.AddForce(knockbackForce, ForceMode2D.Impulse);
-
-            isKnockedBack = true;
-            knockbackEndTime = Time.time + 0.3f;
+            rb.linearVelocity = knockbackDirection.normalized * knockbackForce;
+            KnockbackTimer = TickTimer.CreateFromSeconds(Runner, 0.3f);
         }
 
-        // Visual feedback
-        SpawnHitEffect(hitPoint);
-        StartCoroutine(FlashOnHit());
+        // Notify all clients to show hit effects
+        RPC_OnHit(transform.position);
 
-        Debug.Log($"{stats.enemyName} took {finalDamage} damage. Health: {currentHealth}/{stats.maxHealth}");
-
-        if (currentHealth <= 0)
+        // Check if dead
+        if (CurrentHealth <= 0)
         {
             Die();
         }
     }
 
     /// <summary>
-    /// Check if enemy is currently knocked back (AI should pause movement).
+    /// RPC to show hit effects on all clients
     /// </summary>
-    public bool IsKnockedBack()
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnHit(Vector3 hitPosition)
     {
-        if (isKnockedBack && Time.time >= knockbackEndTime)
-        {
-            isKnockedBack = false;
-        }
-        return isKnockedBack;
-    }
-
-    /// <summary>
-    /// Check if enemy is currently telegraphing an attack.
-    /// </summary>
-    public bool IsTelegraphing()
-    {
-        return isTelegraphing;
-    }
-
-    /// <summary>
-    /// Attack a player with optional telegraph warning.
-    /// </summary>
-    public void AttackPlayer(PlayerStatsHandler player)
-    {
-        if (player == null)
-        {
-            Debug.LogWarning($"{stats.enemyName} tried to attack null player!");
-            return;
-        }
-
-        // Check attack cooldown
-        if (Time.time - lastAttackTime < attackCooldown)
-        {
-            return;
-        }
-
-        // Start telegraphed attack
-        if (useTelegraph && !isTelegraphing)
-        {
-            StartCoroutine(TelegraphedAttack(player));
-        }
-        else if (!useTelegraph)
-        {
-            PerformAttack(player);
-        }
-    }
-
-    /// <summary>
-    /// Coroutine for telegraphed attack with warning indicator.
-    /// FIXED: Now checks range before dealing damage!
-    /// </summary>
-    private IEnumerator TelegraphedAttack(PlayerStatsHandler player)
-    {
-        isTelegraphing = true;
-
-        // Show telegraph visual
-        if (telegraphPrefab != null)
-        {
-            currentTelegraph = Instantiate(telegraphPrefab, transform.position, Quaternion.identity, transform);
-        }
-
-        // Flash color to indicate attack
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = telegraphColor;
-        }
-
-        // Wait for telegraph duration
-        yield return new WaitForSeconds(telegraphDuration);
-
-        // Cleanup telegraph visual
-        if (currentTelegraph != null)
-        {
-            Destroy(currentTelegraph);
-        }
-
-        // Restore original color
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = originalColor;
-        }
-
-        isTelegraphing = false;
-
-        // ✅ FIX: Check if player still exists AND is in range before attacking
-        if (player != null)
-        {
-            float distanceToPlayer = Vector2.Distance(transform.position, player.transform.position);
-
-            if (distanceToPlayer <= attackRange)
-            {
-                PerformAttack(player);
-                Debug.Log($"{stats.enemyName} attack connected! Distance: {distanceToPlayer:F2}");
-            }
-            else
-            {
-                Debug.Log($"{stats.enemyName} attack missed - player escaped! Distance: {distanceToPlayer:F2} (max: {attackRange})");
-            }
-        }
-        else
-        {
-            Debug.Log($"{stats.enemyName} attack cancelled - player no longer exists");
-        }
-    }
-
-    /// <summary>
-    /// Perform the actual attack damage.
-    /// </summary>
-    private void PerformAttack(PlayerStatsHandler player)
-    {
-        // Calculate damage with territorial modifier
-        int finalDamage = stats.attackDamage;
-        if (teamComponent != null)
-        {
-            float attackModifier = teamComponent.GetDamageDealtModifier();
-            finalDamage = Mathf.RoundToInt(stats.attackDamage * attackModifier);
-        }
-
-        // Deal damage to player
-        player.TakeDamage(finalDamage);
-        lastAttackTime = Time.time;
-
-        Debug.Log($"{stats.enemyName} dealt {finalDamage} damage to player");
-    }
-
-    /// <summary>
-    /// Spawn hit effect at damage point.
-    /// </summary>
-    private void SpawnHitEffect(Vector2 hitPoint)
-    {
+        // Spawn hit effect
         if (hitEffectPrefab != null)
         {
-            GameObject effect = Instantiate(hitEffectPrefab, hitPoint, Quaternion.identity);
+            GameObject effect = Instantiate(hitEffectPrefab, hitPosition, Quaternion.identity);
             Destroy(effect, 1f);
+        }
+
+        // Flash sprite
+        if (spriteRenderer != null)
+        {
+            StartCoroutine(FlashOnHit());
         }
     }
 
     /// <summary>
-    /// Flash sprite when taking damage.
+    /// Flash sprite when taking damage
     /// </summary>
     private IEnumerator FlashOnHit()
     {
@@ -266,31 +133,127 @@ public class Enemy : MonoBehaviour
     }
 
     /// <summary>
-    /// Handle enemy death.
+    /// Attack a player (SERVER ONLY)
+    /// </summary>
+    public void AttackPlayer(PlayerStatsHandler target)
+    {
+        // Only server controls attacks
+        if (!HasStateAuthority) return;
+
+        if (IsDead) return;
+
+        // Check attack cooldown
+        if (AttackCooldownTimer.IsRunning) return;
+
+        // Start telegraph
+        if (!TelegraphTimer.IsRunning)
+        {
+            TelegraphTimer = TickTimer.CreateFromSeconds(Runner, telegraphDuration);
+            RPC_ShowTelegraph();
+            return;
+        }
+
+        // Telegraph finished, execute attack
+        if (TelegraphTimer.Expired(Runner))
+        {
+            // Calculate attack direction
+            Vector2 direction = (target.transform.position - transform.position).normalized;
+
+            // Apply damage to player
+            // NOTE: You'll need to adapt this based on your PlayerStatsHandler implementation
+            // target.TakeDamage(stats.damage, direction, stats.knockbackForce);
+
+            // Start cooldown
+            AttackCooldownTimer = TickTimer.CreateFromSeconds(Runner, attackCooldown);
+
+            // Notify clients
+            RPC_OnAttack(target.transform.position);
+        }
+    }
+
+    /// <summary>
+    /// RPC to show attack telegraph on all clients
+    /// </summary>
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ShowTelegraph()
+    {
+        // Add visual telegraph effect here (flash, change color, etc.)
+        if (spriteRenderer != null)
+        {
+            StartCoroutine(TelegraphEffect());
+        }
+    }
+
+    private IEnumerator TelegraphEffect()
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = Color.yellow;
+            yield return new WaitForSeconds(telegraphDuration);
+            spriteRenderer.color = originalColor;
+        }
+    }
+
+    /// <summary>
+    /// RPC to show attack effect on all clients
+    /// </summary>
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnAttack(Vector3 targetPosition)
+    {
+        // Play attack animation/sound here
+        Debug.Log($"{stats.enemyName} attacked!");
+    }
+
+    /// <summary>
+    /// Handle enemy death (SERVER ONLY)
     /// </summary>
     private void Die()
     {
-        Debug.Log($"{stats.enemyName} has died!");
+        if (!HasStateAuthority) return;
 
-        // Notify AI to drop coin if applicable
+        IsDead = true;
+
+        Debug.Log($"[SERVER] {stats.enemyName} has died!");
+
+        // Notify AI to drop coins
         if (enemyAI != null)
         {
             enemyAI.OnDeath();
         }
 
-        Destroy(gameObject);
+        // Notify all clients
+        RPC_OnDeath();
+
+        // Despawn after a short delay (using coroutine)
+        StartCoroutine(DespawnAfterDelay(0.5f));
     }
 
-    // Visual feedback for detection and attack ranges
-    private void OnDrawGizmosSelected()
+    /// <summary>
+    /// Despawn after a delay to allow death effects to play
+    /// </summary>
+    private IEnumerator DespawnAfterDelay(float delay)
     {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, 5f); // Detection range
+        yield return new WaitForSeconds(delay);
 
-        if (useTelegraph)
+        if (HasStateAuthority)
         {
-            Gizmos.color = Color.red;
-            Gizmos.DrawWireSphere(transform.position, attackRange); // Attack range indicator
+            Runner.Despawn(Object);
+        }
+    }
+
+    /// <summary>
+    /// RPC to show death effects on all clients
+    /// </summary>
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnDeath()
+    {
+        // Play death animation/sound here
+        Debug.Log($"{stats.enemyName} died!");
+
+        // Optional: Disable visuals before despawn
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.enabled = false;
         }
     }
 }

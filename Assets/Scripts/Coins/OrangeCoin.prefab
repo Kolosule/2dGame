@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 5321259775972928046}
   - component: {fileID: 3329813912264116155}
   - component: {fileID: 4762929400585816329}
+  - component: {fileID: -934654579490886913}
   m_Layer: 10
   m_Name: OrangeCoin
   m_TagString: Untagged
@@ -142,3 +143,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CoinPickup
   coinData: {fileID: 11400000, guid: 926b75475072e4846ba1e27f718eac13, type: 2}
   pickupSound: {fileID: 0}
+  rotateVisual: 1
+  rotationSpeed: 90
+--- !u!114 &-934654579490886913
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6264326754191315897}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 3899408202
+  ObjectInterest: 0
+  Flags: 786433
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 4762929400585816329}
+  ForceRemoteRenderTimeframe: 0

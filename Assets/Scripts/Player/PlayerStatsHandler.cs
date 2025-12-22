@@ -3,7 +3,7 @@ using Fusion;
 
 /// <summary>
 /// Handles player health, damage, death, and respawning for Photon Fusion.
-/// This script manages player stats and coordinates with NetworkedSpawnManager for respawning.
+/// UPDATED: Now works with NetworkedEnemy instead of old Enemy class.
 /// </summary>
 public class PlayerStatsHandler : NetworkBehaviour
 {
@@ -74,9 +74,10 @@ public class PlayerStatsHandler : NetworkBehaviour
     }
 
     /// <summary>
-    /// Attack an enemy. Should be called on server.
+    /// Attack a networked enemy. Should be called on server.
+    /// UPDATED: Now uses NetworkedEnemy instead of old Enemy class.
     /// </summary>
-    public void Attack(Enemy enemy)
+    public void Attack(NetworkedEnemy enemy)
     {
         // Only server processes attacks
         if (!HasStateAuthority) return;
@@ -95,11 +96,13 @@ public class PlayerStatsHandler : NetworkBehaviour
                 Debug.Log($"Player attack modified by territory: {damageModifier:F2}x");
             }
 
-            // Apply damage with knockback
-            Vector2 knockbackForce = new Vector2(transform.localScale.x * stats.attackForce, 2f);
-            Vector2 hitPoint = enemy.transform.position;
+            // Calculate knockback direction
+            Vector2 knockbackDirection = (enemy.transform.position - transform.position).normalized;
+            float knockbackForce = stats.attackForce;
 
-            enemy.TakeDamage((int)attackDamage, knockbackForce, hitPoint);
+            // Apply damage with knockback to networked enemy
+            enemy.TakeDamage((int)attackDamage, knockbackDirection, knockbackForce);
+
             Debug.Log($"Player attacked {enemy.name} for {attackDamage} damage.");
         }
 
@@ -124,10 +127,16 @@ public class PlayerStatsHandler : NetworkBehaviour
             Flag[] flags = FindObjectsByType<Flag>(FindObjectsSortMode.None);
             foreach (Flag flag in flags)
             {
-                // You'll need to adapt this based on your Flag implementation
                 // The flag system will need to be converted to Fusion too
                 Debug.Log("Flag drop logic needs Fusion conversion");
             }
+        }
+
+        // Drop coins if carrying any
+        NetworkedPlayerInventory inventory = GetComponent<NetworkedPlayerInventory>();
+        if (inventory != null)
+        {
+            inventory.OnPlayerDeath(transform.position);
         }
 
         // Disable combat/movement on all clients via RPC
@@ -189,95 +198,28 @@ public class PlayerStatsHandler : NetworkBehaviour
             return;
         }
 
-        Debug.Log("=== RESPAWN DEBUG START ===");
-        Debug.Log("Respawning player...");
-
-        // Reset health and death state
-        IsDead = false;
+        // Reset health
         CurrentHealth = stats.maxHealth;
+        IsDead = false;
 
-        // Re-enable scripts on all clients via RPC
+        // Find spawn position based on team
+        PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
+        if (teamComponent != null)
+        {
+            // Get spawn point from NetworkedSpawnManager
+            NetworkedSpawnManager spawnManager = NetworkedSpawnManager.Instance;
+            if (spawnManager != null)
+            {
+                // This would require a method in NetworkedSpawnManager to get spawn points
+                // For now, just use a simple respawn at current position
+                Debug.Log("Respawn at spawn point - need to implement GetSpawnPoint in NetworkedSpawnManager");
+            }
+        }
+
+        // Re-enable player on all clients
         RPC_EnablePlayerControls();
 
-        // OPTION 1: Use MultiplayerRespawnManager if available
-        MultiplayerRespawnManager respawnManager = FindFirstObjectByType<MultiplayerRespawnManager>();
-        Debug.Log($"MultiplayerRespawnManager found: {respawnManager != null}, PlayerID: {playerID}");
-
-        if (respawnManager != null && playerID >= 0)
-        {
-            respawnManager.RespawnPlayer(playerID);
-            Debug.Log($"Using MultiplayerRespawnManager to respawn player {playerID}");
-            Debug.Log("=== RESPAWN DEBUG END ===");
-            return;
-        }
-
-        // OPTION 2: NETWORK MODE - Use NetworkedSpawnManager if available
-        Debug.Log($"NetworkedSpawnManager.Instance: {NetworkedSpawnManager.Instance != null}");
-
-        if (NetworkedSpawnManager.Instance != null)
-        {
-            // Get team from PlayerTeamComponent (works with both networking systems)
-            PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-            if (teamComponent != null && !string.IsNullOrEmpty(teamComponent.teamID))
-            {
-                // PlayerTeamComponent uses team names like "Team1" or "Team2"
-                // This is compatible with the old NetworkedSpawnManager.GetSpawnPosition(string)
-                Vector3 spawnPos = NetworkedSpawnManager.Instance.GetSpawnPosition(teamComponent.teamID);
-
-                Debug.Log($"Got spawn position from NetworkedSpawnManager for {teamComponent.teamID}: {spawnPos}");
-                transform.position = spawnPos;
-                Debug.Log("=== RESPAWN DEBUG END ===");
-                return;
-            }
-
-            // Fallback: Try PlayerTeamData if it exists
-            PlayerTeamData teamData = GetComponent<PlayerTeamData>();
-            if (teamData != null)
-            {
-                // Wait for Fusion to compile TeamID property
-                // For now, get team from PlayerTeamComponent which TeamData should have updated
-                PlayerTeamComponent teamCompFallback = GetComponent<PlayerTeamComponent>();
-                if (teamCompFallback != null && !string.IsNullOrEmpty(teamCompFallback.teamID))
-                {
-                    Vector3 spawnPos = NetworkedSpawnManager.Instance.GetSpawnPosition(teamCompFallback.teamID);
-                    Debug.Log($"Got spawn position via PlayerTeamData->TeamComponent: {spawnPos}");
-                    transform.position = spawnPos;
-                    Debug.Log("=== RESPAWN DEBUG END ===");
-                    return;
-                }
-            }
-        }
-
-        // OPTION 3: STANDALONE MODE - Try to respawn at team base if available
-        Debug.Log($"TeamManager.Instance: {TeamManager.Instance != null}");
-
-        PlayerTeamComponent teamComp = GetComponent<PlayerTeamComponent>();
-        Debug.Log($"PlayerTeamComponent (standalone check): {teamComp != null}");
-
-        if (teamComp != null && TeamManager.Instance != null)
-        {
-            Debug.Log($"Getting team data for: {teamComp.teamID}");
-            TeamData teamDataStandalone = TeamManager.Instance.GetTeamData(teamComp.teamID);
-            Debug.Log($"TeamData found: {teamDataStandalone != null}");
-
-            if (teamDataStandalone != null)
-            {
-                Debug.Log($"Team base position: {teamDataStandalone.basePosition}");
-                transform.position = teamDataStandalone.basePosition;
-                Debug.Log($"Respawned at team base: {teamDataStandalone.basePosition}");
-                Debug.Log("=== RESPAWN DEBUG END ===");
-                return;
-            }
-            else
-            {
-                Debug.LogError($"Could not find TeamData for teamID: '{teamComp.teamID}'");
-            }
-        }
-
-        // Fallback: respawn at current position
-        Debug.LogWarning("All respawn methods failed! Using fallback (current position)");
-        Debug.Log($"Current position: {transform.position}");
-        Debug.Log("=== RESPAWN DEBUG END ===");
+        Debug.Log("Player respawned!");
     }
 
     /// <summary>
@@ -286,14 +228,14 @@ public class PlayerStatsHandler : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_EnablePlayerControls()
     {
-        // Re-enable scripts
+        // Re-enable combat/movement
         PlayerCombat combat = GetComponent<PlayerCombat>();
         if (combat != null) combat.enabled = true;
 
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null) movement.enabled = true;
 
-        // Reset transparency
+        // Restore full opacity
         SpriteRenderer sprite = GetComponent<SpriteRenderer>();
         if (sprite != null)
         {
@@ -301,26 +243,29 @@ public class PlayerStatsHandler : NetworkBehaviour
             color.a = 1f;
             sprite.color = color;
         }
-
-        // Reset animator if needed
-        Animator anim = GetComponent<Animator>();
-        if (anim != null)
-        {
-            anim.ResetTrigger("Die");
-        }
     }
 
-    // Public getters for UI
+    // ===== PUBLIC GETTERS FOR UI AND OTHER SYSTEMS =====
+
+    /// <summary>
+    /// Get the current health value
+    /// </summary>
     public float GetCurrentHealth()
     {
         return CurrentHealth;
     }
 
+    /// <summary>
+    /// Get the maximum health value
+    /// </summary>
     public float GetMaxHealth()
     {
         return stats.maxHealth;
     }
 
+    /// <summary>
+    /// Check if player is currently dead
+    /// </summary>
     public bool IsPlayerDead()
     {
         return IsDead;

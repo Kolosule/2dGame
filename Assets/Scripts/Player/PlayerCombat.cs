@@ -2,7 +2,7 @@
 
 /// <summary>
 /// Handles player combat including directional attacks, damage dealing, and visual feedback.
-/// Improved version with hit markers and configurable attack speed.
+/// UPDATED: Now works with NetworkedEnemy for Photon Fusion.
 /// </summary>
 public class PlayerCombat : MonoBehaviour
 {
@@ -38,6 +38,7 @@ public class PlayerCombat : MonoBehaviour
     // Component references
     private Animator anim;
     private PlayerTeamComponent teamComponent;
+    private PlayerStatsHandler statsHandler;
 
     // Combat state
     private float timeSinceAttack;
@@ -47,10 +48,16 @@ public class PlayerCombat : MonoBehaviour
     {
         anim = GetComponent<Animator>();
         teamComponent = GetComponent<PlayerTeamComponent>();
+        statsHandler = GetComponent<PlayerStatsHandler>();
 
         if (teamComponent == null)
         {
-            Debug.LogWarning("PlayerCombat: No PlayerTeamComponent found!");
+            Debug.LogWarning("PlayerCombat: No PlayerTeamComponent found! Territory modifiers won't work.");
+        }
+
+        if (statsHandler == null)
+        {
+            Debug.LogWarning("PlayerCombat: No PlayerStatsHandler found!");
         }
     }
 
@@ -119,7 +126,8 @@ public class PlayerCombat : MonoBehaviour
         // Process each hit object
         foreach (Collider2D hit in objectsHit)
         {
-            Enemy enemy = hit.GetComponent<Enemy>();
+            // Try to get NetworkedEnemy component (new networked version)
+            NetworkedEnemy enemy = hit.GetComponent<NetworkedEnemy>();
             if (enemy != null)
             {
                 // Check if this enemy is on a different team
@@ -134,13 +142,18 @@ public class PlayerCombat : MonoBehaviour
 
                 // Calculate knockback direction
                 Vector2 knockbackDir = (enemy.transform.position - transform.position).normalized;
-                Vector2 knockbackForce = new Vector2(
-                    knockbackDir.x * knockbackStrength,
-                    knockbackUpward
-                );
+                float knockbackForce = knockbackStrength;
 
-                // Deal damage
-                enemy.TakeDamage(damageAmount, knockbackForce, hit.transform.position);
+                // Deal damage using PlayerStatsHandler (server authority)
+                if (statsHandler != null)
+                {
+                    statsHandler.Attack(enemy);
+                }
+                else
+                {
+                    // Fallback: direct damage call (less ideal)
+                    enemy.TakeDamage(damageAmount, knockbackDir, knockbackForce);
+                }
 
                 // Spawn hit marker effect
                 SpawnHitMarker(hit.transform.position);
