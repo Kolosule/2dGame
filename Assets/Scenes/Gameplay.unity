@@ -653,7 +653,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 5f1590081fe451f4587e4975ae395d03, type: 3}
+  enemyPrefab: {fileID: -5874888970263685544, guid: 5f1590081fe451f4587e4975ae395d03, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -1261,7 +1261,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 6aee8894b90824c478e5a67fe9aee3f7, type: 3}
+  enemyPrefab: {fileID: 3568496183314831687, guid: 6aee8894b90824c478e5a67fe9aee3f7, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -3957,7 +3957,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 38d0a71c6db6ab74dbcd0c1cc8927de5, type: 3}
+  enemyPrefab: {fileID: -1281869747419932452, guid: 38d0a71c6db6ab74dbcd0c1cc8927de5, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -4621,7 +4621,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: c36c73ff4e92a14478803a46af8932ef, type: 3}
+  enemyPrefab: {fileID: 6482322057027822627, guid: c36c73ff4e92a14478803a46af8932ef, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -6332,7 +6332,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 8cf9ae77686ca8049889c0de36289053, type: 3}
+  enemyPrefab: {fileID: 6087132018943254329, guid: 8cf9ae77686ca8049889c0de36289053, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -6407,7 +6407,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: af9c58ce606e64c4ead65482170a1ce9, type: 3}
+  enemyPrefab: {fileID: -2222247814501764798, guid: af9c58ce606e64c4ead65482170a1ce9, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -7808,7 +7808,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 5f1590081fe451f4587e4975ae395d03, type: 3}
+  enemyPrefab: {fileID: -5874888970263685544, guid: 5f1590081fe451f4587e4975ae395d03, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -8733,7 +8733,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 38d0a71c6db6ab74dbcd0c1cc8927de5, type: 3}
+  enemyPrefab: {fileID: -1281869747419932452, guid: 38d0a71c6db6ab74dbcd0c1cc8927de5, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -9714,7 +9714,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: af9c58ce606e64c4ead65482170a1ce9, type: 3}
+  enemyPrefab: {fileID: -2222247814501764798, guid: af9c58ce606e64c4ead65482170a1ce9, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -10231,7 +10231,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 029eb0928d4d04e45bb190846123dc10, type: 3}
+  enemyPrefab: {fileID: 4412967370919944409, guid: 029eb0928d4d04e45bb190846123dc10, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -12221,7 +12221,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 029eb0928d4d04e45bb190846123dc10, type: 3}
+  enemyPrefab: {fileID: 4412967370919944409, guid: 029eb0928d4d04e45bb190846123dc10, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -12296,7 +12296,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 6aee8894b90824c478e5a67fe9aee3f7, type: 3}
+  enemyPrefab: {fileID: 3568496183314831687, guid: 6aee8894b90824c478e5a67fe9aee3f7, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -13087,7 +13087,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: 8cf9ae77686ca8049889c0de36289053, type: 3}
+  enemyPrefab: {fileID: 6087132018943254329, guid: 8cf9ae77686ca8049889c0de36289053, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -14561,7 +14561,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf879961992ceda4d849d4f330fb801c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  enemyPrefab: {fileID: 8054919171351746083, guid: c36c73ff4e92a14478803a46af8932ef, type: 3}
+  enemyPrefab: {fileID: 6482322057027822627, guid: c36c73ff4e92a14478803a46af8932ef, type: 3}
   spawnInterval: 10
   maxEnemies: 3
   teamID: Team3
@@ -14977,7 +14977,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7065038410151508182}
-  - component: {fileID: 8612025022324218104}
   - component: {fileID: 5933690063085526574}
   - component: {fileID: 8612025022324218105}
   m_Layer: 0
@@ -15232,18 +15231,6 @@ MonoBehaviour:
   NetworkedBehaviours:
   - {fileID: 5513339658241674972}
   ForceRemoteRenderTimeframe: 0
---- !u!114 &8612025022324218104
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4868426844053686543}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
 --- !u!114 &8612025022324218105
 MonoBehaviour:
   m_ObjectHideFlags: 0

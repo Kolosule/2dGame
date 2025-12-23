@@ -91,6 +91,10 @@ public class Flag : NetworkBehaviour
 
     private void Update()
     {
+        // IMPORTANT: Only access networked properties if the object has been spawned
+        if (Object == null || !Object.IsValid)
+            return;
+
         // If flag is being carried, follow the carrier
         if (CurrentState == FlagState.Carried && carrierGameObject != null)
         {
