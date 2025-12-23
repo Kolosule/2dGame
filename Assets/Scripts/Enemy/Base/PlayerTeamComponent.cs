@@ -36,7 +36,7 @@ public class PlayerTeamComponent : MonoBehaviour
     {
         if (scoreManager == null)
         {
-            scoreManager = FindObjectOfType<TeamScoreManager>();
+            scoreManager = FindFirstObjectByType<TeamScoreManager>();
 
             if (scoreManager == null)
             {

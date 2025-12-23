@@ -154,6 +154,19 @@ public class CTFGameManager : NetworkBehaviour
             return;
         }
 
+        // Check if flags are spawned and valid
+        if (team1Flag.Object == null || !team1Flag.Object.IsValid)
+        {
+            Debug.LogWarning("Team1 flag not spawned yet");
+            return;
+        }
+
+        if (team2Flag.Object == null || !team2Flag.Object.IsValid)
+        {
+            Debug.LogWarning("Team2 flag not spawned yet");
+            return;
+        }
+
         // Get base positions from TeamManager
         if (TeamManager.Instance == null)
         {
@@ -173,23 +186,37 @@ public class CTFGameManager : NetworkBehaviour
         Vector3 team1BasePos = team1Data.basePosition;
         Vector3 team2BasePos = team2Data.basePosition;
 
+        // Increased distance threshold for more forgiving detection
+        float captureDistance = 3f; // Increased from 2f
+
+        // Check distances
+        float team1FlagToTeam1Base = Vector3.Distance(team1Flag.transform.position, team1BasePos);
+        float team2FlagToTeam1Base = Vector3.Distance(team2Flag.transform.position, team1BasePos);
+        float team1FlagToTeam2Base = Vector3.Distance(team1Flag.transform.position, team2BasePos);
+        float team2FlagToTeam2Base = Vector3.Distance(team2Flag.transform.position, team2BasePos);
+
+        // Debug logging
+        Debug.Log($"[CTF] Team1 flag to Team1 base: {team1FlagToTeam1Base:F2} | Team2 flag to Team1 base: {team2FlagToTeam1Base:F2}");
+        Debug.Log($"[CTF] Team1 flag to Team2 base: {team1FlagToTeam2Base:F2} | Team2 flag to Team2 base: {team2FlagToTeam2Base:F2}");
+
         // Check if team1 has both flags at their base
-        bool team1FlagAtTeam1Base = Vector3.Distance(team1Flag.transform.position, team1BasePos) < 2f;
-        bool team2FlagAtTeam1Base = Vector3.Distance(team2Flag.transform.position, team1BasePos) < 2f;
+        bool team1FlagAtTeam1Base = team1FlagToTeam1Base < captureDistance;
+        bool team2FlagAtTeam1Base = team2FlagToTeam1Base < captureDistance;
         Team1HasBothFlags = team1FlagAtTeam1Base && team2FlagAtTeam1Base;
 
         // Check if team2 has both flags at their base
-        bool team1FlagAtTeam2Base = Vector3.Distance(team1Flag.transform.position, team2BasePos) < 2f;
-        bool team2FlagAtTeam2Base = Vector3.Distance(team2Flag.transform.position, team2BasePos) < 2f;
+        bool team1FlagAtTeam2Base = team1FlagToTeam2Base < captureDistance;
+        bool team2FlagAtTeam2Base = team2FlagToTeam2Base < captureDistance;
         Team2HasBothFlags = team1FlagAtTeam2Base && team2FlagAtTeam2Base;
 
-        // Check for win
         if (Team1HasBothFlags)
         {
+            Debug.Log("[CTF] TEAM 1 WINS!");
             EndGame(1);
         }
         else if (Team2HasBothFlags)
         {
+            Debug.Log("[CTF] TEAM 2 WINS!");
             EndGame(2);
         }
     }

@@ -2,8 +2,8 @@ using UnityEngine;
 using Fusion;
 
 /// <summary>
-/// Networked spawner that automatically assigns team, territorial advantage, AND patrol points to spawned enemies.
-/// PHOTON FUSION VERSION - Only server spawns enemies, all clients see them.
+/// Spawner that automatically assigns team, territorial advantage, AND patrol points to spawned enemies.
+/// Uses standard EnemyAI (non-networked AI).
 /// </summary>
 public class NetworkedEnemySpawner : NetworkBehaviour
 {
@@ -38,7 +38,7 @@ public class NetworkedEnemySpawner : NetworkBehaviour
     // Network state
     [Networked] private int CurrentEnemyCount { get; set; }
     [Networked] private TickTimer NextSpawnTimer { get; set; }
-     
+
     private Transform autoPatrolPointA;
     private Transform autoPatrolPointB;
 
@@ -134,8 +134,8 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             Debug.LogWarning($"[SERVER] Spawned enemy doesn't have EnemyTeamComponent!");
         }
 
-        // Assign patrol points to AI
-        NetworkedEnemyAI enemyAI = enemyObj.GetComponent<NetworkedEnemyAI>();
+        // Assign patrol points to AI (using standard EnemyAI, not NetworkedEnemyAI)
+        EnemyAI enemyAI = enemyObj.GetComponent<EnemyAI>();
         if (enemyAI != null)
         {
             // Use manually assigned points if available, otherwise use auto-created ones
@@ -154,7 +154,7 @@ public class NetworkedEnemySpawner : NetworkBehaviour
         }
         else
         {
-            Debug.LogWarning($"[SERVER] Spawned enemy doesn't have NetworkedEnemyAI component!");
+            Debug.LogWarning($"[SERVER] Spawned enemy doesn't have EnemyAI component!");
         }
 
         // Track enemy count
@@ -179,76 +179,40 @@ public class NetworkedEnemySpawner : NetworkBehaviour
         }
     }
 
+    // Visual debugging
     private void OnDrawGizmos()
     {
         if (!showGizmo) return;
 
-        // Draw spawner position
-        Color gizmoColor;
-        if (territorialAdvantage > 0.3f)
-            gizmoColor = Color.green; // Own territory
-        else if (territorialAdvantage < -0.3f)
-            gizmoColor = Color.red; // Enemy territory
-        else
-            gizmoColor = Color.yellow; // Neutral
-
-        gizmoColor.a = 0.5f;
-        Gizmos.color = gizmoColor;
+        // Draw spawn point
+        Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, 0.5f);
-        Gizmos.DrawLine(transform.position, transform.position + Vector3.up * 1f);
 
-        // Draw patrol area
-        Transform pointA = patrolPointA;
-        Transform pointB = patrolPointB;
+        // Draw patrol points
+        Gizmos.color = Color.yellow;
 
-        // If manual points not set, show where auto points would be
-        if (useRelativePatrolPoints && (pointA == null || pointB == null))
+        if (patrolPointA != null)
         {
-            Vector3 autoPointAPos = transform.position + (Vector3)relativePointA;
-            Vector3 autoPointBPos = transform.position + (Vector3)relativePointB;
-
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawWireSphere(autoPointAPos, 0.3f);
-            Gizmos.DrawWireSphere(autoPointBPos, 0.3f);
-            Gizmos.DrawLine(autoPointAPos, autoPointBPos);
+            Gizmos.DrawLine(transform.position, patrolPointA.position);
+            Gizmos.DrawWireSphere(patrolPointA.position, 0.3f);
         }
-        else if (pointA != null && pointB != null)
+        else if (useRelativePatrolPoints)
         {
-            // Draw manual patrol points
-            Gizmos.color = Color.blue;
-            Gizmos.DrawWireSphere(pointA.position, 0.3f);
-            Gizmos.DrawWireSphere(pointB.position, 0.3f);
-            Gizmos.DrawLine(pointA.position, pointB.position);
+            Vector3 pointA = transform.position + (Vector3)relativePointA;
+            Gizmos.DrawLine(transform.position, pointA);
+            Gizmos.DrawWireSphere(pointA, 0.3f);
         }
 
-        // Draw enemy count info - ONLY if the object has been spawned on the network
-#if UNITY_EDITOR
-        // Check if Object is valid and spawned before accessing networked properties
-        if (Object != null && Object.IsValid)
+        if (patrolPointB != null)
         {
-            UnityEditor.Handles.Label(
-                transform.position + Vector3.up * 1.5f,
-                $"{teamID}\nEnemies: {CurrentEnemyCount}/{maxEnemies}",
-                new GUIStyle()
-                {
-                    normal = new GUIStyleState() { textColor = Color.white },
-                    alignment = TextAnchor.MiddleCenter
-                }
-            );
+            Gizmos.DrawLine(transform.position, patrolPointB.position);
+            Gizmos.DrawWireSphere(patrolPointB.position, 0.3f);
         }
-        else
+        else if (useRelativePatrolPoints)
         {
-            // Show static info when not spawned (in editor)
-            UnityEditor.Handles.Label(
-                transform.position + Vector3.up * 1.5f,
-                $"{teamID}\nMax: {maxEnemies}",
-                new GUIStyle()
-                {
-                    normal = new GUIStyleState() { textColor = Color.gray },
-                    alignment = TextAnchor.MiddleCenter
-                }
-            );
+            Vector3 pointB = transform.position + (Vector3)relativePointB;
+            Gizmos.DrawLine(transform.position, pointB);
+            Gizmos.DrawWireSphere(pointB, 0.3f);
         }
-#endif
     }
 }
