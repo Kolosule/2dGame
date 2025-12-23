@@ -2,7 +2,7 @@
 
 /// <summary>
 /// Handles player combat including directional attacks, damage dealing, and visual feedback.
-/// UPDATED: Now works with NetworkedEnemy for Photon Fusion.
+/// Works with standard Enemy class (non-networked enemies).
 /// </summary>
 public class PlayerCombat : MonoBehaviour
 {
@@ -57,7 +57,7 @@ public class PlayerCombat : MonoBehaviour
 
         if (statsHandler == null)
         {
-            Debug.LogWarning("PlayerCombat: No PlayerStatsHandler found!");
+            Debug.LogWarning("PlayerCombat: No PlayerStatsHandler found! Direct enemy attacks won't work.");
         }
     }
 
@@ -126,8 +126,8 @@ public class PlayerCombat : MonoBehaviour
         // Process each hit object
         foreach (Collider2D hit in objectsHit)
         {
-            // Try to get NetworkedEnemy component (new networked version)
-            NetworkedEnemy enemy = hit.GetComponent<NetworkedEnemy>();
+            // Try to get Enemy component (standard non-networked version)
+            Enemy enemy = hit.GetComponent<Enemy>();
             if (enemy != null)
             {
                 // Check if this enemy is on a different team
@@ -136,87 +136,86 @@ public class PlayerCombat : MonoBehaviour
                 {
                     if (teamComponent.teamID == enemyTeam.teamID)
                     {
+                        Debug.Log("Skipping teammate enemy");
                         continue; // Don't attack teammates
                     }
                 }
 
-                // Calculate knockback direction
-                Vector2 knockbackDir = (enemy.transform.position - transform.position).normalized;
-                float knockbackForce = knockbackStrength;
-
-                // Deal damage using PlayerStatsHandler (server authority)
+                // Attack the enemy through PlayerStatsHandler
                 if (statsHandler != null)
                 {
-                    statsHandler.Attack(enemy);
+                    statsHandler.AttackEnemy(enemy);
+                    hitSomething = true;
+
+                    Debug.Log($"Player hit enemy: {enemy.name}");
+
+                    // Spawn hit marker effect
+                    if (hitMarkerPrefab != null)
+                    {
+                        GameObject marker = Instantiate(hitMarkerPrefab, hit.transform.position, Quaternion.identity);
+                        Destroy(marker, hitMarkerDuration);
+                    }
                 }
-                else
+            }
+
+            // Also check for other player (PvP)
+            PlayerStatsHandler otherPlayer = hit.GetComponent<PlayerStatsHandler>();
+            if (otherPlayer != null && otherPlayer != statsHandler)
+            {
+                // Check if on different team
+                PlayerTeamComponent otherTeam = otherPlayer.GetComponent<PlayerTeamComponent>();
+                if (teamComponent != null && otherTeam != null)
                 {
-                    // Fallback: direct damage call (less ideal)
-                    enemy.TakeDamage(damageAmount, knockbackDir, knockbackForce);
+                    if (teamComponent.teamID != otherTeam.teamID)
+                    {
+                        // Apply damage with territorial modifier
+                        float attackDamage = damageAmount;
+                        if (teamComponent != null)
+                        {
+                            float damageModifier = teamComponent.GetDamageDealtModifier();
+                            attackDamage = attackDamage * damageModifier;
+                        }
+
+                        otherPlayer.TakeDamage(attackDamage);
+                        hitSomething = true;
+
+                        Debug.Log($"Player hit other player: {otherPlayer.name} for {attackDamage} damage");
+
+                        // Spawn hit marker
+                        if (hitMarkerPrefab != null)
+                        {
+                            GameObject marker = Instantiate(hitMarkerPrefab, hit.transform.position, Quaternion.identity);
+                            Destroy(marker, hitMarkerDuration);
+                        }
+                    }
                 }
-
-                // Spawn hit marker effect
-                SpawnHitMarker(hit.transform.position);
-
-                hitSomething = true;
             }
         }
 
-        // Optional: Camera shake on hit
-        if (hitSomething)
+        if (!hitSomething)
         {
-            CameraFollow cam = Camera.main?.GetComponent<CameraFollow>();
-            if (cam != null)
-            {
-                cam.ShakeCamera();
-            }
+            Debug.Log("Attack missed - no valid targets hit");
         }
     }
 
-    /// <summary>
-    /// Spawns a visual hit marker effect at the hit location.
-    /// </summary>
-    private void SpawnHitMarker(Vector2 hitPosition)
-    {
-        if (hitMarkerPrefab != null)
-        {
-            GameObject hitMarker = Instantiate(hitMarkerPrefab, hitPosition, Quaternion.identity);
-
-            // Try to set the color if it's a particle system
-            ParticleSystem ps = hitMarker.GetComponent<ParticleSystem>();
-            if (ps != null)
-            {
-                var main = ps.main;
-                main.startColor = hitMarkerColor;
-            }
-
-            // Try to set the color if it's a sprite renderer
-            SpriteRenderer sr = hitMarker.GetComponent<SpriteRenderer>();
-            if (sr != null)
-            {
-                sr.color = hitMarkerColor;
-            }
-
-            // Destroy after duration
-            Destroy(hitMarker, hitMarkerDuration);
-        }
-    }
-
-    // Visual debugging for attack ranges
+    // Visualize attack ranges in editor
     private void OnDrawGizmosSelected()
     {
+        // Side attack
         if (sideAttackPoint != null)
         {
             Gizmos.color = Color.red;
             Gizmos.DrawWireCube(sideAttackPoint.position, sideAttackArea);
         }
 
+        // Up attack
         if (upAttackPoint != null)
         {
             Gizmos.color = Color.blue;
             Gizmos.DrawWireCube(upAttackPoint.position, upAttackArea);
         }
 
+        // Down attack
         if (downAttackPoint != null)
         {
             Gizmos.color = Color.green;

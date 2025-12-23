@@ -1,259 +1,170 @@
 ﻿using UnityEngine;
-using Fusion;
-using System.Collections;
 
 /// <summary>
-/// Networked enemy base class for Photon Fusion.
-/// Handles health, damage, knockback with network synchronization.
-/// NOTE: This is a simplified version - you'll need to adapt based on your existing Enemy.cs
+/// Standard enemy component for non-networked or local enemies.
+/// Handles health, damage, knockback, and attacking players.
 /// </summary>
-public class NetworkedEnemy : NetworkBehaviour
+public class Enemy : MonoBehaviour
 {
-    [Header("References")]
     [SerializeField] private EnemyStats stats;
-    [SerializeField] private SpriteRenderer spriteRenderer;
 
-    [Header("Combat")]
-    [SerializeField] private float attackCooldown = 1f;
-    [SerializeField] private float telegraphDuration = 0.5f;
-
-    [Header("Visual Effects")]
-    [SerializeField] private GameObject hitEffectPrefab;
-    [SerializeField] private float hitFlashDuration = 0.1f;
-
-    // Networked health
-    [Networked]
-    public int CurrentHealth { get; private set; }
-
-    [Networked]
-    private NetworkBool IsDead { get; set; }
-
-    [Networked]
-    private TickTimer AttackCooldownTimer { get; set; }
-
-    [Networked]
-    private TickTimer TelegraphTimer { get; set; }
-
-    [Networked]
-    private TickTimer KnockbackTimer { get; set; }
+    // Health tracking
+    private int currentHealth;
 
     // Component references
-    private NetworkedEnemyAI enemyAI;
+    private EnemyTeamComponent teamComponent;
     private Rigidbody2D rb;
-    private Color originalColor;
 
-    // Public state checkers
-    public bool IsTelegraphing() => TelegraphTimer.IsRunning;
-    public bool IsKnockedBack() => KnockbackTimer.IsRunning;
+    // Combat timing
+    private float lastAttackTime = -999f;
 
-    private void Awake()
+    // Knockback state
+    private bool isKnockedBack = false;
+    private float knockbackEndTime = 0f;
+
+    void Awake()
     {
-        enemyAI = GetComponent<NetworkedEnemyAI>();
+        // Initialize health
+        currentHealth = stats.maxHealth;
+
+        // Get component references
+        teamComponent = GetComponent<EnemyTeamComponent>();
         rb = GetComponent<Rigidbody2D>();
 
-        if (spriteRenderer != null)
+        // Warn if missing required components
+        if (teamComponent == null)
         {
-            originalColor = spriteRenderer.color;
+            Debug.LogError($"Enemy '{stats.enemyName}' is missing EnemyTeamComponent!");
         }
-    }
 
-    public override void Spawned()
-    {
-        // Initialize health on server
-        if (HasStateAuthority)
+        if (rb == null)
         {
-            CurrentHealth = stats.maxHealth;
-            IsDead = false;
+            Debug.LogWarning($"Enemy '{stats.enemyName}' is missing Rigidbody2D - knockback won't work!");
         }
     }
 
     /// <summary>
-    /// Take damage from a player or other source (SERVER ONLY)
+    /// Apply damage to this enemy with knockback
     /// </summary>
-    public void TakeDamage(int damage, Vector2 knockbackDirection, float knockbackForce)
+    /// <param name="amount">Damage amount</param>
+    /// <param name="knockbackForce">Knockback force vector</param>
+    /// <param name="hitPoint">Position where hit occurred</param>
+    public void TakeDamage(int amount, Vector2 knockbackForce, Vector2 hitPoint)
     {
-        // Only server processes damage
-        if (!HasStateAuthority) return;
+        // Apply defensive modifier based on territory
+        float defenseModifier = teamComponent != null ? teamComponent.GetDamageReceivedModifier() : 1f;
+        int finalDamage = Mathf.RoundToInt(amount * defenseModifier);
 
-        if (IsDead) return;
-
-        // Apply damage
-        CurrentHealth -= damage;
-
-        Debug.Log($"[SERVER] {stats.enemyName} took {damage} damage. Health: {CurrentHealth}/{stats.maxHealth}");
+        currentHealth -= finalDamage;
 
         // Apply knockback
-        if (rb != null && knockbackForce > 0)
+        if (rb != null && knockbackForce.magnitude > 0.1f)
         {
-            rb.linearVelocity = knockbackDirection.normalized * knockbackForce;
-            KnockbackTimer = TickTimer.CreateFromSeconds(Runner, 0.3f);
+            // Stop current velocity completely
+            rb.linearVelocity = Vector2.zero;
+
+            // Apply the knockback force as an impulse
+            rb.AddForce(knockbackForce, ForceMode2D.Impulse);
+
+            // Enter knockback state
+            isKnockedBack = true;
+            knockbackEndTime = Time.time + 0.3f;
+
+            Debug.Log($"{stats.enemyName} knocked back with force {knockbackForce}");
         }
 
-        // Notify all clients to show hit effects
-        RPC_OnHit(transform.position);
+        Debug.Log($"{stats.enemyName} took {finalDamage} damage (after {defenseModifier:F2}x modifier). Health: {currentHealth}/{stats.maxHealth}");
 
         // Check if dead
-        if (CurrentHealth <= 0)
+        if (currentHealth <= 0)
         {
             Die();
         }
     }
 
     /// <summary>
-    /// RPC to show hit effects on all clients
+    /// Check if enemy is currently knocked back (AI should pause movement)
     /// </summary>
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_OnHit(Vector3 hitPosition)
+    public bool IsKnockedBack()
     {
-        // Spawn hit effect
-        if (hitEffectPrefab != null)
+        // Clear knockback state if time has expired
+        if (isKnockedBack && Time.time >= knockbackEndTime)
         {
-            GameObject effect = Instantiate(hitEffectPrefab, hitPosition, Quaternion.identity);
-            Destroy(effect, 1f);
+            isKnockedBack = false;
         }
-
-        // Flash sprite
-        if (spriteRenderer != null)
-        {
-            StartCoroutine(FlashOnHit());
-        }
+        return isKnockedBack;
     }
 
     /// <summary>
-    /// Flash sprite when taking damage
+    /// Attack a player
     /// </summary>
-    private IEnumerator FlashOnHit()
+    /// <param name="player">The player to attack</param>
+    public void AttackPlayer(PlayerStatsHandler player)
     {
-        if (spriteRenderer != null)
+        if (player == null)
         {
-            spriteRenderer.color = Color.red;
-            yield return new WaitForSeconds(hitFlashDuration);
-            spriteRenderer.color = originalColor;
-        }
-    }
-
-    /// <summary>
-    /// Attack a player (SERVER ONLY)
-    /// </summary>
-    public void AttackPlayer(PlayerStatsHandler target)
-    {
-        // Only server controls attacks
-        if (!HasStateAuthority) return;
-
-        if (IsDead) return;
-
-        // Check attack cooldown
-        if (AttackCooldownTimer.IsRunning) return;
-
-        // Start telegraph
-        if (!TelegraphTimer.IsRunning)
-        {
-            TelegraphTimer = TickTimer.CreateFromSeconds(Runner, telegraphDuration);
-            RPC_ShowTelegraph();
+            Debug.LogWarning($"{stats.enemyName} tried to attack null player!");
             return;
         }
 
-        // Telegraph finished, execute attack
-        if (TelegraphTimer.Expired(Runner))
+        // Check attack cooldown
+        if (Time.time - lastAttackTime < stats.attackCooldown)
         {
-            // Calculate attack direction
-            Vector2 direction = (target.transform.position - transform.position).normalized;
-
-            // Apply damage to player
-            // NOTE: You'll need to adapt this based on your PlayerStatsHandler implementation
-            // target.TakeDamage(stats.damage, direction, stats.knockbackForce);
-
-            // Start cooldown
-            AttackCooldownTimer = TickTimer.CreateFromSeconds(Runner, attackCooldown);
-
-            // Notify clients
-            RPC_OnAttack(target.transform.position);
+            Debug.Log($"{stats.enemyName} attack on cooldown. Time remaining: {stats.attackCooldown - (Time.time - lastAttackTime):F2}");
+            return;
         }
+
+        // Calculate damage with territorial modifier
+        int finalDamage = stats.attackDamage;
+        if (teamComponent != null)
+        {
+            float attackModifier = teamComponent.GetDamageDealtModifier();
+            finalDamage = Mathf.RoundToInt(stats.attackDamage * attackModifier);
+            Debug.Log($"{stats.enemyName} attacking {player.name} with {finalDamage} damage (base: {stats.attackDamage}, modifier: {attackModifier:F2}x)");
+        }
+
+        // Deal damage to player
+        player.TakeDamage(finalDamage);
+        lastAttackTime = Time.time;
+
+        Debug.Log($"{stats.enemyName} successfully attacked {player.name}!");
     }
 
     /// <summary>
-    /// RPC to show attack telegraph on all clients
-    /// </summary>
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_ShowTelegraph()
-    {
-        // Add visual telegraph effect here (flash, change color, etc.)
-        if (spriteRenderer != null)
-        {
-            StartCoroutine(TelegraphEffect());
-        }
-    }
-
-    private IEnumerator TelegraphEffect()
-    {
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = Color.yellow;
-            yield return new WaitForSeconds(telegraphDuration);
-            spriteRenderer.color = originalColor;
-        }
-    }
-
-    /// <summary>
-    /// RPC to show attack effect on all clients
-    /// </summary>
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_OnAttack(Vector3 targetPosition)
-    {
-        // Play attack animation/sound here
-        Debug.Log($"{stats.enemyName} attacked!");
-    }
-
-    /// <summary>
-    /// Handle enemy death (SERVER ONLY)
+    /// Enemy death handler
     /// </summary>
     private void Die()
     {
-        if (!HasStateAuthority) return;
+        Debug.Log($"{stats.enemyName} has died!");
 
-        IsDead = true;
+        // TODO: Add death effects, spawn coins, etc.
 
-        Debug.Log($"[SERVER] {stats.enemyName} has died!");
-
-        // Notify AI to drop coins
-        if (enemyAI != null)
-        {
-            enemyAI.OnDeath();
-        }
-
-        // Notify all clients
-        RPC_OnDeath();
-
-        // Despawn after a short delay (using coroutine)
-        StartCoroutine(DespawnAfterDelay(0.5f));
+        Destroy(gameObject);
     }
 
     /// <summary>
-    /// Despawn after a delay to allow death effects to play
+    /// Get current health (useful for health bars)
     /// </summary>
-    private IEnumerator DespawnAfterDelay(float delay)
+    public int GetCurrentHealth()
     {
-        yield return new WaitForSeconds(delay);
-
-        if (HasStateAuthority)
-        {
-            Runner.Despawn(Object);
-        }
+        return currentHealth;
     }
 
     /// <summary>
-    /// RPC to show death effects on all clients
+    /// Get max health
     /// </summary>
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_OnDeath()
+    public int GetMaxHealth()
     {
-        // Play death animation/sound here
-        Debug.Log($"{stats.enemyName} died!");
+        return stats.maxHealth;
+    }
 
-        // Optional: Disable visuals before despawn
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.enabled = false;
-        }
+    // Visual feedback for detection range in editor
+    private void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, 5f); // Detection range
+
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, 1.5f); // Attack range (adjust to match your EnemyAI)
     }
 }

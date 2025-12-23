@@ -52,25 +52,52 @@ public class NetworkedCoinPickup : NetworkBehaviour
     /// Called when another object enters this coin's trigger collider
     /// Only processes on the client with input authority (local player)
     /// </summary>
+    /// <summary>
+    /// Called when another object enters this coin's trigger collider
+    /// Only processes on the client with input authority (local player)
+    /// </summary>
     private void OnTriggerEnter2D(Collider2D collision)
     {
+        Debug.Log($"[CoinPickup] Trigger entered by: {collision.gameObject.name}");
+
         // IMPORTANT: Only access networked properties if the object has been spawned
         if (Object == null || !Object.IsValid)
+        {
+            Debug.LogWarning("[CoinPickup] NetworkObject not valid yet");
             return;
+        }
 
         // Only process if this coin hasn't been collected yet
-        if (IsCollected) return;
+        if (IsCollected)
+        {
+            Debug.Log("[CoinPickup] Coin already collected, ignoring");
+            return;
+        }
 
         // Check if the object that touched the coin is a player
         NetworkedPlayerInventory player = collision.GetComponent<NetworkedPlayerInventory>();
 
         if (player != null && coinData != null)
         {
+            Debug.Log($"[CoinPickup] Player detected: {player.name}, HasInputAuthority: {player.HasInputAuthority}");
+
             // Only the local player should request pickup
             if (player.HasInputAuthority)
             {
+                Debug.Log("[CoinPickup] Requesting pickup from server");
                 // Request pickup from server
                 RPC_RequestPickup(player.Object.InputAuthority);
+            }
+        }
+        else
+        {
+            if (player == null)
+            {
+                Debug.Log($"[CoinPickup] No NetworkedPlayerInventory found on {collision.gameObject.name}");
+            }
+            if (coinData == null)
+            {
+                Debug.LogError("[CoinPickup] CoinData is NULL! Assign it in the Inspector!");
             }
         }
     }

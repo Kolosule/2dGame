@@ -14,6 +14,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TeamData
   teamName: Blue Team
   teamColor: {r: 0, g: 0.10471668, b: 0.8490566, a: 1}
-  basePosition: {x: 200, y: 5}
+  basePosition: {x: 195, y: 25}
   teamID: Team1
   isAITeam: 0
+  damageMultiplier: 1
+  defenseMultiplier: 1
+  respawnDelay: 3
+  usesTerritorialAdvantage: 1
+  teamIcon: {fileID: 0}
+  teamMaterial: {fileID: 0}
+  teamDescription: 

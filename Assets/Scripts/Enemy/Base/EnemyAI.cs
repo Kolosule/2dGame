@@ -1,61 +1,49 @@
 ﻿using UnityEngine;
-using Fusion;
 
 /// <summary>
-/// Networked Enemy AI for Photon Fusion.
-/// Handles patrol, detection, and combat with network synchronization.
-/// Drops networked coins when defeated.
+/// AI controller for standard (non-networked) enemies.
+/// Handles patrol, chase, and attack behaviors.
 /// </summary>
-public class NetworkedEnemyAI : NetworkBehaviour
+public class EnemyAI : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private EnemyStats stats;
-    [SerializeField] private LayerMask playerLayer;
 
     [Header("Patrol Points")]
-    public Transform pointA;
-    public Transform pointB;
+    [Tooltip("First patrol point")]
+    [SerializeField] private Transform pointA;
+
+    [Tooltip("Second patrol point")]
+    [SerializeField] private Transform pointB;
 
     [Header("Detection")]
-    [Tooltip("Distance at which enemy can detect players")]
+    [Tooltip("How far the enemy can detect players")]
     [SerializeField] private float detectionRange = 5f;
 
-    [Tooltip("Distance at which enemy attacks players")]
+    [Tooltip("Layer mask for detecting players")]
+    [SerializeField] private LayerMask playerLayer;
+
+    [Header("Combat")]
+    [Tooltip("How close enemy needs to be to attack")]
     [SerializeField] private float attackRange = 1.5f;
-
-    [Header("Coin Dropping")]
-    [Tooltip("Does this enemy drop a coin when defeated?")]
-    [SerializeField] private bool dropsCoin = true;
-
-    [Tooltip("Networked coin prefab to spawn on death (must have NetworkObject!)")]
-    [SerializeField] private NetworkObject coinPrefab;
-
-    [Tooltip("Number of coins to drop")]
-    [SerializeField] private int coinDropCount = 1;
-
-    [Tooltip("Scatter radius for multiple coin drops")]
-    [SerializeField] private float scatterRadius = 0.5f;
 
     // Component references
     private Rigidbody2D rb;
-    private NetworkedEnemy enemy;
+    private Enemy enemy;
 
-    // AI state - synced across network
-    private enum AIState { Patrolling, Chasing, Attacking }
-
-    [Networked]
-    private AIState CurrentState { get; set; }
-
-    [Networked]
-    private NetworkBool IsFacingRight { get; set; }
-
+    // AI state
     private Transform currentTargetPoint;
     private PlayerStatsHandler lockedTarget;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        enemy = GetComponent<NetworkedEnemy>();
+        enemy = GetComponent<Enemy>();
+
+        if (enemy == null)
+        {
+            Debug.LogError($"{gameObject.name} is missing Enemy component!");
+        }
 
         // Default patrol target
         if (pointA != null)
@@ -64,48 +52,29 @@ public class NetworkedEnemyAI : NetworkBehaviour
         }
     }
 
-    public override void Spawned()
+    void FixedUpdate()
     {
-        // Initialize state on server
-        if (HasStateAuthority)
-        {
-            CurrentState = AIState.Patrolling;
-            IsFacingRight = true;
-        }
-    }
-
-    public override void FixedUpdateNetwork()
-    {
-        // Only server controls AI
-        if (!HasStateAuthority) return;
-
-        // Don't move if knocked back or telegraphing attack
-        if (enemy != null && (enemy.IsKnockedBack() || enemy.IsTelegraphing()))
+        // Don't move if knocked back
+        if (enemy != null && enemy.IsKnockedBack())
         {
             rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
             return;
         }
 
-        // Update AI behavior based on state
-        switch (CurrentState)
+        // AI behavior
+        if (lockedTarget == null)
         {
-            case AIState.Patrolling:
-                Patrol();
-                DetectPlayer();
-                break;
-
-            case AIState.Chasing:
-                ChaseTarget();
-                break;
-
-            case AIState.Attacking:
-                AttackTarget();
-                break;
+            Patrol();
+            DetectPlayer();
+        }
+        else
+        {
+            ChaseTarget();
         }
     }
 
     /// <summary>
-    /// Patrol between two points (SERVER ONLY)
+    /// Patrol between two points
     /// </summary>
     private void Patrol()
     {
@@ -115,196 +84,113 @@ public class NetworkedEnemyAI : NetworkBehaviour
             return;
         }
 
-        // Check if reached patrol point (X only)
+        // Check if reached patrol point (X only for 2D platformer)
         float distanceX = Mathf.Abs(transform.position.x - currentTargetPoint.position.x);
         if (distanceX < 0.5f)
         {
+            // Switch to other patrol point
             currentTargetPoint = currentTargetPoint == pointA ? pointB : pointA;
         }
 
-        // Move toward target point
-        float direction = Mathf.Sign(currentTargetPoint.position.x - transform.position.x);
-        rb.linearVelocity = new Vector2(direction * stats.moveSpeed, rb.linearVelocity.y);
+        // Move toward current patrol point
+        Vector2 direction = (currentTargetPoint.position - transform.position).normalized;
+        rb.linearVelocity = new Vector2(direction.x * stats.moveSpeed, rb.linearVelocity.y);
 
-        // Face the movement direction
-        FlipSprite(direction);
+        // Face movement direction
+        Flip(direction.x);
     }
 
     /// <summary>
-    /// Detect nearby players (SERVER ONLY)
+    /// Detect nearby players
     /// </summary>
     private void DetectPlayer()
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, detectionRange, playerLayer);
+        Collider2D playerCollider = Physics2D.OverlapCircle(transform.position, detectionRange, playerLayer);
 
-        if (hits.Length > 0)
+        if (playerCollider != null)
         {
-            // Find closest player
-            Transform closestPlayer = null;
-            float closestDistance = Mathf.Infinity;
-
-            foreach (Collider2D hit in hits)
+            PlayerStatsHandler handler = playerCollider.GetComponent<PlayerStatsHandler>();
+            if (handler == null)
             {
-                float distance = Vector2.Distance(transform.position, hit.transform.position);
-                if (distance < closestDistance)
-                {
-                    closestDistance = distance;
-                    closestPlayer = hit.transform;
-                }
+                handler = playerCollider.GetComponentInParent<PlayerStatsHandler>();
             }
 
-            if (closestPlayer != null)
+            if (handler != null)
             {
-                lockedTarget = closestPlayer.GetComponent<PlayerStatsHandler>();
-                CurrentState = AIState.Chasing;
+                lockedTarget = handler;
+                Debug.Log($"{gameObject.name} detected player: {handler.name}");
             }
         }
     }
 
     /// <summary>
-    /// Chase the locked target (SERVER ONLY)
+    /// Chase the locked target
     /// </summary>
     private void ChaseTarget()
     {
         if (lockedTarget == null)
         {
-            CurrentState = AIState.Patrolling;
             return;
         }
 
         float distanceToTarget = Vector2.Distance(transform.position, lockedTarget.transform.position);
 
-        // Lost sight of target
+        // Lose target if too far away
         if (distanceToTarget > detectionRange * 1.5f)
         {
+            Debug.Log($"{gameObject.name} lost player target");
             lockedTarget = null;
-            CurrentState = AIState.Patrolling;
             return;
         }
 
-        // Close enough to attack
+        // Attack if in range
         if (distanceToTarget <= attackRange)
         {
-            CurrentState = AIState.Attacking;
-            return;
+            // Stop moving
+            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+
+            // Attack the player
+            if (enemy != null)
+            {
+                enemy.AttackPlayer(lockedTarget);
+            }
         }
-
-        // Move toward target
-        float direction = Mathf.Sign(lockedTarget.transform.position.x - transform.position.x);
-        rb.linearVelocity = new Vector2(direction * stats.moveSpeed, rb.linearVelocity.y);
-
-        FlipSprite(direction);
-    }
-
-    /// <summary>
-    /// Attack the locked target (SERVER ONLY)
-    /// </summary>
-    private void AttackTarget()
-    {
-        if (lockedTarget == null)
+        else
         {
-            CurrentState = AIState.Patrolling;
-            return;
-        }
-
-        float distanceToTarget = Vector2.Distance(transform.position, lockedTarget.transform.position);
-
-        // Return to chasing if target moves out of attack range
-        if (distanceToTarget > attackRange * 1.2f)
-        {
-            CurrentState = AIState.Chasing;
-            return;
-        }
-
-        // Stop movement while attacking
-        rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
-
-        // Face the target
-        float direction = lockedTarget.transform.position.x - transform.position.x;
-        FlipSprite(direction);
-
-        // Attempt attack
-        if (enemy != null)
-        {
-            enemy.AttackPlayer(lockedTarget);
+            // Chase the player
+            Vector2 direction = (lockedTarget.transform.position - transform.position).normalized;
+            rb.linearVelocity = new Vector2(direction.x * stats.moveSpeed, rb.linearVelocity.y);
+            Flip(direction.x);
         }
     }
 
     /// <summary>
-    /// Flip sprite to face movement/attack direction (SERVER ONLY)
+    /// Flip sprite to face movement direction
     /// </summary>
-    private void FlipSprite(float direction)
+    private void Flip(float direction)
     {
-        if (direction > 0 && !IsFacingRight)
+        if (direction > 0)
         {
-            IsFacingRight = true;
             transform.localScale = new Vector3(1, 1, 1);
         }
-        else if (direction < 0 && IsFacingRight)
+        else if (direction < 0)
         {
-            IsFacingRight = false;
             transform.localScale = new Vector3(-1, 1, 1);
         }
     }
 
     /// <summary>
-    /// Set patrol points (called by spawner after instantiation)
+    /// Public method for spawner to assign patrol points after spawn
     /// </summary>
     public void SetPatrolPoints(Transform pointA, Transform pointB)
     {
         this.pointA = pointA;
         this.pointB = pointB;
         this.currentTargetPoint = pointA;
-        Debug.Log($"{gameObject.name}: Patrol points assigned!");
+        Debug.Log($"{gameObject.name}: Patrol points assigned by spawner!");
     }
 
-    /// <summary>
-    /// Called when enemy dies (from NetworkedEnemy.cs)
-    /// SERVER ONLY - spawns networked coins
-    /// </summary>
-    public void OnDeath()
-    {
-        // Only server spawns coins
-        if (!HasStateAuthority) return;
-
-        Debug.Log($"[SERVER] {gameObject.name} has been defeated!");
-
-        // Drop coins if enabled
-        if (dropsCoin && coinPrefab != null)
-        {
-            DropCoins();
-        }
-    }
-
-    /// <summary>
-    /// Spawn networked coins at enemy's death location (SERVER ONLY)
-    /// </summary>
-    private void DropCoins()
-    {
-        if (coinPrefab == null)
-        {
-            Debug.LogWarning($"{gameObject.name} wants to drop coins but coinPrefab is not assigned!");
-            return;
-        }
-
-        for (int i = 0; i < coinDropCount; i++)
-        {
-            // Calculate scatter position
-            Vector2 scatterOffset = Random.insideUnitCircle * scatterRadius;
-            Vector3 spawnPosition = transform.position + new Vector3(scatterOffset.x, scatterOffset.y, 0);
-
-            // Spawn networked coin (only server can spawn)
-            Runner.Spawn(
-                coinPrefab,
-                spawnPosition,
-                Quaternion.identity
-            );
-        }
-
-        Debug.Log($"[SERVER] {gameObject.name} dropped {coinDropCount} coin(s)!");
-    }
-
-    // Visual debugging
+    // Visualize detection and attack ranges in editor
     private void OnDrawGizmosSelected()
     {
         // Detection range
@@ -314,14 +200,5 @@ public class NetworkedEnemyAI : NetworkBehaviour
         // Attack range
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, attackRange);
-
-        // Patrol points
-        if (pointA != null && pointB != null)
-        {
-            Gizmos.color = Color.blue;
-            Gizmos.DrawLine(pointA.position, pointB.position);
-            Gizmos.DrawWireSphere(pointA.position, 0.3f);
-            Gizmos.DrawWireSphere(pointB.position, 0.3f);
-        }
     }
 }

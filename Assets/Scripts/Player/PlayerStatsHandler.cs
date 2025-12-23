@@ -3,7 +3,7 @@ using Fusion;
 
 /// <summary>
 /// Handles player health, damage, death, and respawning for Photon Fusion.
-/// UPDATED: Now works with NetworkedEnemy instead of old Enemy class.
+/// Works with standard Enemy class (non-networked enemies).
 /// </summary>
 public class PlayerStatsHandler : NetworkBehaviour
 {
@@ -74,37 +74,37 @@ public class PlayerStatsHandler : NetworkBehaviour
     }
 
     /// <summary>
-    /// Attack a networked enemy. Should be called on server.
-    /// UPDATED: Now uses NetworkedEnemy instead of old Enemy class.
+    /// Attack a standard enemy (non-networked).
+    /// This can be called from client with input authority, server will validate.
     /// </summary>
-    public void Attack(NetworkedEnemy enemy)
+    public void AttackEnemy(Enemy enemy)
     {
-        // Only server processes attacks
-        if (!HasStateAuthority) return;
+        if (enemy == null) return;
 
+        // Check attack cooldown
         if (Time.time - lastAttackTime < stats.attackCooldown) return;
 
-        if (enemy != null)
+        // Apply offensive territorial modifier
+        float attackDamage = stats.attackDamage;
+        PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
+        if (teamComponent != null)
         {
-            // Apply offensive territorial modifier
-            float attackDamage = stats.attackDamage;
-            PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-            if (teamComponent != null)
-            {
-                float damageModifier = teamComponent.GetDamageDealtModifier();
-                attackDamage = attackDamage * damageModifier;
-                Debug.Log($"Player attack modified by territory: {damageModifier:F2}x");
-            }
-
-            // Calculate knockback direction
-            Vector2 knockbackDirection = (enemy.transform.position - transform.position).normalized;
-            float knockbackForce = stats.attackForce;
-
-            // Apply damage with knockback to networked enemy
-            enemy.TakeDamage((int)attackDamage, knockbackDirection, knockbackForce);
-
-            Debug.Log($"Player attacked {enemy.name} for {attackDamage} damage.");
+            float damageModifier = teamComponent.GetDamageDealtModifier();
+            attackDamage = attackDamage * damageModifier;
+            Debug.Log($"Player attack modified by territory: {damageModifier:F2}x");
         }
+
+        // Calculate knockback
+        Vector2 knockbackDirection = (enemy.transform.position - transform.position).normalized;
+        Vector2 knockbackForce = knockbackDirection * stats.attackForce;
+
+        // Add upward component to knockback
+        knockbackForce.y += 2f;
+
+        // Apply damage with knockback to enemy
+        enemy.TakeDamage((int)attackDamage, knockbackForce, enemy.transform.position);
+
+        Debug.Log($"Player attacked {enemy.name} for {attackDamage} damage.");
 
         lastAttackTime = Time.time;
     }
@@ -119,38 +119,15 @@ public class PlayerStatsHandler : NetworkBehaviour
         IsDead = true;
         Debug.Log("Player died!");
 
-        // Drop flag if carrying one (if you have CTF mode)
-        FlagCarrierMarker carrierMarker = GetComponent<FlagCarrierMarker>();
-        if (carrierMarker != null && carrierMarker.IsCarryingFlag())
-        {
-            // Find which flag this player is carrying
-            Flag[] flags = FindObjectsByType<Flag>(FindObjectsSortMode.None);
-            foreach (Flag flag in flags)
-            {
-                // The flag system will need to be converted to Fusion too
-                Debug.Log("Flag drop logic needs Fusion conversion");
-            }
-        }
-
-        // Drop coins if carrying any
-        NetworkedPlayerInventory inventory = GetComponent<NetworkedPlayerInventory>();
-        if (inventory != null)
-        {
-            inventory.OnPlayerDeath(transform.position);
-        }
-
-        // Disable combat/movement on all clients via RPC
+        // Disable player controls on all clients
         RPC_DisablePlayerControls();
 
-        // Trigger respawn after 2 seconds (only on server)
-        if (HasStateAuthority)
-        {
-            StartCoroutine(RespawnAfterDelay(2f));
-        }
+        // Start respawn timer
+        Invoke(nameof(Respawn), 3f); // Respawn after 3 seconds
     }
 
     /// <summary>
-    /// RPC to disable player controls on all clients
+    /// RPC to disable player controls on all clients when dead
     /// </summary>
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_DisablePlayerControls()
@@ -162,13 +139,7 @@ public class PlayerStatsHandler : NetworkBehaviour
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null) movement.enabled = false;
 
-        Animator anim = GetComponent<Animator>();
-        if (anim != null)
-        {
-            anim.SetTrigger("Die");
-        }
-
-        // Make player semi-transparent
+        // Optional: Make sprite semi-transparent to show player is dead
         SpriteRenderer sprite = GetComponent<SpriteRenderer>();
         if (sprite != null)
         {
@@ -179,22 +150,13 @@ public class PlayerStatsHandler : NetworkBehaviour
     }
 
     /// <summary>
-    /// Coroutine to delay respawn
-    /// </summary>
-    private System.Collections.IEnumerator RespawnAfterDelay(float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        Respawn();
-    }
-
-    /// <summary>
-    /// Respawn the player at their team's spawn point
+    /// Respawn the player. Only runs on server.
     /// </summary>
     private void Respawn()
     {
         if (!HasStateAuthority)
         {
-            Debug.LogWarning("Respawn called on client - only server can respawn!");
+            Debug.LogWarning("Respawn called on client - only server can respawn players!");
             return;
         }
 

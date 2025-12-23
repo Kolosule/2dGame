@@ -182,12 +182,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
   stats: {fileID: 11400000, guid: 51a36f1a17c87e949b21988706427905, type: 2}
-  spriteRenderer: {fileID: 0}
-  attackCooldown: 1
-  telegraphDuration: 1.25
-  hitEffectPrefab: {fileID: 6354563029965422019, guid: b79271f6077d45844b46f5903e0297db, type: 3}
-  hitFlashDuration: 0.1
-  _CurrentHealth: 0
 --- !u!114 &1057860978440285187
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -201,17 +195,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   stats: {fileID: 11400000, guid: 51a36f1a17c87e949b21988706427905, type: 2}
-  playerLayer:
-    serializedVersion: 2
-    m_Bits: 256
   pointA: {fileID: 0}
   pointB: {fileID: 0}
   detectionRange: 10
+  playerLayer:
+    serializedVersion: 2
+    m_Bits: 256
   attackRange: 1.5
-  dropsCoin: 1
-  coinPrefab: {fileID: 8087019548463442517, guid: 4689e5bf175eac940bf3b4e400951a0e, type: 3}
-  coinDropCount: 1
-  scatterRadius: 0.5
 --- !u!114 &1088235477252150459
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -243,7 +233,5 @@ MonoBehaviour:
   ObjectInterest: 0
   Flags: 786433
   NestedObjects: []
-  NetworkedBehaviours:
-  - {fileID: 7101480511692835348}
-  - {fileID: 1057860978440285187}
+  NetworkedBehaviours: []
   ForceRemoteRenderTimeframe: 0
