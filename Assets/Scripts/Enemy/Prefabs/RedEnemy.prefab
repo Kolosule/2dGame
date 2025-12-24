@@ -182,6 +182,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
   stats: {fileID: 11400000, guid: 51a36f1a17c87e949b21988706427905, type: 2}
+  coinPrefab: {fileID: 8087019548463442517, guid: 4689e5bf175eac940bf3b4e400951a0e, type: 3}
+  coinsToDropMin: 1
+  coinsToDropMax: 1
+  coinScatterRadius: 1.5
 --- !u!114 &1057860978440285187
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -202,6 +206,9 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 256
   attackRange: 1.5
+  attackTelegraphDuration: 0.5
+  telegraphColor: {r: 1, g: 0.3, b: 0.3, a: 1}
+  freezeDuringTelegraph: 1
 --- !u!114 &1088235477252150459
 MonoBehaviour:
   m_ObjectHideFlags: 0
