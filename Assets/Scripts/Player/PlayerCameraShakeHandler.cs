@@ -111,7 +111,7 @@ public class PlayerCameraShakeHandler : MonoBehaviour
     private void FindPlayerCamera()
     {
         // Find the PlayerCamera component in the scene
-        playerCamera = FindObjectOfType<PlayerCamera>();
+        playerCamera = FindFirstObjectByType<PlayerCamera>();
 
         if (playerCamera != null && showDebugMessages)
         {

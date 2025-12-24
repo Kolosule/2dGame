@@ -203,7 +203,7 @@ public class PlayerCamera : MonoBehaviour
     private void FindLocalPlayer()
     {
         // Find all NetworkPlayerWrapper objects in the scene
-        NetworkPlayerWrapper[] allPlayers = FindObjectsOfType<NetworkPlayerWrapper>();
+        NetworkPlayerWrapper[] allPlayers = FindObjectsByType<NetworkPlayerWrapper>(FindObjectsSortMode.None);
 
         if (allPlayers.Length == 0)
         {

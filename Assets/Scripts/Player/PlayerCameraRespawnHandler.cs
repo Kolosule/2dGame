@@ -102,7 +102,7 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
     /// </summary>
     private void FindPlayerCamera()
     {
-        playerCamera = FindObjectOfType<PlayerCamera>();
+        playerCamera = FindFirstObjectByType<PlayerCamera>();
 
         if (playerCamera != null && showDebugMessages)
         {

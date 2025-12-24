@@ -602,7 +602,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
   SortKey: 3699468870
-  ObjectInterest: 0
+  ObjectInterest: 1
   Flags: 786433
   NestedObjects: []
   NetworkedBehaviours:
@@ -6293,15 +6293,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a060d3d0c0328849ac4cc66a4476906, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UIManager
-  team1ScoreText: {fileID: 0}
-  team2ScoreText: {fileID: 0}
+  team1ScoreText: {fileID: 1454083668}
+  team2ScoreText: {fileID: 2068378056}
   playerCoinText: {fileID: 1601584217}
   playerCoinValueText: {fileID: 513301147}
   team1DamageBuffIcon: {fileID: 0}
   team1DefenseBuffIcon: {fileID: 0}
   team2DamageBuffIcon: {fileID: 0}
   team2DefenseBuffIcon: {fileID: 0}
-  updateInterval: 0.1
+  updateInterval: 1
 --- !u!1 &731959677
 GameObject:
   m_ObjectHideFlags: 0

@@ -196,8 +196,8 @@ public class CTFGameManager : NetworkBehaviour
         float team2FlagToTeam2Base = Vector3.Distance(team2Flag.transform.position, team2BasePos);
 
         // Debug logging
-        Debug.Log($"[CTF] Team1 flag to Team1 base: {team1FlagToTeam1Base:F2} | Team2 flag to Team1 base: {team2FlagToTeam1Base:F2}");
-        Debug.Log($"[CTF] Team1 flag to Team2 base: {team1FlagToTeam2Base:F2} | Team2 flag to Team2 base: {team2FlagToTeam2Base:F2}");
+       // Debug.Log($"[CTF] Team1 flag to Team1 base: {team1FlagToTeam1Base:F2} | Team2 flag to Team1 base: {team2FlagToTeam1Base:F2}");
+      //  Debug.Log($"[CTF] Team1 flag to Team2 base: {team1FlagToTeam2Base:F2} | Team2 flag to Team2 base: {team2FlagToTeam2Base:F2}");
 
         // Check if team1 has both flags at their base
         bool team1FlagAtTeam1Base = team1FlagToTeam1Base < captureDistance;

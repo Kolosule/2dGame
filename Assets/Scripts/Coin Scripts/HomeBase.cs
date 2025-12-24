@@ -2,6 +2,7 @@ using UnityEngine;
 using Fusion;
 
 /// <summary>
+/// FIXED VERSION - Now properly handles coin deposits by passing NetworkObject directly!
 /// Networked home base for Photon Fusion.
 /// Players deposit coins here to score points for their team.
 /// </summary>
@@ -118,53 +119,75 @@ public class NetworkedHomeBase : NetworkBehaviour
             return;
         }
 
-        // Send RPC to server to handle deposit
-        RPC_RequestDeposit(player.Object.InputAuthority);
+        Debug.Log($"[CLIENT] Requesting deposit for {player.CoinCount} coins");
+
+        // FIXED: Send the NetworkObject directly instead of PlayerRef
+        RPC_RequestDeposit(player.Object);
     }
 
     /// <summary>
-    /// RPC to request coin deposit. Called by client, executed on server.
+    /// FIXED - RPC to request coin deposit. Called by client, executed on server.
+    /// Now receives NetworkObject directly instead of PlayerRef to avoid lookup issues.
     /// </summary>
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_RequestDeposit(PlayerRef player)
+    private void RPC_RequestDeposit(NetworkObject playerNetObj)
     {
-        // Find the player's network object
-        NetworkObject playerNetObj;
-        if (Runner.TryGetPlayerObject(player, out playerNetObj))
+        Debug.Log("[SERVER] RPC_RequestDeposit called");
+
+        // Validate the player NetworkObject
+        if (playerNetObj == null || !playerNetObj.IsValid)
         {
-            NetworkedPlayerInventory inventory = playerNetObj.GetComponent<NetworkedPlayerInventory>();
+            Debug.LogError("[SERVER] Invalid player NetworkObject passed to RPC_RequestDeposit");
+            return;
+        }
 
-            if (inventory != null)
+        Debug.Log($"[SERVER] Processing deposit for {playerNetObj.name}");
+
+        // Get the inventory component
+        NetworkedPlayerInventory inventory = playerNetObj.GetComponent<NetworkedPlayerInventory>();
+
+        if (inventory != null)
+        {
+            Debug.Log("[SERVER] Found NetworkedPlayerInventory component");
+
+            // Verify player is on correct team (server-side check)
+            if (!IsPlayerOnCorrectTeam(inventory))
             {
-                // Verify player is on correct team (server-side check)
-                if (!IsPlayerOnCorrectTeam(inventory))
+                Debug.LogWarning($"[SERVER] Player tried to deposit at wrong base!");
+                return;
+            }
+
+            // Get points from player's inventory
+            int points = inventory.ServerDepositCoins();
+
+            if (points > 0)
+            {
+                Debug.Log($"[SERVER] Player deposited {points} points");
+
+                // Add points to team score through the TeamScoreManager
+                TeamScoreManager scoreManager = TeamScoreManager.Instance;
+                if (scoreManager != null)
                 {
-                    Debug.LogWarning($"[SERVER] Player tried to deposit at wrong base!");
-                    return;
+                    scoreManager.RPC_AddPoints(baseTeam, points);
+
+                    Debug.Log($"[SERVER] {playerNetObj.name} deposited coins at {baseTeam} base for {points} points!");
+
+                    // Notify all clients to play effects
+                    RPC_OnDeposit(playerNetObj.transform.position, points);
                 }
-
-                // Get points from player's inventory
-                int points = inventory.ServerDepositCoins();
-
-                if (points > 0)
+                else
                 {
-                    // Add points to team score through the TeamScoreManager
-                    TeamScoreManager scoreManager = TeamScoreManager.Instance;
-                    if (scoreManager != null)
-                    {
-                        scoreManager.RPC_AddPoints(baseTeam, points);
-
-                        Debug.Log($"[SERVER] {playerNetObj.name} deposited coins at {baseTeam} base for {points} points!");
-
-                        // Notify all clients to play effects
-                        RPC_OnDeposit(playerNetObj.transform.position, points);
-                    }
-                    else
-                    {
-                        Debug.LogError("[SERVER] TeamScoreManager not found in scene!");
-                    }
+                    Debug.LogError("[SERVER] TeamScoreManager not found in scene!");
                 }
             }
+            else
+            {
+                Debug.Log("[SERVER] No points to deposit (inventory empty or returned 0)");
+            }
+        }
+        else
+        {
+            Debug.LogError($"[SERVER] No NetworkedPlayerInventory component found on {playerNetObj.name}!");
         }
     }
 
@@ -174,6 +197,8 @@ public class NetworkedHomeBase : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnDeposit(Vector3 playerPosition, int points)
     {
+        Debug.Log($"[CLIENT] Deposit effect triggered - {points} points for {baseTeam}");
+
         // Play deposit sound if assigned
         if (depositSound != null)
         {
@@ -198,6 +223,8 @@ public class NetworkedHomeBase : NetworkBehaviour
     {
         string playerTeamName = player.PlayerTeam.ToLower().Trim();
         string baseTeamName = baseTeam.ToLower().Trim();
+
+        Debug.Log($"[TEAM CHECK] Player team: '{playerTeamName}' vs Base team: '{baseTeamName}'");
 
         // Direct match
         if (playerTeamName == baseTeamName)

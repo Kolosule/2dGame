@@ -3,7 +3,7 @@ using Fusion;
 using System.Collections;
 
 /// <summary>
-/// FULLY FIXED VERSION - Coins now pickup correctly when dropped by enemies!
+/// FIXED VERSION - Now properly handles coin pickup by passing NetworkObject directly!
 /// Networked coin pickup for Photon Fusion.
 /// Handles coin collection and syncs across all clients.
 /// </summary>
@@ -53,7 +53,7 @@ public class NetworkedCoinPickup : NetworkBehaviour
     }
 
     /// <summary>
-    /// FIXED - Initialize coin after a short delay to ensure everything is ready
+    /// Initialize coin after a short delay to ensure everything is ready
     /// </summary>
     private IEnumerator InitializeCoin()
     {
@@ -80,7 +80,7 @@ public class NetworkedCoinPickup : NetworkBehaviour
 
     /// <summary>
     /// FIXED - Called when another object enters this coin's trigger collider
-    /// Now properly checks if coin is ready for pickup
+    /// Now properly passes NetworkObject reference to avoid lookup issues
     /// </summary>
     private void OnTriggerEnter2D(Collider2D collision)
     {
@@ -118,8 +118,10 @@ public class NetworkedCoinPickup : NetworkBehaviour
             if (player.HasInputAuthority)
             {
                 Debug.Log("[CoinPickup] Requesting pickup from server");
-                // Request pickup from server
-                RPC_RequestPickup(player.Object.InputAuthority);
+
+                // FIXED: Pass the player's NetworkObject directly instead of PlayerRef
+                // This avoids the Runner.TryGetPlayerObject() lookup issue
+                RPC_RequestPickup(player.Object);
             }
         }
         else
@@ -152,37 +154,61 @@ public class NetworkedCoinPickup : NetworkBehaviour
     }
 
     /// <summary>
-    /// RPC to request coin pickup. Called by client, executed on server.
+    /// FIXED - RPC to request coin pickup. Called by client, executed on server.
+    /// Now receives NetworkObject directly instead of PlayerRef to avoid lookup issues.
     /// </summary>
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_RequestPickup(PlayerRef player)
+    private void RPC_RequestPickup(NetworkObject playerNetObj)
     {
+        Debug.Log("[SERVER] RPC_RequestPickup called");
+
         // Double-check coin hasn't been collected (race condition protection)
-        if (IsCollected) return;
-
-        // Find the player's network object
-        NetworkObject playerNetObj;
-        if (Runner.TryGetPlayerObject(player, out playerNetObj))
+        if (IsCollected)
         {
-            NetworkedPlayerInventory inventory = playerNetObj.GetComponent<NetworkedPlayerInventory>();
+            Debug.Log("[SERVER] Coin already collected, ignoring pickup request");
+            return;
+        }
 
-            if (inventory != null)
+        // Validate the player NetworkObject
+        if (playerNetObj == null || !playerNetObj.IsValid)
+        {
+            Debug.LogError("[SERVER] Invalid player NetworkObject passed to RPC_RequestPickup");
+            return;
+        }
+
+        Debug.Log($"[SERVER] Processing pickup for {playerNetObj.name}");
+
+        // Get the inventory component
+        NetworkedPlayerInventory inventory = playerNetObj.GetComponent<NetworkedPlayerInventory>();
+
+        if (inventory != null)
+        {
+            Debug.Log("[SERVER] Found NetworkedPlayerInventory component");
+
+            // Try to add coin to player's inventory
+            bool pickedUp = inventory.ServerAddCoin(coinData);
+
+            if (pickedUp)
             {
-                // Try to add coin to player's inventory
-                bool pickedUp = inventory.ServerAddCoin(coinData);
+                Debug.Log("[SERVER] Coin successfully added to inventory - despawning coin");
 
-                if (pickedUp)
-                {
-                    // Mark as collected
-                    IsCollected = true;
+                // Mark as collected
+                IsCollected = true;
 
-                    // Notify all clients to play effects and destroy
-                    RPC_OnCoinCollected(playerNetObj.transform.position);
+                // Notify all clients to play effects and destroy
+                RPC_OnCoinCollected(playerNetObj.transform.position);
 
-                    // Despawn the coin (server authority)
-                    Runner.Despawn(Object);
-                }
+                // Despawn the coin (server authority)
+                Runner.Despawn(Object);
             }
+            else
+            {
+                Debug.LogWarning("[SERVER] Failed to add coin to inventory (inventory might be full)");
+            }
+        }
+        else
+        {
+            Debug.LogError($"[SERVER] No NetworkedPlayerInventory component found on {playerNetObj.name}!");
         }
     }
 
@@ -193,6 +219,8 @@ public class NetworkedCoinPickup : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnCoinCollected(Vector3 playerPosition)
     {
+        Debug.Log("[CLIENT] Coin collected - playing effects");
+
         // Play pickup sound if assigned
         if (pickupSound != null)
         {
