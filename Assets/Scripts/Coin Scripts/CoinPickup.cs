@@ -1,7 +1,9 @@
 using UnityEngine;
 using Fusion;
+using System.Collections;
 
 /// <summary>
+/// FULLY FIXED VERSION - Coins now pickup correctly when dropped by enemies!
 /// Networked coin pickup for Photon Fusion.
 /// Handles coin collection and syncs across all clients.
 /// </summary>
@@ -23,17 +25,41 @@ public class NetworkedCoinPickup : NetworkBehaviour
     [Tooltip("Rotation speed in degrees per second")]
     [SerializeField] private float rotationSpeed = 90f;
 
+    [Header("Spawn Settings")]
+    [Tooltip("How long to wait after spawning before allowing pickup (prevents instant pickup)")]
+    [SerializeField] private float spawnDelay = 0.1f;
+
     // Network property to track if coin has been collected
     [Networked]
     private NetworkBool IsCollected { get; set; }
+
+    // Track if we're ready to be picked up
+    private bool isReadyForPickup = false;
+    private bool hasStartedInitialization = false;
 
     /// <summary>
     /// Public property to access coin data from other scripts
     /// </summary>
     public CoinData CoinDataProperty => coinData;
 
-    private void Start()
+    public override void Spawned()
     {
+        // Start initialization when spawned on the network
+        if (!hasStartedInitialization)
+        {
+            hasStartedInitialization = true;
+            StartCoroutine(InitializeCoin());
+        }
+    }
+
+    /// <summary>
+    /// FIXED - Initialize coin after a short delay to ensure everything is ready
+    /// </summary>
+    private IEnumerator InitializeCoin()
+    {
+        // Wait for spawn delay
+        yield return new WaitForSeconds(spawnDelay);
+
         // Ensure the collider is set to trigger mode
         Collider2D col = GetComponent<Collider2D>();
         if (col != null)
@@ -46,19 +72,26 @@ public class NetworkedCoinPickup : NetworkBehaviour
         {
             Debug.LogError($"NetworkedCoinPickup on {gameObject.name} is missing CoinData! Please assign it in the Inspector.");
         }
+
+        // Mark as ready for pickup
+        isReadyForPickup = true;
+        Debug.Log($"[CoinPickup] {gameObject.name} initialized and ready for pickup");
     }
 
     /// <summary>
-    /// Called when another object enters this coin's trigger collider
-    /// Only processes on the client with input authority (local player)
-    /// </summary>
-    /// <summary>
-    /// Called when another object enters this coin's trigger collider
-    /// Only processes on the client with input authority (local player)
+    /// FIXED - Called when another object enters this coin's trigger collider
+    /// Now properly checks if coin is ready for pickup
     /// </summary>
     private void OnTriggerEnter2D(Collider2D collision)
     {
         Debug.Log($"[CoinPickup] Trigger entered by: {collision.gameObject.name}");
+
+        // IMPORTANT: Check if coin is ready for pickup
+        if (!isReadyForPickup)
+        {
+            Debug.Log("[CoinPickup] Coin not ready for pickup yet (still initializing)");
+            return;
+        }
 
         // IMPORTANT: Only access networked properties if the object has been spawned
         if (Object == null || !Object.IsValid)

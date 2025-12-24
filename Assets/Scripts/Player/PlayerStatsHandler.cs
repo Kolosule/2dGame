@@ -2,6 +2,7 @@
 using Fusion;
 
 /// <summary>
+/// FULLY FIXED VERSION - Respawns at team spawn point AND fixes camera issues!
 /// Handles player health, damage, death, and respawning for Photon Fusion.
 /// Works with standard Enemy class (non-networked enemies).
 /// </summary>
@@ -119,6 +120,14 @@ public class PlayerStatsHandler : NetworkBehaviour
         IsDead = true;
         Debug.Log("Player died!");
 
+        // CAMERA FIX: Disable PlayerCameraRespawnHandler to prevent camera issues
+        PlayerCameraRespawnHandler cameraHandler = GetComponent<PlayerCameraRespawnHandler>();
+        if (cameraHandler != null)
+        {
+            cameraHandler.enabled = false;
+            Debug.Log("Disabled PlayerCameraRespawnHandler to prevent camera jump issues");
+        }
+
         // Disable player controls on all clients
         RPC_DisablePlayerControls();
 
@@ -150,7 +159,7 @@ public class PlayerStatsHandler : NetworkBehaviour
     }
 
     /// <summary>
-    /// Respawn the player. Only runs on server.
+    /// FIXED - Respawn the player at their team's spawn point. Only runs on server.
     /// </summary>
     private void Respawn()
     {
@@ -164,22 +173,41 @@ public class PlayerStatsHandler : NetworkBehaviour
         CurrentHealth = stats.maxHealth;
         IsDead = false;
 
-        // Find spawn position based on team
+        // Get spawn position from NetworkedSpawnManager based on team
         PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-        if (teamComponent != null)
+        if (teamComponent != null && NetworkedSpawnManager.Instance != null)
         {
-            // Get spawn point from NetworkedSpawnManager
-            NetworkedSpawnManager spawnManager = NetworkedSpawnManager.Instance;
-            if (spawnManager != null)
+            // Get the spawn position for this player's team
+            Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(teamComponent.teamID);
+
+            // Move player to spawn position
+            transform.position = spawnPosition;
+
+            // Reset velocity
+            Rigidbody2D rb = GetComponent<Rigidbody2D>();
+            if (rb != null)
             {
-                // This would require a method in NetworkedSpawnManager to get spawn points
-                // For now, just use a simple respawn at current position
-                Debug.Log("Respawn at spawn point - need to implement GetSpawnPoint in NetworkedSpawnManager");
+                rb.linearVelocity = Vector2.zero;
+                rb.angularVelocity = 0f;
             }
+
+            Debug.Log($"✓ Player respawned at team spawn point: {spawnPosition}");
+        }
+        else
+        {
+            Debug.LogWarning("⚠️ Could not get spawn position - respawning at current location");
         }
 
         // Re-enable player on all clients
         RPC_EnablePlayerControls();
+
+        // CAMERA FIX: Re-enable PlayerCameraRespawnHandler after respawn
+        PlayerCameraRespawnHandler cameraHandler = GetComponent<PlayerCameraRespawnHandler>();
+        if (cameraHandler != null)
+        {
+            cameraHandler.enabled = true;
+            Debug.Log("Re-enabled PlayerCameraRespawnHandler after respawn");
+        }
 
         Debug.Log("Player respawned!");
     }

@@ -1,79 +1,83 @@
 ﻿using UnityEngine;
+using Fusion;
 
 /// <summary>
-/// Standard enemy component for non-networked or local enemies.
-/// Handles health, damage, knockback, and attacking players.
+/// FIXED VERSION - Now drops coins on death!
+/// Base enemy class handling health, damage, and combat.
+/// Works with non-networked enemies (spawned by server via EnemySpawner).
 /// </summary>
 public class Enemy : MonoBehaviour
 {
+    [Header("Enemy Configuration")]
     [SerializeField] private EnemyStats stats;
+
+    [Header("Coin Drop Settings")]
+    [Tooltip("Coin prefab to spawn when this enemy dies")]
+    [SerializeField] private NetworkObject coinPrefab;
+
+    [Tooltip("How many coins to drop on death")]
+    [SerializeField] private int coinsToDropMin = 1;
+    [SerializeField] private int coinsToDropMax = 3;
+
+    [Tooltip("How far coins should scatter from death position")]
+    [SerializeField] private float coinScatterRadius = 1.5f;
 
     // Health tracking
     private int currentHealth;
 
-    // Component references
-    private EnemyTeamComponent teamComponent;
-    private Rigidbody2D rb;
-
-    // Combat timing
-    private float lastAttackTime = -999f;
-
-    // Knockback state
+    // Knockback tracking
     private bool isKnockedBack = false;
     private float knockbackEndTime = 0f;
 
-    void Awake()
+    // Combat tracking
+    private float lastAttackTime = -999f;
+
+    // Team component reference
+    private EnemyTeamComponent teamComponent;
+
+    private void Start()
     {
-        // Initialize health
-        currentHealth = stats.maxHealth;
-
-        // Get component references
-        teamComponent = GetComponent<EnemyTeamComponent>();
-        rb = GetComponent<Rigidbody2D>();
-
-        // Warn if missing required components
-        if (teamComponent == null)
+        // Initialize health from stats
+        if (stats != null)
         {
-            Debug.LogError($"Enemy '{stats.enemyName}' is missing EnemyTeamComponent!");
+            currentHealth = stats.maxHealth;
+            Debug.Log($"{stats.enemyName} initialized with {currentHealth} health");
+        }
+        else
+        {
+            Debug.LogError($"Enemy on {gameObject.name} has no EnemyStats assigned!");
         }
 
-        if (rb == null)
+        // Get team component for territorial damage modifiers
+        teamComponent = GetComponent<EnemyTeamComponent>();
+
+        // Warn if coin prefab is missing
+        if (coinPrefab == null)
         {
-            Debug.LogWarning($"Enemy '{stats.enemyName}' is missing Rigidbody2D - knockback won't work!");
+            Debug.LogWarning($"{gameObject.name} has no coin prefab assigned - won't drop coins on death!");
         }
     }
 
     /// <summary>
     /// Apply damage to this enemy with knockback
     /// </summary>
-    /// <param name="amount">Damage amount</param>
-    /// <param name="knockbackForce">Knockback force vector</param>
-    /// <param name="hitPoint">Position where hit occurred</param>
     public void TakeDamage(int amount, Vector2 knockbackForce, Vector2 hitPoint)
     {
-        // Apply defensive modifier based on territory
-        float defenseModifier = teamComponent != null ? teamComponent.GetDamageReceivedModifier() : 1f;
-        int finalDamage = Mathf.RoundToInt(amount * defenseModifier);
-
-        currentHealth -= finalDamage;
+        // Apply damage
+        currentHealth -= amount;
+        Debug.Log($"{stats.enemyName} took {amount} damage. Health: {currentHealth}/{stats.maxHealth}");
 
         // Apply knockback
-        if (rb != null && knockbackForce.magnitude > 0.1f)
+        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
         {
-            // Stop current velocity completely
-            rb.linearVelocity = Vector2.zero;
-
-            // Apply the knockback force as an impulse
+            rb.linearVelocity = Vector2.zero; // Reset current velocity
             rb.AddForce(knockbackForce, ForceMode2D.Impulse);
 
-            // Enter knockback state
+            // Set knockback state with duration
             isKnockedBack = true;
-            knockbackEndTime = Time.time + 0.3f;
-
-            Debug.Log($"{stats.enemyName} knocked back with force {knockbackForce}");
+            knockbackEndTime = Time.time + 0.3f; // 0.3 second knockback duration
         }
-
-        Debug.Log($"{stats.enemyName} took {finalDamage} damage (after {defenseModifier:F2}x modifier). Health: {currentHealth}/{stats.maxHealth}");
 
         // Check if dead
         if (currentHealth <= 0)
@@ -131,15 +135,71 @@ public class Enemy : MonoBehaviour
     }
 
     /// <summary>
-    /// Enemy death handler
+    /// Enemy death handler - NOW DROPS COINS!
     /// </summary>
     private void Die()
     {
         Debug.Log($"{stats.enemyName} has died!");
 
-        // TODO: Add death effects, spawn coins, etc.
+        // Spawn coins if we have a coin prefab
+        if (coinPrefab != null)
+        {
+            SpawnCoins();
+        }
+
+        // TODO: Add death effects, animations, etc.
 
         Destroy(gameObject);
+    }
+
+    /// <summary>
+    /// Spawns coins at the enemy's death position
+    /// </summary>
+    private void SpawnCoins()
+    {
+        // Only spawn coins on the server/host
+        NetworkRunner runner = FindFirstObjectByType<NetworkRunner>();
+        if (runner == null || (!runner.IsServer && !runner.IsSharedModeMasterClient))
+        {
+            Debug.Log("Not server - skipping coin spawn");
+            return;
+        }
+
+        // Determine how many coins to drop
+        int coinCount = Random.Range(coinsToDropMin, coinsToDropMax + 1);
+
+        Debug.Log($"Spawning {coinCount} coins from {stats.enemyName} death");
+
+        // Spawn each coin with slight scatter
+        for (int i = 0; i < coinCount; i++)
+        {
+            // Calculate random scatter position
+            Vector2 randomOffset = Random.insideUnitCircle * coinScatterRadius;
+            Vector3 spawnPosition = transform.position + new Vector3(randomOffset.x, randomOffset.y, 0);
+
+            // Spawn the coin on the network
+            NetworkObject coin = runner.Spawn(
+                coinPrefab,
+                spawnPosition,
+                Quaternion.identity
+            );
+
+            // Optional: Add a small upward force to make coins "pop out"
+            if (coin != null)
+            {
+                Rigidbody2D coinRb = coin.GetComponent<Rigidbody2D>();
+                if (coinRb != null)
+                {
+                    Vector2 popForce = new Vector2(
+                        Random.Range(-2f, 2f),  // Random horizontal force
+                        Random.Range(3f, 5f)     // Upward force
+                    );
+                    coinRb.AddForce(popForce, ForceMode2D.Impulse);
+                }
+            }
+        }
+
+        Debug.Log($"✓ Successfully spawned {coinCount} coins!");
     }
 
     /// <summary>
@@ -165,6 +225,10 @@ public class Enemy : MonoBehaviour
         Gizmos.DrawWireSphere(transform.position, 5f); // Detection range
 
         Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, 1.5f); // Attack range (adjust to match your EnemyAI)
+        Gizmos.DrawWireSphere(transform.position, 1.5f); // Attack range
+
+        // Show coin scatter radius
+        Gizmos.color = new Color(1f, 0.84f, 0f, 0.3f); // Transparent gold
+        Gizmos.DrawWireSphere(transform.position, coinScatterRadius);
     }
 }
