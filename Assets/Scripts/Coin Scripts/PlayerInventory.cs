@@ -100,7 +100,10 @@ public class NetworkedPlayerInventory : NetworkBehaviour
 
         return true;
     }
-
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        Debug.Log($"PLAYER TRIGGERED BY: {collision.gameObject.name} on layer {LayerMask.LayerToName(collision.gameObject.layer)}");
+    }
     /// <summary>
     /// RPC to notify all clients that a coin was added (for visual/audio feedback)
     /// </summary>

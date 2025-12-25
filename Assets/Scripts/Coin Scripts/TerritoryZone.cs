@@ -40,7 +40,7 @@ public class TerritoryZone : MonoBehaviour
         }
         
         // Get the damage multiplier from TeamScoreManager
-        TeamScoreManager scoreManager = FindObjectOfType<TeamScoreManager>();
+        TeamScoreManager scoreManager = FindFirstObjectByType<TeamScoreManager>();
         if (scoreManager == null)
         {
             Debug.LogWarning("TeamScoreManager not found! Using default multiplier.");
@@ -77,7 +77,7 @@ public class TerritoryZone : MonoBehaviour
         }
         
         // Get the defense multiplier from TeamScoreManager
-        TeamScoreManager scoreManager = FindObjectOfType<TeamScoreManager>();
+        TeamScoreManager scoreManager = FindFirstObjectByType<TeamScoreManager>();
         if (scoreManager == null)
         {
             Debug.LogWarning("TeamScoreManager not found! Using default multiplier.");

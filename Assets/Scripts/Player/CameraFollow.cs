@@ -96,7 +96,7 @@ public class CameraFollow : MonoBehaviour
             }
 
             // Alternative: Search for NetworkPlayerWrapper with IsOwner
-            NetworkPlayerWrapper[] players = FindObjectsOfType<NetworkPlayerWrapper>();
+            NetworkPlayerWrapper[] players = FindObjectsByType<NetworkPlayerWrapper>(FindObjectsSortMode.None);
             foreach (var playerWrapper in players)
             {
                 if (playerWrapper.HasInputAuthority)

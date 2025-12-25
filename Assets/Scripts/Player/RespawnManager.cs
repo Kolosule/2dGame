@@ -31,7 +31,7 @@ public class MultiplayerRespawnManager : MonoBehaviour
         GameObject player1 = SpawnPlayer("Team1", 0);
 
         // Set camera to follow first player
-        CameraFollow cam = FindObjectOfType<CameraFollow>();
+        CameraFollow cam = FindFirstObjectByType<CameraFollow>();
         if (cam != null && player1 != null)
         {
             cam.SetTarget(player1.transform);
@@ -122,7 +122,7 @@ public class MultiplayerRespawnManager : MonoBehaviour
         string teamID = teamComponent != null ? teamComponent.teamID : "Team1";
 
         // Store camera reference before destroying
-        CameraFollow cam = FindObjectOfType<CameraFollow>();
+        CameraFollow cam = FindFirstObjectByType<CameraFollow>();
         bool wasFollowingThisPlayer = cam != null && cam.Target == oldPlayer.transform;
 
         // Destroy old player
