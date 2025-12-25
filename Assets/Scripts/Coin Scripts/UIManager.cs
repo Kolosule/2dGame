@@ -34,10 +34,14 @@ public class UIManager : MonoBehaviour
     [Header("Update Settings")]
     [SerializeField] private float updateInterval = 0.1f;
 
+    [Header("Dash Cooldown Display")]
+    [SerializeField] private Image dashCooldownRadial; // radial fill image
+    [SerializeField] private TextMeshProUGUI dashCooldownText; // optional countdown text
+
     // Local player references
     private NetworkedPlayerInventory localPlayer;
     private PlayerStatsHandler localStats;
-
+    private PlayerMovement localMovement;
     private float nextUpdateTime;
 
     // Smooth health animation
@@ -66,6 +70,7 @@ public class UIManager : MonoBehaviour
             UpdateTeamScores();
             UpdatePlayerCoinDisplay();
             UpdatePlayerHealthDisplay(false);
+            UpdateDashDisplay(); // <--- NEW
 
             nextUpdateTime = Time.time + updateInterval;
         }
@@ -76,7 +81,7 @@ public class UIManager : MonoBehaviour
     // -------------------------
     private void FindLocalPlayer()
     {
-        if (localPlayer != null && localStats != null)
+        if (localPlayer != null && localStats != null && localMovement != null)
             return;
 
         NetworkedPlayerInventory[] allPlayers = FindObjectsByType<NetworkedPlayerInventory>(FindObjectsSortMode.None);
@@ -87,11 +92,12 @@ public class UIManager : MonoBehaviour
             {
                 localPlayer = player;
                 localStats = player.GetComponent<PlayerStatsHandler>();
+                localMovement = player.GetComponent<PlayerMovement>(); // <-- FIXED
 
                 if (localStats != null)
                     smoothHealth = localStats.GetCurrentHealth();
 
-                Debug.Log("UIManager: Found local player + stats");
+                Debug.Log("UIManager: Found local player + stats + movement");
                 break;
             }
         }
@@ -114,6 +120,33 @@ public class UIManager : MonoBehaviour
         UpdateBuffIndicators(scoreManager);
     }
 
+    private void UpdateDashDisplay()
+    {
+        if (localMovement == null)
+            return;
+
+        float percent = localMovement.GetDashCooldownPercent();
+        float remaining = localMovement.GetDashCooldownRemaining();
+
+        // Radial fill
+        if (dashCooldownRadial != null)
+            dashCooldownRadial.fillAmount = percent;
+
+        // Text countdown
+        if (dashCooldownText != null)
+        {
+            if (percent >= 1f)
+            {
+                dashCooldownText.text = "READY";
+                dashCooldownText.color = Color.yellow;
+            }
+            else
+            {
+                dashCooldownText.text = remaining.ToString("0.0");
+                dashCooldownText.color = Color.white;
+            }
+        }
+    }
     private void UpdateBuffIndicators(TeamScoreManager scoreManager)
     {
         if (team1DamageBuffIcon != null)
@@ -157,14 +190,21 @@ public class UIManager : MonoBehaviour
 
         float current = localStats.GetCurrentHealth();
         float max = localStats.GetMaxHealth();
-
+        if (Mathf.Abs(smoothHealth - current) > 20f)
+        {
+            smoothHealth = current; // snap
+        }
+        else
+        {
+            smoothHealth = Mathf.Lerp(smoothHealth, current, Time.deltaTime * 15f);
+        }
         if (instant)
         {
             smoothHealth = current;
         }
         else
         {
-            smoothHealth = Mathf.Lerp(smoothHealth, current, Time.deltaTime * 10f);
+            smoothHealth = Mathf.Lerp(smoothHealth, current, Time.deltaTime * 20f);
         }
 
         if (healthSlider != null)

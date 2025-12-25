@@ -31,11 +31,21 @@ public class PlayerMovement : MonoBehaviour
     private bool isDashing = false;
     private float originalGravity;
     private float originalDrag;
+    private float dashCooldownTimer = 0f;
 
     // Jump state
     private int remainingAirJumps;
     private int coyoteCounter;
     private int jumpBufferCounter;
+    public float GetDashCooldownPercent()
+    {
+        if (canDash) return 1f;
+        return Mathf.Clamp01(1f - (dashCooldownTimer / stats.dashCooldown));
+    }
+    public float GetDashCooldownRemaining()
+    {
+        return Mathf.Max(0f, stats.dashCooldown - dashCooldownTimer);
+    }
 
     void Awake()
     {
@@ -199,6 +209,17 @@ public class PlayerMovement : MonoBehaviour
             dashCooldownBar.fillAmount = 1f;
             dashCooldownBar.gameObject.SetActive(false);
         }
+        
+        dashCooldownTimer = 0f;
+
+        while (dashCooldownTimer < stats.dashCooldown)
+        {
+            dashCooldownTimer += Time.deltaTime;
+            yield return null;
+        }
+
+        canDash = true;
+        dashCooldownTimer = stats.dashCooldown;
     }
 
     /// <summary>
