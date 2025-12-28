@@ -185,7 +185,7 @@ MonoBehaviour:
   coinPrefab: {fileID: 5136239110909564780, guid: b914b9a97b825e44b8d33e985a4f427a, type: 3}
   coinsToDropMin: 1
   coinsToDropMax: 1
-  coinScatterRadius: 1.5
+  coinScatterRadius: 0.5
 --- !u!114 &1057860978440285187
 MonoBehaviour:
   m_ObjectHideFlags: 0
