@@ -1,29 +1,17 @@
 ﻿using UnityEngine;
-using Fusion;
-#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
-#endif
 
-/// <summary>
-/// Enhanced player combat with:
-/// - Two down attack versions (ground pound OR air attack)
-/// - Projectile shooting system with mouse/gamepad aiming
-/// - Friendly fire prevention
-/// - Works with BOTH old Input Manager AND new Input System
-/// - Works with Photon Fusion networking
-/// </summary>
 public class PlayerCombat : MonoBehaviour
 {
-    [Header("Combat Settings")]
+    [Header("Stats")]
     [SerializeField] private PlayerStats stats;
-    [SerializeField] private LayerMask attackableLayer;
-    [SerializeField] private int damageAmount = 10;
-    [SerializeField] private float knockbackStrength = 10f;
-    [SerializeField] private float knockbackUpward = 3f;
 
-    [Header("Attack Speed")]
-    [Tooltip("Time in seconds between attacks (lower = faster attacks)")]
-    [SerializeField] private float attackCooldown = 0.5f;
+    [Header("Attack Settings")]
+    [SerializeField] private LayerMask attackableLayer;
+    [SerializeField] private int damageAmount = 25;
+    [SerializeField] private float knockbackStrength = 10f;
+    [SerializeField] private float knockbackUpward = 5f;
+    [SerializeField] private float attackCooldown = 0.3f;
 
     [Header("Attack Points")]
     [SerializeField] private Transform sideAttackPoint;
@@ -35,28 +23,18 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private Vector2 upAttackArea = new Vector2(1f, 1f);
     [SerializeField] private Vector2 downAttackArea = new Vector2(1f, 1f);
 
-    [Header("Hit Marker Effects")]
-    [Tooltip("Particle effect to spawn when attacks hit enemies")]
+    [Header("Hit Marker")]
     [SerializeField] private GameObject hitMarkerPrefab;
-    [Tooltip("Color of hit marker for successful hits")]
     [SerializeField] private Color hitMarkerColor = Color.white;
-    [Tooltip("Duration of hit marker effect in seconds")]
     [SerializeField] private float hitMarkerDuration = 0.3f;
 
-    [Header("Down Attack Configuration")]
-    [Tooltip("Version A = Ground Pound (propels downward), Version B = Regular Air Attack")]
+    [Header("Ground Pound")]
     [SerializeField] private bool useGroundPound = true;
-
-    [Header("Ground Pound Settings (Version A)")]
-    [Tooltip("Downward force applied when ground pounding")]
     [SerializeField] private float groundPoundForce = 20f;
-    [Tooltip("Optional effect when ground pound hits ground")]
     [SerializeField] private GameObject groundPoundImpactEffect;
 
     [Header("Projectile Settings")]
-    [Tooltip("Projectile prefab to spawn (must have Projectile.cs attached)")]
     [SerializeField] private GameObject projectilePrefab;
-    [Tooltip("Where projectiles spawn from")]
     [SerializeField] private Transform projectileSpawnPoint;
     [Tooltip("Projectile damage")]
     [SerializeField] private int projectileDamage = 15;
@@ -68,7 +46,7 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private float projectileCooldown = 0.5f;
 
     // Component references
-    private Animator anim;
+    private Animator anim; // NOW REFERENCES CHILD OBJECT
     private PlayerTeamComponent teamComponent;
     private PlayerStatsHandler statsHandler;
     private Rigidbody2D rb;
@@ -85,7 +63,14 @@ public class PlayerCombat : MonoBehaviour
 
     void Awake()
     {
-        anim = GetComponent<Animator>();
+        // UPDATED: Get Animator from child object instead of parent
+        anim = GetComponentInChildren<Animator>();
+
+        if (anim == null)
+        {
+            Debug.LogWarning("PlayerCombat: Animator not found in children! Make sure the Sprite child has an Animator component.");
+        }
+
         teamComponent = GetComponent<PlayerTeamComponent>();
         statsHandler = GetComponent<PlayerStatsHandler>();
         rb = GetComponent<Rigidbody2D>();
@@ -120,49 +105,18 @@ public class PlayerCombat : MonoBehaviour
         timeSinceProjectile += Time.deltaTime;
     }
 
+#if ENABLE_INPUT_SYSTEM
+    /// <summary>
+    /// Called by PlayerController to handle combat input (New Input System)
+    /// </summary>
     public void HandleInput()
     {
-#if ENABLE_INPUT_SYSTEM
-        // NEW INPUT SYSTEM
-        HandleInputNewSystem();
-#else
-        // OLD INPUT MANAGER
-        HandleInputOldSystem();
-#endif
-    }
-
-#if !ENABLE_INPUT_SYSTEM
-    /// <summary>
-    /// Handle input using OLD Input Manager
-    /// </summary>
-    private void HandleInputOldSystem()
-    {
-        yAxis = Input.GetAxisRaw("Vertical");
-
-        // MELEE ATTACK - Fire1
-        if (Input.GetButtonDown("Fire1") && timeSinceAttack >= attackCooldown)
-        {
-            Attack();
-        }
-
-        // PROJECTILE ATTACK - Fire2
-        if (Input.GetButtonDown("Fire2") && timeSinceProjectile >= projectileCooldown)
-        {
-            ShootProjectile();
-        }
-    }
-#endif
-
-#if ENABLE_INPUT_SYSTEM
-    /// <summary>
-    /// Handle input using NEW Input System
-    /// </summary>
-    private void HandleInputNewSystem()
-    {
-        // Get vertical input (old style compatible)
+        // Get input devices
         var keyboard = Keyboard.current;
+        var mouse = Mouse.current;
         var gamepad = Gamepad.current;
 
+        // VERTICAL AXIS - For directional attacks
         yAxis = 0;
         if (keyboard != null)
         {
@@ -171,13 +125,13 @@ public class PlayerCombat : MonoBehaviour
         }
         if (gamepad != null)
         {
-            float stickY = gamepad.leftStick.y.ReadValue();
+            float stickY = gamepad.leftStick.ReadValue().y;
             if (Mathf.Abs(stickY) > 0.2f) yAxis = stickY;
         }
 
         // MELEE ATTACK - Fire1 (left mouse, left ctrl, or gamepad button)
         bool fire1Pressed = false;
-        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+        if (mouse != null && mouse.leftButton.wasPressedThisFrame)
             fire1Pressed = true;
         if (keyboard != null && keyboard.leftCtrlKey.wasPressedThisFrame)
             fire1Pressed = true;
@@ -191,7 +145,7 @@ public class PlayerCombat : MonoBehaviour
 
         // PROJECTILE ATTACK - Fire2 (right mouse, left alt, or gamepad button)
         bool fire2Pressed = false;
-        if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+        if (mouse != null && mouse.rightButton.wasPressedThisFrame)
             fire2Pressed = true;
         if (keyboard != null && keyboard.leftAltKey.wasPressedThisFrame)
             fire2Pressed = true;
@@ -218,83 +172,111 @@ public class PlayerCombat : MonoBehaviour
         if (yAxis > 0)
         {
             // UP ATTACK
-            anim.SetTrigger("Attack");
             attackTransform = upAttackPoint;
             attackArea = upAttackArea;
-            Hit(attackTransform, attackArea);
-        }
-        else if (yAxis < 0)
-        {
-            // DOWN ATTACK - Only works in air
-            if (IsInAir())
-            {
-                anim.SetTrigger("Attack");
-                attackTransform = downAttackPoint;
-                attackArea = downAttackArea;
 
-                if (useGroundPound)
-                {
-                    PerformGroundPound();
-                }
-                else
-                {
-                    Hit(attackTransform, attackArea);
-                }
-            }
-            else
+            // Check if animator exists before setting parameters
+            if (anim != null)
             {
-                // On ground, down does side attack
-                attackTransform = sideAttackPoint;
-                attackArea = sideAttackArea;
-                Hit(attackTransform, attackArea);
+                anim.SetTrigger("AttackUp");
             }
+        }
+        else if (yAxis < 0 && useGroundPound)
+        {
+            // DOWN ATTACK (Ground Pound)
+            GroundPound();
+            return;
         }
         else
         {
-            // SIDE ATTACK
-            anim.SetTrigger("Attack");
+            // SIDE ATTACK (default)
             attackTransform = sideAttackPoint;
             attackArea = sideAttackArea;
-            Hit(attackTransform, attackArea);
+
+            // Check if animator exists before setting parameters
+            if (anim != null)
+            {
+                anim.SetTrigger("Attack");
+            }
         }
+
+        // Perform the attack
+        Hit(attackTransform, attackArea);
     }
 
-    private void PerformGroundPound()
+    /// <summary>
+    /// Ground pound attack - slam downward
+    /// </summary>
+    private void GroundPound()
     {
-        if (rb == null) return;
-
-        rb.linearVelocity = new Vector2(rb.linearVelocity.x, 0);
-        rb.AddForce(Vector2.down * groundPoundForce, ForceMode2D.Impulse);
+        if (isGroundPounding) return;
 
         isGroundPounding = true;
-        Hit(downAttackPoint, downAttackArea);
 
-        Debug.Log("Ground Pound activated!");
-    }
-
-    private bool IsInAir()
-    {
-        if (playerMovement != null)
+        // Check if animator exists before setting parameters
+        if (anim != null)
         {
-            return !Physics2D.OverlapCircle(transform.position + Vector3.down * 0.5f, 0.2f, LayerMask.GetMask("Ground"));
+            anim.SetTrigger("AttackDown");
         }
-        return rb != null && Mathf.Abs(rb.linearVelocity.y) > 0.1f;
+
+        // Apply downward force
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x, -groundPoundForce);
+
+        // The actual ground pound hit will be triggered on landing
+        // You can call Hit() in an animation event or detect ground collision
     }
 
-    private void OnCollisionEnter2D(Collision2D collision)
+    /// <summary>
+    /// Detects and damages enemies in the attack area
+    /// </summary>
+    private void Hit(Transform attackTransform, Vector2 attackArea)
     {
-        if (isGroundPounding && collision.gameObject.layer == LayerMask.NameToLayer("Ground"))
+        if (attackTransform == null)
         {
-            isGroundPounding = false;
-            if (groundPoundImpactEffect != null)
+            Debug.LogWarning("PlayerCombat: Attack transform is null!");
+            return;
+        }
+
+        // Detect all colliders in attack range
+        Collider2D[] objectsHit = Physics2D.OverlapBoxAll(
+            attackTransform.position,
+            attackArea,
+            0f,
+            attackableLayer
+        );
+
+        foreach (Collider2D hit in objectsHit)
+        {
+            // Spawn hit marker at hit location
+            if (hitMarkerPrefab != null)
             {
-                Instantiate(groundPoundImpactEffect, transform.position, Quaternion.identity);
+                GameObject marker = Instantiate(hitMarkerPrefab, hit.transform.position, Quaternion.identity);
+
+                SpriteRenderer sr = marker.GetComponent<SpriteRenderer>();
+                if (sr != null)
+                {
+                    sr.color = hitMarkerColor;
+                }
+
+                Destroy(marker, hitMarkerDuration);
+            }
+
+            // Try to damage the enemy using the Enemy class
+            Enemy enemy = hit.GetComponent<Enemy>();
+            if (enemy != null)
+            {
+                // Calculate knockback
+                Vector2 knockbackDirection = (hit.transform.position - transform.position).normalized;
+                Vector2 knockbackForce = new Vector2(knockbackDirection.x * knockbackStrength, knockbackUpward);
+
+                enemy.TakeDamage(damageAmount, knockbackForce, hit.transform.position);
+                Debug.Log($"Hit {hit.name} for {damageAmount} damage!");
             }
         }
     }
 
     /// <summary>
-    /// Shoots projectile towards mouse or gamepad aim
+    /// Shoots a projectile towards the mouse position or in facing direction
     /// </summary>
     private void ShootProjectile()
     {
@@ -312,154 +294,67 @@ public class PlayerCombat : MonoBehaviour
 
         timeSinceProjectile = 0;
 
-        Vector2 fireDirection = GetAimDirection();
+        // Determine aim direction
+        Vector2 aimDirection;
 
-        GameObject projectileObj = Instantiate(projectilePrefab, projectileSpawnPoint.position, Quaternion.identity);
-        projectileObj.transform.localScale = Vector3.one * projectileScale;
-
-        Projectile projectile = projectileObj.GetComponent<Projectile>();
-        if (projectile != null)
+        // Try to aim towards mouse if available
+        if (Mouse.current != null && mainCamera != null)
         {
-            string shooterTeam = teamComponent != null ? teamComponent.teamID : "";
-            projectile.Initialize(fireDirection, projectileSpeed, projectileDamage, shooterTeam);
+            Vector2 mousePos = mainCamera.ScreenToWorldPoint(Mouse.current.position.ReadValue());
+            aimDirection = (mousePos - (Vector2)projectileSpawnPoint.position).normalized;
         }
         else
         {
-            Debug.LogError("PlayerCombat: Projectile prefab missing Projectile.cs!");
-            Destroy(projectileObj);
-        }
-    }
-
-    /// <summary>
-    /// Gets aim direction from mouse or gamepad
-    /// </summary>
-    private Vector2 GetAimDirection()
-    {
-#if ENABLE_INPUT_SYSTEM
-        // NEW INPUT SYSTEM
-        var gamepad = Gamepad.current;
-        var mouse = Mouse.current;
-
-        // Try gamepad right stick first
-        if (gamepad != null)
-        {
-            Vector2 rightStick = gamepad.rightStick.ReadValue();
-            if (rightStick.magnitude > 0.2f)
-            {
-                Debug.Log($"Aiming with gamepad: {rightStick.normalized}");
-                return rightStick.normalized;
-            }
+            // Fallback: shoot in facing direction
+            float facingDirection = Mathf.Sign(transform.localScale.x);
+            aimDirection = new Vector2(facingDirection, 0);
         }
 
-        // Fall back to mouse
-        if (mouse != null && mainCamera != null)
-        {
-            Vector2 mousePos = mouse.position.ReadValue();
-            Vector3 mouseWorldPos = mainCamera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, 0));
-            mouseWorldPos.z = 0;
-            Vector2 direction = (mouseWorldPos - transform.position).normalized;
-            Debug.Log($"Aiming with mouse: {direction}");
-            return direction;
-        }
-
-        // Fallback to facing direction
-        return new Vector2(transform.localScale.x, 0);
-#else
-        // OLD INPUT SYSTEM
-        // Try joystick
-        float joyX = Input.GetAxis("RightStickX");
-        float joyY = Input.GetAxis("RightStickY");
-        
-        if (Mathf.Abs(joyX) > 0.2f || Mathf.Abs(joyY) > 0.2f)
-        {
-            return new Vector2(joyX, joyY).normalized;
-        }
-        
-        // Mouse
-        if (mainCamera != null)
-        {
-            Vector3 mouseWorldPos = mainCamera.ScreenToWorldPoint(Input.mousePosition);
-            mouseWorldPos.z = 0;
-            return (mouseWorldPos - transform.position).normalized;
-        }
-
-        return new Vector2(transform.localScale.x, 0);
-#endif
-    }
-
-    private void Hit(Transform attackTransform, Vector2 attackArea)
-    {
-        Collider2D[] objectsHit = Physics2D.OverlapBoxAll(
-            attackTransform.position,
-            attackArea,
-            0f,
-            attackableLayer
+        // Spawn projectile
+        GameObject projectile = Instantiate(
+            projectilePrefab,
+            projectileSpawnPoint.position,
+            Quaternion.identity
         );
 
-        bool hitSomething = false;
+        // Scale the projectile
+        projectile.transform.localScale = Vector3.one * projectileScale;
 
-        foreach (Collider2D hit in objectsHit)
+        // Initialize projectile with all settings
+        Projectile projectileScript = projectile.GetComponent<Projectile>();
+        if (projectileScript != null)
         {
-            Enemy enemy = hit.GetComponent<Enemy>();
-            if (enemy != null)
+            string shooterTeam = teamComponent != null ? teamComponent.teamID : "";
+            projectileScript.Initialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam);
+        }
+        else
+        {
+            Debug.LogWarning("PlayerCombat: Projectile prefab is missing Projectile component!");
+
+            // Fallback: manually set velocity if no Projectile script
+            Rigidbody2D projectileRb = projectile.GetComponent<Rigidbody2D>();
+            if (projectileRb != null)
             {
-                EnemyTeamComponent enemyTeam = enemy.GetComponent<EnemyTeamComponent>();
-                if (teamComponent != null && enemyTeam != null)
-                {
-                    if (teamComponent.teamID == enemyTeam.teamID)
-                    {
-                        continue;
-                    }
-                }
-
-                if (statsHandler != null)
-                {
-                    statsHandler.AttackEnemy(enemy);
-                    hitSomething = true;
-
-                    if (hitMarkerPrefab != null)
-                    {
-                        GameObject marker = Instantiate(hitMarkerPrefab, hit.transform.position, Quaternion.identity);
-                        Destroy(marker, hitMarkerDuration);
-                    }
-                }
-            }
-
-            PlayerStatsHandler otherPlayer = hit.GetComponent<PlayerStatsHandler>();
-            if (otherPlayer != null && otherPlayer != statsHandler)
-            {
-                PlayerTeamComponent otherTeam = otherPlayer.GetComponent<PlayerTeamComponent>();
-                if (teamComponent != null && otherTeam != null)
-                {
-                    bool friendlyFireEnabled = GameSettingsManager.Instance != null &&
-                                               GameSettingsManager.Instance.friendlyFireEnabled;
-
-                    if (teamComponent.teamID == otherTeam.teamID && !friendlyFireEnabled)
-                    {
-                        continue;
-                    }
-
-                    float attackDamage = damageAmount;
-                    if (teamComponent != null)
-                    {
-                        attackDamage *= teamComponent.GetDamageDealtModifier();
-                    }
-
-                    otherPlayer.TakeDamage(attackDamage);
-                    hitSomething = true;
-
-                    if (hitMarkerPrefab != null)
-                    {
-                        GameObject marker = Instantiate(hitMarkerPrefab, hit.transform.position, Quaternion.identity);
-                        Destroy(marker, hitMarkerDuration);
-                    }
-                }
+                projectileRb.linearVelocity = aimDirection * projectileSpeed;
             }
         }
+
+        // Trigger shoot animation if animator exists
+        if (anim != null)
+        {
+            anim.SetTrigger("Shoot");
+        }
+
+        Debug.Log($"Projectile fired in direction: {aimDirection}");
     }
 
-    private void OnDrawGizmosSelected()
+    // ============================
+    // DEBUG VISUALIZATION
+    // ============================
+
+    void OnDrawGizmosSelected()
     {
+        // Visualize attack ranges
         if (sideAttackPoint != null)
         {
             Gizmos.color = Color.red;
@@ -476,12 +371,6 @@ public class PlayerCombat : MonoBehaviour
         {
             Gizmos.color = Color.green;
             Gizmos.DrawWireCube(downAttackPoint.position, downAttackArea);
-        }
-
-        if (projectileSpawnPoint != null)
-        {
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(projectileSpawnPoint.position, 0.2f);
         }
     }
 }

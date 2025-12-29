@@ -1,33 +1,27 @@
 ﻿using UnityEngine;
 using Fusion;
 
-/// <summary>
-/// FULLY FIXED VERSION - Respawns at team spawn point AND fixes camera issues!
-/// Handles player health, damage, death, and respawning for Photon Fusion.
-/// Works with standard Enemy class (non-networked enemies).
-/// </summary>
 public class PlayerStatsHandler : NetworkBehaviour
 {
+    [Header("Stats")]
     [SerializeField] private PlayerStats stats;
 
-    // Networked health - automatically syncs across all clients
+    // Networked health
     [Networked] public float CurrentHealth { get; set; }
-
     [Networked] public bool IsDead { get; set; }
 
+    // Local tracking for damage feedback
     private float lastAttackTime;
     private int playerID = -1; // Track player ID for MultiplayerRespawnManager
 
-    public override void Spawned()
+    void Start()
     {
-        // Initialize health when spawned on network
+        // Initialize health when spawned
         if (HasStateAuthority)
         {
             CurrentHealth = stats.maxHealth;
             IsDead = false;
         }
-
-        Debug.Log($"Player initialized with {CurrentHealth} health");
     }
 
     /// <summary>
@@ -40,72 +34,29 @@ public class PlayerStatsHandler : NetworkBehaviour
     }
 
     /// <summary>
-    /// Apply damage to this player. Only runs on server/host.
+    /// Called when player takes damage. Only runs on server.
     /// </summary>
-    public void TakeDamage(float amount)
+    public void TakeDamage(float damage)
     {
-        // Only server can modify health
+        // Only the server should modify health
         if (!HasStateAuthority)
         {
-            Debug.LogWarning("TakeDamage called on client - only server can damage players!");
+            Debug.LogWarning("TakeDamage called on client - only server can modify health!");
             return;
         }
 
         // Don't take damage if already dead
         if (IsDead) return;
 
-        // Apply defensive territorial modifier if available
-        PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-        if (teamComponent != null)
-        {
-            float defenseModifier = teamComponent.GetDamageReceivedModifier();
-            amount = amount * defenseModifier;
-            Debug.Log($"Player damage modified by territory: {defenseModifier:F2}x");
-        }
+        CurrentHealth -= damage;
+        Debug.Log($"Player took {damage} damage. Current health: {CurrentHealth}/{stats.maxHealth}");
 
-        CurrentHealth -= amount;
-        Debug.Log($"Player took {amount} damage. Health = {CurrentHealth}/{stats.maxHealth}");
-
-        // Check if health has dropped to 0 or below
+        // Check for death
         if (CurrentHealth <= 0)
         {
             CurrentHealth = 0;
             Die();
         }
-    }
-
-    /// <summary>
-    /// Attack a standard enemy (non-networked).
-    /// This can be called from client with input authority, server will validate.
-    /// </summary>
-    public void AttackEnemy(Enemy enemy)
-    {
-        if (enemy == null) return;
-
-        // Check attack cooldown
-        if (Time.time - lastAttackTime < stats.attackCooldown) return;
-
-        // Apply offensive territorial modifier
-        float attackDamage = stats.attackDamage;
-        PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-        if (teamComponent != null)
-        {
-            float damageModifier = teamComponent.GetDamageDealtModifier();
-            attackDamage = attackDamage * damageModifier;
-            Debug.Log($"Player attack modified by territory: {damageModifier:F2}x");
-        }
-
-        // Calculate knockback
-        Vector2 knockbackDirection = (enemy.transform.position - transform.position).normalized;
-        Vector2 knockbackForce = knockbackDirection * stats.attackForce;
-
-        // Add upward component to knockback
-        knockbackForce.y += 2f;
-
-        // Apply damage with knockback to enemy
-        enemy.TakeDamage((int)attackDamage, knockbackForce, enemy.transform.position);
-
-        Debug.Log($"Player attacked {enemy.name} for {attackDamage} damage.");
 
         lastAttackTime = Time.time;
     }
@@ -148,13 +99,18 @@ public class PlayerStatsHandler : NetworkBehaviour
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null) movement.enabled = false;
 
+        // UPDATED: Get SpriteRenderer from child object instead of parent
         // Optional: Make sprite semi-transparent to show player is dead
-        SpriteRenderer sprite = GetComponent<SpriteRenderer>();
+        SpriteRenderer sprite = GetComponentInChildren<SpriteRenderer>();
         if (sprite != null)
         {
             Color color = sprite.color;
             color.a = 0.5f;
             sprite.color = color;
+        }
+        else
+        {
+            Debug.LogWarning("PlayerStatsHandler: SpriteRenderer not found in children!");
         }
     }
 
@@ -225,13 +181,18 @@ public class PlayerStatsHandler : NetworkBehaviour
         PlayerMovement movement = GetComponent<PlayerMovement>();
         if (movement != null) movement.enabled = true;
 
+        // UPDATED: Get SpriteRenderer from child object instead of parent
         // Restore full opacity
-        SpriteRenderer sprite = GetComponent<SpriteRenderer>();
+        SpriteRenderer sprite = GetComponentInChildren<SpriteRenderer>();
         if (sprite != null)
         {
             Color color = sprite.color;
             color.a = 1f;
             sprite.color = color;
+        }
+        else
+        {
+            Debug.LogWarning("PlayerStatsHandler: SpriteRenderer not found in children!");
         }
     }
 
