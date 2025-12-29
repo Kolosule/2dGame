@@ -271,7 +271,7 @@ BoxCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: -0.000054508448, y: -0.15530407}
+  m_Offset: {x: 0, y: -0.15}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
@@ -382,10 +382,19 @@ MonoBehaviour:
   downAttackPoint: {fileID: 598472603001116420}
   sideAttackArea: {x: 2, y: 3}
   upAttackArea: {x: 1, y: 2}
-  downAttackArea: {x: 1, y: 2}
+  downAttackArea: {x: 1, y: -2}
   hitMarkerPrefab: {fileID: 6354563029965422019, guid: b4f6a2b3656ed5b4eb44fb019e40ccb8, type: 3}
   hitMarkerColor: {r: 1, g: 1, b: 1, a: 1}
   hitMarkerDuration: 0.3
+  useGroundPound: 1
+  groundPoundForce: 20
+  groundPoundImpactEffect: {fileID: 0}
+  projectilePrefab: {fileID: 4920318945033129665, guid: 0493ec13f599f9842be9fd7309303029, type: 3}
+  projectileSpawnPoint: {fileID: 8846297479289465317}
+  projectileDamage: 15
+  projectileSpeed: 40
+  projectileScale: 1
+  projectileCooldown: 0.5
 --- !u!114 &1716746421360222117
 MonoBehaviour:
   m_ObjectHideFlags: 0

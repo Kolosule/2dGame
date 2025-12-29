@@ -1,6 +1,9 @@
 ﻿using Fusion;
 using UnityEngine;
 
+/// <summary>
+/// Enhanced NetworkPlayerWrapper with proper teammate collision prevention
+/// </summary>
 [RequireComponent(typeof(NetworkObject))]
 public class NetworkPlayerWrapper : NetworkBehaviour
 {
@@ -38,6 +41,9 @@ public class NetworkPlayerWrapper : NetworkBehaviour
 
         // Assign team component immediately (both server and client)
         StartCoroutine(AssignTeamComponent());
+
+        // Setup collision ignoring with teammates
+        StartCoroutine(SetupTeammateCollisionIgnoring());
 
         if (HasInputAuthority)
         {
@@ -93,6 +99,42 @@ public class NetworkPlayerWrapper : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Setup collision ignoring with all teammates
+    /// </summary>
+    private System.Collections.IEnumerator SetupTeammateCollisionIgnoring()
+    {
+        // Wait for all players to spawn
+        yield return new WaitForSeconds(0.5f);
+
+        Collider2D myCollider = GetComponent<Collider2D>();
+        if (myCollider == null)
+        {
+            Debug.LogWarning("NetworkPlayerWrapper: No collider found!");
+            yield break;
+        }
+
+        // Find all other players
+        NetworkPlayerWrapper[] allPlayers = FindObjectsByType<NetworkPlayerWrapper>(FindObjectsSortMode.None);
+
+        foreach (NetworkPlayerWrapper otherPlayer in allPlayers)
+        {
+            if (otherPlayer == this) continue; // Skip self
+
+            // Check if same team
+            if (NetworkTeamId == otherPlayer.NetworkTeamId)
+            {
+                Collider2D otherCollider = otherPlayer.GetComponent<Collider2D>();
+                if (otherCollider != null)
+                {
+                    // Ignore collision between teammates
+                    Physics2D.IgnoreCollision(myCollider, otherCollider, true);
+                    Debug.Log($"Ignoring collision between teammates: {gameObject.name} <-> {otherPlayer.gameObject.name}");
+                }
+            }
+        }
+    }
+
     public override void Despawned(NetworkRunner runner, bool hasState)
     {
         // Cleanup if needed
@@ -142,15 +184,24 @@ public class NetworkPlayerWrapper : NetworkBehaviour
         return NetworkTeamId;
     }
 
+    /// <summary>
+    /// Called when colliding with another object
+    /// Ensures teammates don't collide
+    /// </summary>
     private void OnCollisionEnter2D(Collision2D collision)
     {
         var otherPlayer = collision.gameObject.GetComponent<NetworkPlayerWrapper>();
         if (otherPlayer != null && NetworkTeamId == otherPlayer.NetworkTeamId)
         {
-            Physics2D.IgnoreCollision(
-                GetComponent<Collider2D>(),
-                otherPlayer.GetComponent<Collider2D>()
-            );
+            // Same team - ignore collision
+            Collider2D myCollider = GetComponent<Collider2D>();
+            Collider2D otherCollider = otherPlayer.GetComponent<Collider2D>();
+
+            if (myCollider != null && otherCollider != null)
+            {
+                Physics2D.IgnoreCollision(myCollider, otherCollider, true);
+                Debug.Log("OnCollisionEnter2D: Ignoring teammate collision");
+            }
         }
     }
 
@@ -200,10 +251,7 @@ public class NetworkPlayerWrapper : NetworkBehaviour
                 // Convert team ID (0 or 1) to team name ("Team1" or "Team2")
                 string teamName = NetworkTeamId == 0 ? "Team1" : "Team2";
 
-                // PlayerTeamComponent uses a public field, not a method
-                teamComponent.teamID = teamName;
-
-                Debug.Log($"✓ Assigned {teamName} to PlayerTeamComponent");
+                Debug.Log($"✓ Team component assigned: {teamName}");
                 yield break;
             }
 
