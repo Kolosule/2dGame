@@ -297,6 +297,7 @@ MonoBehaviour:
   coyoteTimeFrames: 6
   jumpBufferFrames: 6
   jumpCutMultiplier: 0.1
+  dashCooldownBar: {fileID: 0}
 --- !u!114 &1629181840047361504
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -334,7 +335,7 @@ MonoBehaviour:
   projectileDamage: 15
   projectileSpeed: 40
   projectileScale: 1
-  projectileCooldown: 0.5
+  projectileCooldown: 1
 --- !u!114 &1716746421360222117
 MonoBehaviour:
   m_ObjectHideFlags: 0
