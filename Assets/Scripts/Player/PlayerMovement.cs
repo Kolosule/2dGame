@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Handles all player movement including walking, jumping, dashing, and physics.
-/// Cleaned up version with better organization and comments.
+/// FIXED VERSION - Corrected DashCooldown coroutine
 /// </summary>
 public class PlayerMovement : MonoBehaviour
 {
@@ -37,11 +37,14 @@ public class PlayerMovement : MonoBehaviour
     private int remainingAirJumps;
     private int coyoteCounter;
     private int jumpBufferCounter;
+
+    // Public getters for UI
     public float GetDashCooldownPercent()
     {
         if (canDash) return 1f;
-        return Mathf.Clamp01(1f - (dashCooldownTimer / stats.dashCooldown));
+        return Mathf.Clamp01(dashCooldownTimer / stats.dashCooldown);
     }
+
     public float GetDashCooldownRemaining()
     {
         return Mathf.Max(0f, stats.dashCooldown - dashCooldownTimer);
@@ -76,10 +79,12 @@ public class PlayerMovement : MonoBehaviour
     {
         float xAxis = Input.GetAxisRaw("Horizontal");
 
-        // Flip sprite to face movement direction
+        // Flip sprite to face movement direction (FIXED - preserves original scale)
         if (xAxis != 0)
         {
-            transform.localScale = new Vector2(Mathf.Sign(xAxis), 1);
+            Vector3 currentScale = transform.localScale;
+            currentScale.x = Mathf.Abs(currentScale.x) * Mathf.Sign(xAxis);
+            transform.localScale = currentScale;
         }
 
         // Apply movement (unless dashing)
@@ -181,45 +186,46 @@ public class PlayerMovement : MonoBehaviour
         isDashing = false;
     }
 
+    /// <summary>
+    /// FIXED - Dash cooldown coroutine with proper UI updates
+    /// Removed duplicate logic and simplified the cooldown tracking
+    /// </summary>
     private IEnumerator DashCooldown()
     {
+        // Show cooldown bar (dash just used)
         if (dashCooldownBar != null)
         {
             dashCooldownBar.gameObject.SetActive(true);
-            dashCooldownBar.fillAmount = 1f;
+            dashCooldownBar.fillAmount = 0f; // Start empty since dash was just used
         }
 
-        float elapsed = 0f;
-        while (elapsed < stats.dashCooldown)
-        {
-            elapsed += Time.deltaTime;
+        dashCooldownTimer = 0f;
 
+        // Count up from 0 to dashCooldown duration
+        while (dashCooldownTimer < stats.dashCooldown)
+        {
+            dashCooldownTimer += Time.deltaTime;
+
+            // Update UI - fill gradually as cooldown progresses
             if (dashCooldownBar != null)
             {
-                dashCooldownBar.fillAmount = 1f - (elapsed / stats.dashCooldown);
+                // fillAmount goes from 0 (just dashed) to 1 (ready again)
+                dashCooldownBar.fillAmount = dashCooldownTimer / stats.dashCooldown;
             }
 
             yield return null;
         }
 
+        // Cooldown complete
         canDash = true;
+        dashCooldownTimer = stats.dashCooldown;
 
+        // Hide cooldown bar (dash is ready)
         if (dashCooldownBar != null)
         {
             dashCooldownBar.fillAmount = 1f;
             dashCooldownBar.gameObject.SetActive(false);
         }
-        
-        dashCooldownTimer = 0f;
-
-        while (dashCooldownTimer < stats.dashCooldown)
-        {
-            dashCooldownTimer += Time.deltaTime;
-            yield return null;
-        }
-
-        canDash = true;
-        dashCooldownTimer = stats.dashCooldown;
     }
 
     /// <summary>
@@ -229,32 +235,54 @@ public class PlayerMovement : MonoBehaviour
     {
         bool isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
 
+        // Reset air jumps when grounded
+        if (isGrounded)
+        {
+            remainingAirJumps = stats.maxAirJumps;
+        }
+
+        // Update coyote time counter
         if (isGrounded)
         {
             coyoteCounter = coyoteTimeFrames;
-            remainingAirJumps = stats.maxAirJumps;
         }
         else
         {
             coyoteCounter--;
         }
 
-        // Process buffered jump input
+        // Decrement jump buffer counter
         if (jumpBufferCounter > 0)
         {
             jumpBufferCounter--;
+        }
 
-            // Ground jump (with coyote time)
-            if (coyoteCounter > 0)
-            {
-                Jump();
-            }
-            // Air jump
-            else if (remainingAirJumps > 0)
+        // Execute jump if conditions are met
+        bool hasJumpInput = jumpBufferCounter > 0;
+        bool canCoyoteJump = coyoteCounter > 0;
+        bool canAirJump = remainingAirJumps > 0;
+
+        if (hasJumpInput && (canCoyoteJump || canAirJump))
+        {
+            Jump();
+
+            // Consume air jump if not coyote jumping
+            if (!canCoyoteJump)
             {
                 remainingAirJumps--;
-                Jump();
             }
+        }
+    }
+
+    /// <summary>
+    /// Visualize ground check position in editor
+    /// </summary>
+    private void OnDrawGizmosSelected()
+    {
+        if (groundCheck != null)
+        {
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
         }
     }
 }
