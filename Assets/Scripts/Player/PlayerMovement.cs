@@ -21,7 +21,8 @@ public class PlayerMovement : MonoBehaviour
 
     // Component references
     private Rigidbody2D rb;
-    private Animator anim; // NOW REFERENCES CHILD OBJECT
+    private Animator anim;
+    private FlagCarrierMarker flagCarrierMarker; // NEW: Reference to flag carrier component
 
     // Jump mechanics
     private int remainingAirJumps;
@@ -34,6 +35,10 @@ public class PlayerMovement : MonoBehaviour
     private bool isDashing;
     private bool canDash = true;
 
+    // NEW: Stun mechanics
+    private bool isStunned = false;
+    private float stunEndTime = 0f;
+
     // ============================
     // UNITY LIFECYCLE
     // ============================
@@ -41,79 +46,84 @@ public class PlayerMovement : MonoBehaviour
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-
-        // UPDATED: Get Animator from child object instead of parent
         anim = GetComponentInChildren<Animator>();
+        flagCarrierMarker = GetComponent<FlagCarrierMarker>(); // NEW: Get flag carrier component
 
         if (anim == null)
         {
             Debug.LogWarning("PlayerMovement: Animator not found in children! Make sure the Sprite child has an Animator component.");
         }
 
-        remainingAirJumps = stats.maxAirJumps;
+        if (rb == null)
+        {
+            Debug.LogError("PlayerMovement: Rigidbody2D is missing!");
+        }
     }
 
     void Update()
     {
+        HandleInput();
         UpdateJumpVariables();
         HandleVariableJumpHeight();
 
-        // Allow canceling dash by releasing Shift
-        if (isDashing && Input.GetKeyUp(KeyCode.LeftShift))
+        // NEW: Update stun status
+        if (isStunned && Time.time >= stunEndTime)
         {
-            StopAllCoroutines();
-
-            // IMPORTANT: Restore gravity when cancelling dash
-            if (rb != null)
-            {
-                rb.gravityScale = 5f; // Restore default gravity
-            }
-
-            EndDash();
-            StartCoroutine(DashCooldown());
+            isStunned = false;
+            Debug.Log("Player stun ended");
         }
     }
 
     void FixedUpdate()
     {
-        bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+        float xAxis = Input.GetAxisRaw("Horizontal");
 
-        // Check if animator exists before setting parameters
+        // Don't override velocity if dashing
+        if (!isDashing)
+        {
+            // NEW: Don't move if stunned
+            if (isStunned)
+            {
+                rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+            }
+            else
+            {
+                // Normal movement - FIXED: Use walkSpeed
+                float moveSpeed = xAxis * stats.walkSpeed;
+                rb.linearVelocity = new Vector2(moveSpeed, rb.linearVelocity.y);
+            }
+        }
+
+        // Flip sprite based on movement direction (allow during dash)
+        if (xAxis < 0)
+        {
+            transform.localScale = new Vector3(-1, 1, 1);
+        }
+        else if (xAxis > 0)
+        {
+            transform.localScale = new Vector3(1, 1, 1);
+        }
+
+        // Update walking animation
         if (anim != null)
         {
-            anim.SetBool("Grounded", grounded);
+            anim.SetBool("Walking", xAxis != 0 && !isDashing);
         }
     }
 
-    // ============================
-    // INPUT HANDLING
-    // ============================
-
-    /// <summary>
-    /// Called by PlayerController to handle movement input
-    /// </summary>
     public void HandleInput()
     {
-        float xAxis = Input.GetAxisRaw("Horizontal");
-
-        // Flip sprite to face movement direction
-        if (xAxis != 0)
+        // NEW: Don't handle input if stunned
+        if (isStunned)
         {
-            Vector3 currentScale = transform.localScale;
-            currentScale.x = Mathf.Abs(currentScale.x) * Mathf.Sign(xAxis);
-            transform.localScale = currentScale;
+            return;
         }
 
-        // Apply movement (unless dashing)
-        if (!isDashing)
-        {
-            rb.linearVelocity = new Vector2(xAxis * stats.walkSpeed, rb.linearVelocity.y);
+        float xAxis = Input.GetAxisRaw("Horizontal");
 
-            // Check if animator exists before setting parameters
-            if (anim != null)
-            {
-                anim.SetBool("Walking", xAxis != 0);
-            }
+        if (anim != null)
+        {
+            anim.SetBool("Walking", xAxis != 0);
         }
 
         // Buffer jump input for responsive controls
@@ -127,10 +137,9 @@ public class PlayerMovement : MonoBehaviour
                 StopAllCoroutines();
                 EndDash();
 
-                // IMPORTANT: Restore gravity before jumping
                 if (rb != null)
                 {
-                    rb.gravityScale = 5f; // Restore default gravity
+                    rb.gravityScale = 5f;
                 }
 
                 Jump();
@@ -138,10 +147,31 @@ public class PlayerMovement : MonoBehaviour
             }
         }
 
-        // Handle dash input
+        // FIXED: Check if carrying flag before allowing dash
         if (Input.GetKeyDown(KeyCode.LeftShift) && canDash && !isDashing)
         {
+            // NEW: Check if carrying flag
+            if (flagCarrierMarker != null && flagCarrierMarker.IsCarryingFlag())
+            {
+                Debug.Log("Cannot dash while carrying flag!");
+                return; // Block dash if carrying flag
+            }
+
             StartCoroutine(Dash());
+        }
+
+        // NEW: Cancel dash early when releasing shift
+        if (Input.GetKeyUp(KeyCode.LeftShift) && isDashing)
+        {
+            StopAllCoroutines();
+            EndDash();
+
+            if (rb != null)
+            {
+                rb.gravityScale = 5f; // Restore gravity
+            }
+
+            StartCoroutine(DashCooldown());
         }
     }
 
@@ -158,6 +188,12 @@ public class PlayerMovement : MonoBehaviour
         {
             coyoteTimeCounter = coyoteTimeFrames;
             remainingAirJumps = stats.maxAirJumps;
+
+            // NEW: Clear stun when grounded
+            if (isStunned && Time.time >= stunEndTime)
+            {
+                isStunned = false;
+            }
         }
         else
         {
@@ -173,8 +209,12 @@ public class PlayerMovement : MonoBehaviour
         // Execute buffered jump if conditions are met
         if (jumpBufferCounter > 0 && (coyoteTimeCounter > 0 || remainingAirJumps > 0))
         {
-            Jump();
-            jumpBufferCounter = 0;
+            // NEW: Don't allow jump if stunned
+            if (!isStunned)
+            {
+                Jump();
+                jumpBufferCounter = 0;
+            }
         }
     }
 
@@ -184,13 +224,11 @@ public class PlayerMovement : MonoBehaviour
 
         if (grounded || coyoteTimeCounter > 0)
         {
-            // Ground or coyote time jump
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
             coyoteTimeCounter = 0;
         }
         else if (remainingAirJumps > 0)
         {
-            // Air jump
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
             remainingAirJumps--;
         }
@@ -198,7 +236,6 @@ public class PlayerMovement : MonoBehaviour
         isJumping = true;
         isJumpCut = false;
 
-        // Check if animator exists before setting parameters
         if (anim != null)
         {
             anim.SetTrigger("Jump");
@@ -207,14 +244,12 @@ public class PlayerMovement : MonoBehaviour
 
     private void HandleVariableJumpHeight()
     {
-        // Cut jump short if button released early
         if (Input.GetButtonUp("Jump") && rb.linearVelocity.y > 0 && !isJumpCut)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.y * jumpCutMultiplier);
             isJumpCut = true;
         }
 
-        // Reset jump state when landing
         bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
         if (grounded && isJumping)
         {
@@ -234,11 +269,9 @@ public class PlayerMovement : MonoBehaviour
         float originalGravity = rb.gravityScale;
         rb.gravityScale = 0;
 
-        // Dash in facing direction
         float dashDirection = Mathf.Sign(transform.localScale.x);
         rb.linearVelocity = new Vector2(dashDirection * stats.dashSpeed, 0);
 
-        // Check if animator exists before setting parameters
         if (anim != null)
         {
             anim.SetBool("Dashing", true);
@@ -256,7 +289,6 @@ public class PlayerMovement : MonoBehaviour
     {
         isDashing = false;
 
-        // Check if animator exists before setting parameters
         if (anim != null)
         {
             anim.SetBool("Dashing", false);
@@ -271,7 +303,6 @@ public class PlayerMovement : MonoBehaviour
         {
             elapsed += Time.deltaTime;
 
-            // Update UI if dash cooldown bar exists
             if (dashCooldownBar != null)
             {
                 dashCooldownBar.fillAmount = elapsed / stats.dashCooldown;
@@ -284,6 +315,38 @@ public class PlayerMovement : MonoBehaviour
     }
 
     // ============================
+    // NEW: STUN MECHANICS
+    // ============================
+
+    /// <summary>
+    /// Stuns the player, preventing dash and jump until grounded
+    /// </summary>
+    public void ApplyStun(float duration)
+    {
+        isStunned = true;
+        stunEndTime = Time.time + duration;
+
+        // Cancel dash if currently dashing
+        if (isDashing)
+        {
+            StopAllCoroutines();
+            EndDash();
+            rb.gravityScale = 5f;
+            StartCoroutine(DashCooldown());
+        }
+
+        Debug.Log($"Player stunned for {duration} seconds");
+    }
+
+    /// <summary>
+    /// Check if player is currently stunned
+    /// </summary>
+    public bool IsStunned()
+    {
+        return isStunned;
+    }
+
+    // ============================
     // PUBLIC METHODS
     // ============================
 
@@ -292,26 +355,17 @@ public class PlayerMovement : MonoBehaviour
         return isDashing;
     }
 
-    /// <summary>
-    /// Returns dash cooldown as a percentage (0 = just used, 1 = ready)
-    /// </summary>
     public float GetDashCooldownPercent()
     {
         if (canDash) return 1f;
         return Mathf.Clamp01((stats.dashCooldown - GetDashCooldownRemaining()) / stats.dashCooldown);
     }
 
-    /// <summary>
-    /// Returns remaining cooldown time in seconds
-    /// </summary>
     public float GetDashCooldownRemaining()
     {
         return canDash ? 0f : stats.dashCooldown;
     }
 
-    /// <summary>
-    /// Returns whether dash is ready to use
-    /// </summary>
     public bool CanDash()
     {
         return canDash;

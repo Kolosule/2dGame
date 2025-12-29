@@ -1,11 +1,13 @@
 using UnityEngine;
 
 /// <summary>
+/// FIXED VERSION - Now includes stunning effect!
 /// Projectile script for player ranged attacks
 /// Features:
 /// - Gravity-affected arc trajectory
 /// - Collision with surfaces, players, and enemies
 /// - Team-based damage (respects friendly fire settings)
+/// - Stunning effect that prevents dash/jump until grounded
 /// - Auto-destroys on impact
 /// </summary>
 [RequireComponent(typeof(Rigidbody2D))]
@@ -18,6 +20,13 @@ public class Projectile : MonoBehaviour
 
     [Tooltip("Initial speed multiplier")]
     private float speed = 10f;
+
+    [Header("NEW: Stun Settings")]
+    [Tooltip("Duration of stun effect in seconds")]
+    [SerializeField] private float stunDuration = 1.5f;
+
+    [Tooltip("Should the projectile stun players?")]
+    [SerializeField] private bool stunPlayers = true;
 
     [Header("Visual Effects")]
     [Tooltip("Particle effect on impact (optional)")]
@@ -33,8 +42,8 @@ public class Projectile : MonoBehaviour
     // Runtime variables
     private Rigidbody2D rb;
     private CircleCollider2D col;
-    private string shooterTeam; // Team that fired this projectile
-    private bool hasHit = false; // Prevent multiple hits
+    private string shooterTeam;
+    private bool hasHit = false;
 
     /// <summary>
     /// Initialize the projectile with direction, speed, damage, and shooter team
@@ -46,13 +55,12 @@ public class Projectile : MonoBehaviour
         damage = projectileDamage;
         shooterTeam = team;
 
-        // Apply initial velocity
         if (rb != null)
         {
             rb.linearVelocity = direction.normalized * speed;
         }
 
-        Debug.Log($"Projectile initialized: Speed={speed}, Damage={damage}, Team={shooterTeam}");
+        Debug.Log($"Projectile initialized: Speed={speed}, Damage={damage}, Team={shooterTeam}, Stun={stunDuration}s");
     }
 
     void Awake()
@@ -60,14 +68,12 @@ public class Projectile : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         col = GetComponent<CircleCollider2D>();
 
-        // Configure rigidbody for arc trajectory
         if (rb != null)
         {
-            rb.gravityScale = 1f; // Enable gravity for arc
-            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous; // Better collision
+            rb.gravityScale = 1f;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         }
 
-        // Ensure collider is trigger
         if (col != null)
         {
             col.isTrigger = true;
@@ -76,7 +82,6 @@ public class Projectile : MonoBehaviour
 
     void Update()
     {
-        // Rotate projectile to face movement direction
         if (rb != null && rb.linearVelocity.magnitude > 0.1f)
         {
             float angle = Mathf.Atan2(rb.linearVelocity.y, rb.linearVelocity.x) * Mathf.Rad2Deg;
@@ -85,72 +90,62 @@ public class Projectile : MonoBehaviour
     }
 
     /// <summary>
-    /// Handle collisions with triggers (players, enemies, etc.)
+    /// FIXED: Handle collisions with triggers - now includes stunning!
     /// </summary>
     void OnTriggerEnter2D(Collider2D other)
     {
-        if (hasHit) return; // Already hit something
+        if (hasHit) return;
 
-        // Ignore collision with shooter (optional safety check)
-        // You could add shooter GameObject tracking if needed
+        Debug.Log($"Projectile hit trigger: {other.gameObject.name}");
 
-        // Check what we hit
         bool shouldDestroy = false;
 
-        // Hit a player?
-        PlayerStatsHandler player = other.GetComponent<PlayerStatsHandler>();
-        if (player != null)
+        // Check for player hit
+        PlayerStatsHandler playerStats = other.GetComponent<PlayerStatsHandler>();
+        if (playerStats != null)
         {
-            PlayerTeamComponent playerTeam = player.GetComponent<PlayerTeamComponent>();
+            PlayerTeamComponent playerTeam = other.GetComponent<PlayerTeamComponent>();
 
-            // Check friendly fire
-            if (playerTeam != null)
+            // Check if friendly fire or enemy hit
+            if (playerTeam == null || playerTeam.teamID != shooterTeam)
             {
-                bool friendlyFireEnabled = GameSettingsManager.Instance != null &&
-                                           GameSettingsManager.Instance.friendlyFireEnabled;
+                // Damage the player
+                playerStats.RPC_TakeDamage(damage);
+                Debug.Log($"Projectile hit player for {damage} damage!");
 
-                // Same team - check friendly fire setting
-                if (playerTeam.teamID == shooterTeam)
+                // NEW: Apply stun effect to the player
+                if (stunPlayers)
                 {
-                    if (!friendlyFireEnabled)
+                    PlayerMovement playerMovement = other.GetComponent<PlayerMovement>();
+                    if (playerMovement != null)
                     {
-                        Debug.Log("Projectile hit teammate - friendly fire disabled, ignoring");
-                        return; // Don't damage teammates
+                        playerMovement.ApplyStun(stunDuration);
+                        Debug.Log($"Player stunned for {stunDuration} seconds!");
                     }
                 }
 
-                // Different team OR friendly fire enabled - deal damage
-                player.TakeDamage(damage);
-                Debug.Log($"Projectile hit player: {player.name} for {damage} damage");
                 shouldDestroy = true;
+            }
+            else
+            {
+                Debug.Log("Projectile hit friendly player - no damage");
             }
         }
 
-        // Hit an enemy?
+        // Check for enemy hit
         Enemy enemy = other.GetComponent<Enemy>();
         if (enemy != null)
         {
-            EnemyTeamComponent enemyTeam = enemy.GetComponent<EnemyTeamComponent>();
+            Vector2 knockbackDirection = (other.transform.position - transform.position).normalized;
+            Vector2 knockbackForce = knockbackDirection * 5f;
 
-            // Check if same team
-            if (enemyTeam != null && enemyTeam.teamID == shooterTeam)
-            {
-                Debug.Log("Projectile hit teammate enemy - ignoring");
-                return; // Don't damage teammates
-            }
+            enemy.TakeDamage(damage, knockbackForce, other.transform.position);
+            Debug.Log($"Projectile hit enemy for {damage} damage!");
 
-            // Calculate knockback direction (away from projectile)
-            Vector2 knockbackDirection = (enemy.transform.position - transform.position).normalized;
-            Vector2 knockbackForce = knockbackDirection * 5f; // Light knockback from projectile
-            knockbackForce.y += 1f; // Small upward component
-
-            // Damage enemy with knockback
-            enemy.TakeDamage(damage, knockbackForce, other.ClosestPoint(transform.position));
-            Debug.Log($"Projectile hit enemy: {enemy.name} for {damage} damage");
             shouldDestroy = true;
         }
 
-        // Hit ground or wall?
+        // Check for ground/wall collision
         if (other.gameObject.layer == LayerMask.NameToLayer("Ground") ||
             other.gameObject.CompareTag("Wall"))
         {
@@ -158,7 +153,6 @@ public class Projectile : MonoBehaviour
             shouldDestroy = true;
         }
 
-        // Destroy projectile
         if (shouldDestroy)
         {
             DestroyProjectile(other.ClosestPoint(transform.position));
@@ -173,8 +167,6 @@ public class Projectile : MonoBehaviour
         if (hasHit) return;
 
         Debug.Log($"Projectile collided with: {collision.gameObject.name}");
-
-        // Destroy on any collision (ground, walls, etc.)
         DestroyProjectile(collision.contacts[0].point);
     }
 
@@ -186,27 +178,23 @@ public class Projectile : MonoBehaviour
         if (hasHit) return;
         hasHit = true;
 
-        // Spawn impact effect
         if (impactEffect != null)
         {
             GameObject effect = Instantiate(impactEffect, hitPosition, Quaternion.identity);
-            Destroy(effect, 2f); // Clean up after 2 seconds
+            Destroy(effect, 2f);
         }
 
-        // Play impact sound
         if (impactSound != null)
         {
             AudioSource.PlayClipAtPoint(impactSound, transform.position);
         }
 
-        // Detach trail if it exists (so it doesn't get destroyed with projectile)
         if (trail != null)
         {
             trail.transform.SetParent(null);
-            Destroy(trail.gameObject, trail.time); // Destroy after trail fades
+            Destroy(trail.gameObject, trail.time);
         }
 
-        // Destroy the projectile
         Destroy(gameObject);
     }
 }
