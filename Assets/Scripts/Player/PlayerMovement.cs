@@ -1,77 +1,38 @@
-using System.Collections;
 using UnityEngine;
+using System.Collections;
 
-/// <summary>
-/// Handles all player movement including walking, jumping, dashing, and physics.
-/// CLEAN VERSION - UI management removed, only exposes data through public methods
-/// </summary>
 public class PlayerMovement : MonoBehaviour
 {
-    [Header("References")]
+    [Header("Stats")]
     [SerializeField] private PlayerStats stats;
-    [SerializeField] private Transform groundCheck;
 
-    [Header("Ground Detection")]
+    [Header("Ground Check")]
+    [SerializeField] private Transform groundCheck;
     [SerializeField] private float groundCheckRadius = 0.2f;
     [SerializeField] private LayerMask groundLayer;
 
     [Header("Jump Settings")]
-    [SerializeField] private int coyoteTimeFrames = 6;   // Frames of grace time after leaving platform (~0.1s at 60fps)
-    [SerializeField] private int jumpBufferFrames = 6;   // Frames to remember jump input (~0.1s at 60fps)
-    [SerializeField] private float jumpCutMultiplier = 0.5f; // Multiplier for releasing jump early (short hop)
+    [SerializeField] private int coyoteTimeFrames = 6;
+    [SerializeField] private int jumpBufferFrames = 6;
+    [SerializeField] private float jumpCutMultiplier = 0.1f;
+
+    [Header("UI References")]
+    [SerializeField] private UnityEngine.UI.Image dashCooldownBar;
 
     // Component references
     private Rigidbody2D rb;
-    private Animator anim;
+    private Animator anim; // NOW REFERENCES CHILD OBJECT
 
-    // Dash state
-    private bool canDash = true;
-    private bool isDashing = false;
-    private float originalGravity;
-    private float originalDrag;
-    private float dashCooldownTimer = 0f;
-
-    // Jump state
+    // Jump mechanics
     private int remainingAirJumps;
-    private int coyoteCounter;
+    private int coyoteTimeCounter;
     private int jumpBufferCounter;
+    private bool isJumping;
+    private bool isJumpCut;
 
-    // ============================
-    // PUBLIC API FOR UI
-    // ============================
-
-    /// <summary>
-    /// Returns dash cooldown as a percentage (0 = just used, 1 = ready)
-    /// </summary>
-    public float GetDashCooldownPercent()
-    {
-        if (canDash) return 1f;
-        return Mathf.Clamp01(dashCooldownTimer / stats.dashCooldown);
-    }
-
-    /// <summary>
-    /// Returns remaining cooldown time in seconds
-    /// </summary>
-    public float GetDashCooldownRemaining()
-    {
-        return Mathf.Max(0f, stats.dashCooldown - dashCooldownTimer);
-    }
-
-    /// <summary>
-    /// Returns whether dash is ready to use
-    /// </summary>
-    public bool CanDash()
-    {
-        return canDash;
-    }
-
-    /// <summary>
-    /// Returns whether player is currently dashing
-    /// </summary>
-    public bool IsDashing()
-    {
-        return isDashing;
-    }
+    // Dash mechanics
+    private bool isDashing;
+    private bool canDash = true;
 
     // ============================
     // UNITY LIFECYCLE
@@ -80,7 +41,15 @@ public class PlayerMovement : MonoBehaviour
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        anim = GetComponent<Animator>();
+
+        // UPDATED: Get Animator from child object instead of parent
+        anim = GetComponentInChildren<Animator>();
+
+        if (anim == null)
+        {
+            Debug.LogWarning("PlayerMovement: Animator not found in children! Make sure the Sprite child has an Animator component.");
+        }
+
         remainingAirJumps = stats.maxAirJumps;
     }
 
@@ -93,6 +62,13 @@ public class PlayerMovement : MonoBehaviour
         if (isDashing && Input.GetKeyUp(KeyCode.LeftShift))
         {
             StopAllCoroutines();
+
+            // IMPORTANT: Restore gravity when cancelling dash
+            if (rb != null)
+            {
+                rb.gravityScale = 5f; // Restore default gravity
+            }
+
             EndDash();
             StartCoroutine(DashCooldown());
         }
@@ -101,7 +77,12 @@ public class PlayerMovement : MonoBehaviour
     void FixedUpdate()
     {
         bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-        anim.SetBool("Grounded", grounded);
+
+        // Check if animator exists before setting parameters
+        if (anim != null)
+        {
+            anim.SetBool("Grounded", grounded);
+        }
     }
 
     // ============================
@@ -127,7 +108,12 @@ public class PlayerMovement : MonoBehaviour
         if (!isDashing)
         {
             rb.linearVelocity = new Vector2(xAxis * stats.walkSpeed, rb.linearVelocity.y);
-            anim.SetBool("Walking", xAxis != 0);
+
+            // Check if animator exists before setting parameters
+            if (anim != null)
+            {
+                anim.SetBool("Walking", xAxis != 0);
+            }
         }
 
         // Buffer jump input for responsive controls
@@ -140,160 +126,206 @@ public class PlayerMovement : MonoBehaviour
             {
                 StopAllCoroutines();
                 EndDash();
+
+                // IMPORTANT: Restore gravity before jumping
+                if (rb != null)
+                {
+                    rb.gravityScale = 5f; // Restore default gravity
+                }
+
                 Jump();
                 StartCoroutine(DashCooldown());
             }
         }
 
         // Handle dash input
-        FlagCarrierMarker carrierMarker = GetComponent<FlagCarrierMarker>();
-        bool isCarryingFlag = carrierMarker != null && carrierMarker.IsCarryingFlag();
-
-        if (Input.GetKeyDown(KeyCode.LeftShift) && canDash && !isCarryingFlag)
+        if (Input.GetKeyDown(KeyCode.LeftShift) && canDash && !isDashing)
         {
-            StartCoroutine(Dash(xAxis));
+            StartCoroutine(Dash());
         }
     }
 
     // ============================
-    // JUMP LOGIC
+    // JUMP MECHANICS
     // ============================
-
-    private void Jump()
-    {
-        rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
-        anim.SetTrigger("Jump");
-
-        // Consume buffered input and coyote time after jumping
-        jumpBufferCounter = 0;
-        coyoteCounter = 0;
-    }
-
-    private void HandleVariableJumpHeight()
-    {
-        if (Input.GetButtonUp("Jump") && rb.linearVelocity.y > 0)
-        {
-            rb.linearVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.y * jumpCutMultiplier);
-        }
-    }
 
     private void UpdateJumpVariables()
     {
         bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
 
-        // Reset air jumps when grounded
+        // Coyote time: grace period after leaving ground
         if (grounded)
         {
+            coyoteTimeCounter = coyoteTimeFrames;
             remainingAirJumps = stats.maxAirJumps;
         }
-
-        // Update coyote time (grace period after leaving ground)
-        if (grounded)
+        else
         {
-            coyoteCounter = coyoteTimeFrames;
-        }
-        else if (coyoteCounter > 0)
-        {
-            coyoteCounter--;
+            coyoteTimeCounter--;
         }
 
-        // Update jump buffer (remember jump input briefly)
+        // Jump buffer countdown
         if (jumpBufferCounter > 0)
         {
             jumpBufferCounter--;
         }
 
-        // Execute jump if conditions are met
-        bool canGroundJump = grounded || coyoteCounter > 0;
-        bool canAirJump = !grounded && remainingAirJumps > 0;
-
-        if (jumpBufferCounter > 0 && (canGroundJump || canAirJump))
+        // Execute buffered jump if conditions are met
+        if (jumpBufferCounter > 0 && (coyoteTimeCounter > 0 || remainingAirJumps > 0))
         {
             Jump();
+            jumpBufferCounter = 0;
+        }
+    }
 
-            // Consume air jump if used
-            if (!grounded && coyoteCounter <= 0)
-            {
-                remainingAirJumps--;
-            }
+    private void Jump()
+    {
+        bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+
+        if (grounded || coyoteTimeCounter > 0)
+        {
+            // Ground or coyote time jump
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
+            coyoteTimeCounter = 0;
+        }
+        else if (remainingAirJumps > 0)
+        {
+            // Air jump
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
+            remainingAirJumps--;
+        }
+
+        isJumping = true;
+        isJumpCut = false;
+
+        // Check if animator exists before setting parameters
+        if (anim != null)
+        {
+            anim.SetTrigger("Jump");
+        }
+    }
+
+    private void HandleVariableJumpHeight()
+    {
+        // Cut jump short if button released early
+        if (Input.GetButtonUp("Jump") && rb.linearVelocity.y > 0 && !isJumpCut)
+        {
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.y * jumpCutMultiplier);
+            isJumpCut = true;
+        }
+
+        // Reset jump state when landing
+        bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+        if (grounded && isJumping)
+        {
+            isJumping = false;
         }
     }
 
     // ============================
-    // DASH LOGIC
+    // DASH MECHANICS
     // ============================
 
-    private IEnumerator Dash(float xAxis)
+    private IEnumerator Dash()
     {
-        // Double-check flag carrier status
-        FlagCarrierMarker carrierMarker = GetComponent<FlagCarrierMarker>();
-        if (carrierMarker != null && carrierMarker.IsCarryingFlag())
-        {
-            yield break;
-        }
-
         canDash = false;
         isDashing = true;
-        anim.SetTrigger("Dashing");
 
-        // Store original physics values
-        originalGravity = rb.gravityScale;
-        originalDrag = rb.linearDamping;
+        float originalGravity = rb.gravityScale;
+        rb.gravityScale = 0;
 
-        // Disable gravity and drag during dash
-        rb.gravityScale = 0f;
-        rb.linearDamping = 0f;
+        // Dash in facing direction
+        float dashDirection = Mathf.Sign(transform.localScale.x);
+        rb.linearVelocity = new Vector2(dashDirection * stats.dashSpeed, 0);
 
-        // Calculate dash direction (horizontal only)
-        Vector2 dashDir = new Vector2(transform.localScale.x, 0); // Default to facing direction
-        if (xAxis != 0)
+        // Check if animator exists before setting parameters
+        if (anim != null)
         {
-            dashDir = new Vector2(xAxis, 0); // Use input if pressing a direction
+            anim.SetBool("Dashing", true);
         }
-
-        rb.linearVelocity = dashDir * stats.dashSpeed;
 
         yield return new WaitForSeconds(stats.dashTime);
 
         EndDash();
-        StartCoroutine(DashCooldown());
+        rb.gravityScale = originalGravity;
+
+        yield return StartCoroutine(DashCooldown());
     }
 
     private void EndDash()
     {
-        rb.gravityScale = originalGravity;
-        rb.linearDamping = originalDrag;
         isDashing = false;
+
+        // Check if animator exists before setting parameters
+        if (anim != null)
+        {
+            anim.SetBool("Dashing", false);
+        }
     }
 
-    /// <summary>
-    /// Dash cooldown - UI reads state via public methods
-    /// </summary>
     private IEnumerator DashCooldown()
     {
-        dashCooldownTimer = 0f;
+        float elapsed = 0;
 
-        // Count up from 0 to dashCooldown duration
-        while (dashCooldownTimer < stats.dashCooldown)
+        while (elapsed < stats.dashCooldown)
         {
-            dashCooldownTimer += Time.deltaTime;
+            elapsed += Time.deltaTime;
+
+            // Update UI if dash cooldown bar exists
+            if (dashCooldownBar != null)
+            {
+                dashCooldownBar.fillAmount = elapsed / stats.dashCooldown;
+            }
+
             yield return null;
         }
 
-        // Cooldown complete
         canDash = true;
-        dashCooldownTimer = stats.dashCooldown;
+    }
+
+    // ============================
+    // PUBLIC METHODS
+    // ============================
+
+    public bool IsDashing()
+    {
+        return isDashing;
+    }
+
+    /// <summary>
+    /// Returns dash cooldown as a percentage (0 = just used, 1 = ready)
+    /// </summary>
+    public float GetDashCooldownPercent()
+    {
+        if (canDash) return 1f;
+        return Mathf.Clamp01((stats.dashCooldown - GetDashCooldownRemaining()) / stats.dashCooldown);
+    }
+
+    /// <summary>
+    /// Returns remaining cooldown time in seconds
+    /// </summary>
+    public float GetDashCooldownRemaining()
+    {
+        return canDash ? 0f : stats.dashCooldown;
+    }
+
+    /// <summary>
+    /// Returns whether dash is ready to use
+    /// </summary>
+    public bool CanDash()
+    {
+        return canDash;
     }
 
     // ============================
     // DEBUG
     // ============================
 
-    private void OnDrawGizmosSelected()
+    void OnDrawGizmosSelected()
     {
         if (groundCheck != null)
         {
-            Gizmos.color = Color.green;
+            Gizmos.color = Color.red;
             Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
         }
     }
