@@ -1,17 +1,15 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.UI;
 
 /// <summary>
 /// Handles all player movement including walking, jumping, dashing, and physics.
-/// FIXED VERSION - Corrected DashCooldown coroutine
+/// CLEAN VERSION - UI management removed, only exposes data through public methods
 /// </summary>
 public class PlayerMovement : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private PlayerStats stats;
     [SerializeField] private Transform groundCheck;
-    [SerializeField] private Image dashCooldownBar; // Optional UI element for dash cooldown
 
     [Header("Ground Detection")]
     [SerializeField] private float groundCheckRadius = 0.2f;
@@ -38,31 +36,56 @@ public class PlayerMovement : MonoBehaviour
     private int coyoteCounter;
     private int jumpBufferCounter;
 
-    // Public getters for UI
+    // ============================
+    // PUBLIC API FOR UI
+    // ============================
+
+    /// <summary>
+    /// Returns dash cooldown as a percentage (0 = just used, 1 = ready)
+    /// </summary>
     public float GetDashCooldownPercent()
     {
         if (canDash) return 1f;
         return Mathf.Clamp01(dashCooldownTimer / stats.dashCooldown);
     }
 
+    /// <summary>
+    /// Returns remaining cooldown time in seconds
+    /// </summary>
     public float GetDashCooldownRemaining()
     {
         return Mathf.Max(0f, stats.dashCooldown - dashCooldownTimer);
     }
+
+    /// <summary>
+    /// Returns whether dash is ready to use
+    /// </summary>
+    public bool CanDash()
+    {
+        return canDash;
+    }
+
+    /// <summary>
+    /// Returns whether player is currently dashing
+    /// </summary>
+    public bool IsDashing()
+    {
+        return isDashing;
+    }
+
+    // ============================
+    // UNITY LIFECYCLE
+    // ============================
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         anim = GetComponent<Animator>();
         remainingAirJumps = stats.maxAirJumps;
-
-        if (dashCooldownBar != null)
-            dashCooldownBar.fillAmount = 1f; // Full = dash ready
     }
 
     void Update()
     {
-        HandleInput();
         UpdateJumpVariables();
         HandleVariableJumpHeight();
 
@@ -75,11 +98,24 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
+    void FixedUpdate()
+    {
+        bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+        anim.SetBool("Grounded", grounded);
+    }
+
+    // ============================
+    // INPUT HANDLING
+    // ============================
+
+    /// <summary>
+    /// Called by PlayerController to handle movement input
+    /// </summary>
     public void HandleInput()
     {
         float xAxis = Input.GetAxisRaw("Horizontal");
 
-        // Flip sprite to face movement direction (FIXED - preserves original scale)
+        // Flip sprite to face movement direction
         if (xAxis != 0)
         {
             Vector3 currentScale = transform.localScale;
@@ -119,6 +155,10 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
+    // ============================
+    // JUMP LOGIC
+    // ============================
+
     private void Jump()
     {
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
@@ -129,9 +169,6 @@ public class PlayerMovement : MonoBehaviour
         coyoteCounter = 0;
     }
 
-    /// <summary>
-    /// Allows variable jump height by cutting velocity when jump button is released.
-    /// </summary>
     private void HandleVariableJumpHeight()
     {
         if (Input.GetButtonUp("Jump") && rb.linearVelocity.y > 0)
@@ -140,9 +177,52 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Horizontal-only dash with instant start and smooth physics.
-    /// </summary>
+    private void UpdateJumpVariables()
+    {
+        bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+
+        // Reset air jumps when grounded
+        if (grounded)
+        {
+            remainingAirJumps = stats.maxAirJumps;
+        }
+
+        // Update coyote time (grace period after leaving ground)
+        if (grounded)
+        {
+            coyoteCounter = coyoteTimeFrames;
+        }
+        else if (coyoteCounter > 0)
+        {
+            coyoteCounter--;
+        }
+
+        // Update jump buffer (remember jump input briefly)
+        if (jumpBufferCounter > 0)
+        {
+            jumpBufferCounter--;
+        }
+
+        // Execute jump if conditions are met
+        bool canGroundJump = grounded || coyoteCounter > 0;
+        bool canAirJump = !grounded && remainingAirJumps > 0;
+
+        if (jumpBufferCounter > 0 && (canGroundJump || canAirJump))
+        {
+            Jump();
+
+            // Consume air jump if used
+            if (!grounded && coyoteCounter <= 0)
+            {
+                remainingAirJumps--;
+            }
+        }
+    }
+
+    // ============================
+    // DASH LOGIC
+    // ============================
+
     private IEnumerator Dash(float xAxis)
     {
         // Double-check flag carrier status
@@ -187,101 +267,33 @@ public class PlayerMovement : MonoBehaviour
     }
 
     /// <summary>
-    /// FIXED - Dash cooldown coroutine with proper UI updates
-    /// Removed duplicate logic and simplified the cooldown tracking
+    /// Dash cooldown - UI reads state via public methods
     /// </summary>
     private IEnumerator DashCooldown()
     {
-        // Show cooldown bar (dash just used)
-        if (dashCooldownBar != null)
-        {
-            dashCooldownBar.gameObject.SetActive(true);
-            dashCooldownBar.fillAmount = 0f; // Start empty since dash was just used
-        }
-
         dashCooldownTimer = 0f;
 
         // Count up from 0 to dashCooldown duration
         while (dashCooldownTimer < stats.dashCooldown)
         {
             dashCooldownTimer += Time.deltaTime;
-
-            // Update UI - fill gradually as cooldown progresses
-            if (dashCooldownBar != null)
-            {
-                // fillAmount goes from 0 (just dashed) to 1 (ready again)
-                dashCooldownBar.fillAmount = dashCooldownTimer / stats.dashCooldown;
-            }
-
             yield return null;
         }
 
         // Cooldown complete
         canDash = true;
         dashCooldownTimer = stats.dashCooldown;
-
-        // Hide cooldown bar (dash is ready)
-        if (dashCooldownBar != null)
-        {
-            dashCooldownBar.fillAmount = 1f;
-            dashCooldownBar.gameObject.SetActive(false);
-        }
     }
 
-    /// <summary>
-    /// Updates coyote time, jump buffer, and handles jump logic.
-    /// </summary>
-    private void UpdateJumpVariables()
-    {
-        bool isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+    // ============================
+    // DEBUG
+    // ============================
 
-        // Reset air jumps when grounded
-        if (isGrounded)
-        {
-            remainingAirJumps = stats.maxAirJumps;
-        }
-
-        // Update coyote time counter
-        if (isGrounded)
-        {
-            coyoteCounter = coyoteTimeFrames;
-        }
-        else
-        {
-            coyoteCounter--;
-        }
-
-        // Decrement jump buffer counter
-        if (jumpBufferCounter > 0)
-        {
-            jumpBufferCounter--;
-        }
-
-        // Execute jump if conditions are met
-        bool hasJumpInput = jumpBufferCounter > 0;
-        bool canCoyoteJump = coyoteCounter > 0;
-        bool canAirJump = remainingAirJumps > 0;
-
-        if (hasJumpInput && (canCoyoteJump || canAirJump))
-        {
-            Jump();
-
-            // Consume air jump if not coyote jumping
-            if (!canCoyoteJump)
-            {
-                remainingAirJumps--;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Visualize ground check position in editor
-    /// </summary>
     private void OnDrawGizmosSelected()
     {
         if (groundCheck != null)
         {
-            Gizmos.color = Color.red;
+            Gizmos.color = Color.green;
             Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
         }
     }
