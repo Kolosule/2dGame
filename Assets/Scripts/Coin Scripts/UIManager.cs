@@ -4,9 +4,8 @@ using TMPro;
 using Fusion;
 
 /// <summary>
-/// Manages UI display for team scores, player coins, and player health.
-/// UPDATED: Now includes smooth health bar animation.
-/// Attach this to a UI Canvas GameObject.
+/// Manages UI display for team scores, player coins, player health, and dash cooldown.
+/// CLEAN VERSION - All UI logic centralized here, reads data from gameplay scripts
 /// </summary>
 public class UIManager : MonoBehaviour
 {
@@ -25,6 +24,13 @@ public class UIManager : MonoBehaviour
     [Tooltip("Text showing numeric health (optional)")]
     [SerializeField] private TextMeshProUGUI healthText;
 
+    [Header("Dash Cooldown Display")]
+    [Tooltip("Image with Image Type set to 'Filled' for radial cooldown")]
+    [SerializeField] private Image dashCooldownRadial;
+
+    [Tooltip("Optional text showing countdown or 'READY'")]
+    [SerializeField] private TextMeshProUGUI dashCooldownText;
+
     [Header("Buff Indicators (Optional)")]
     [SerializeField] private GameObject team1DamageBuffIcon;
     [SerializeField] private GameObject team1DefenseBuffIcon;
@@ -33,10 +39,6 @@ public class UIManager : MonoBehaviour
 
     [Header("Update Settings")]
     [SerializeField] private float updateInterval = 0.1f;
-
-    [Header("Dash Cooldown Display")]
-    [SerializeField] private Image dashCooldownRadial; // radial fill image
-    [SerializeField] private TextMeshProUGUI dashCooldownText; // optional countdown text
 
     // Local player references
     private NetworkedPlayerInventory localPlayer;
@@ -47,6 +49,10 @@ public class UIManager : MonoBehaviour
     // Smooth health animation
     private float smoothHealth;
 
+    // ============================
+    // UNITY LIFECYCLE
+    // ============================
+
     private void Start()
     {
         // Hide buff icons initially
@@ -55,61 +61,74 @@ public class UIManager : MonoBehaviour
         if (team2DamageBuffIcon != null) team2DamageBuffIcon.SetActive(false);
         if (team2DefenseBuffIcon != null) team2DefenseBuffIcon.SetActive(false);
 
-        FindLocalPlayer();
+        // Initialize dash UI
+        if (dashCooldownRadial != null)
+        {
+            dashCooldownRadial.fillAmount = 1f; // Start ready
+        }
 
-        // Initialize UI
-        UpdateTeamScores();
-        UpdatePlayerCoinDisplay();
-        UpdatePlayerHealthDisplay(true);
+        if (dashCooldownText != null)
+        {
+            dashCooldownText.text = "READY";
+            dashCooldownText.color = Color.yellow;
+        }
     }
 
     private void Update()
     {
-        if (Time.time >= nextUpdateTime)
-        {
-            UpdateTeamScores();
-            UpdatePlayerCoinDisplay();
-            UpdatePlayerHealthDisplay(false);
-            UpdateDashDisplay(); // <--- NEW
-
-            nextUpdateTime = Time.time + updateInterval;
-        }
-    }
-
-    // -------------------------
-    // FIND LOCAL PLAYER
-    // -------------------------
-    private void FindLocalPlayer()
-    {
-        if (localPlayer != null && localStats != null && localMovement != null)
+        // Throttle updates for performance
+        if (Time.time < nextUpdateTime)
             return;
 
-        NetworkedPlayerInventory[] allPlayers = FindObjectsByType<NetworkedPlayerInventory>(FindObjectsSortMode.None);
+        nextUpdateTime = Time.time + updateInterval;
 
-        foreach (NetworkedPlayerInventory player in allPlayers)
+        // Find local player if needed
+        if (localPlayer == null || localStats == null || localMovement == null)
+            FindLocalPlayer();
+
+        // Update all UI elements
+        UpdateTeamScoreDisplay();
+        UpdatePlayerCoinDisplay();
+        UpdatePlayerHealthDisplay(false);
+        UpdateDashDisplay();
+    }
+
+    // ============================
+    // PLAYER FINDING
+    // ============================
+
+    private void FindLocalPlayer()
+    {
+        NetworkedPlayerInventory[] players = FindObjectsByType<NetworkedPlayerInventory>(FindObjectsSortMode.None);
+
+        foreach (var player in players)
         {
             if (player.HasInputAuthority)
             {
                 localPlayer = player;
                 localStats = player.GetComponent<PlayerStatsHandler>();
-                localMovement = player.GetComponent<PlayerMovement>(); // <-- FIXED
+                localMovement = player.GetComponent<PlayerMovement>();
 
+                // Initialize smooth health on first find
                 if (localStats != null)
+                {
                     smoothHealth = localStats.GetCurrentHealth();
+                }
 
-                Debug.Log("UIManager: Found local player + stats + movement");
                 break;
             }
         }
     }
 
-    // -------------------------
-    // TEAM SCORES
-    // -------------------------
-    public void UpdateTeamScores()
+    // ============================
+    // TEAM SCORE
+    // ============================
+
+    private void UpdateTeamScoreDisplay()
     {
-        TeamScoreManager scoreManager = TeamScoreManager.Instance;
-        if (scoreManager == null) return;
+        TeamScoreManager scoreManager = FindFirstObjectByType<TeamScoreManager>();
+        if (scoreManager == null)
+            return;
 
         if (team1ScoreText != null)
             team1ScoreText.text = $"Team1: {scoreManager.Team1Score}";
@@ -120,33 +139,6 @@ public class UIManager : MonoBehaviour
         UpdateBuffIndicators(scoreManager);
     }
 
-    private void UpdateDashDisplay()
-    {
-        if (localMovement == null)
-            return;
-
-        float percent = localMovement.GetDashCooldownPercent();
-        float remaining = localMovement.GetDashCooldownRemaining();
-
-        // Radial fill
-        if (dashCooldownRadial != null)
-            dashCooldownRadial.fillAmount = percent;
-
-        // Text countdown
-        if (dashCooldownText != null)
-        {
-            if (percent >= 1f)
-            {
-                dashCooldownText.text = "READY";
-                dashCooldownText.color = Color.yellow;
-            }
-            else
-            {
-                dashCooldownText.text = remaining.ToString("0.0");
-                dashCooldownText.color = Color.white;
-            }
-        }
-    }
     private void UpdateBuffIndicators(TeamScoreManager scoreManager)
     {
         if (team1DamageBuffIcon != null)
@@ -162,9 +154,10 @@ public class UIManager : MonoBehaviour
             team2DefenseBuffIcon.SetActive(scoreManager.Team2DefenseBuff);
     }
 
-    // -------------------------
-    // COINS
-    // -------------------------
+    // ============================
+    // PLAYER COINS
+    // ============================
+
     public void UpdatePlayerCoinDisplay()
     {
         if (localPlayer == null)
@@ -177,9 +170,10 @@ public class UIManager : MonoBehaviour
             playerCoinValueText.text = localPlayer != null ? $"Value: {localPlayer.TotalCoinValue}" : "Value: 0";
     }
 
-    // -------------------------
-    // HEALTH (NEW)
-    // -------------------------
+    // ============================
+    // PLAYER HEALTH
+    // ============================
+
     private void UpdatePlayerHealthDisplay(bool instant)
     {
         if (localStats == null)
@@ -190,17 +184,11 @@ public class UIManager : MonoBehaviour
 
         float current = localStats.GetCurrentHealth();
         float max = localStats.GetMaxHealth();
-        if (Mathf.Abs(smoothHealth - current) > 20f)
+
+        // Smooth health animation
+        if (instant || Mathf.Abs(smoothHealth - current) > 20f)
         {
-            smoothHealth = current; // snap
-        }
-        else
-        {
-            smoothHealth = Mathf.Lerp(smoothHealth, current, Time.deltaTime * 15f);
-        }
-        if (instant)
-        {
-            smoothHealth = current;
+            smoothHealth = current; // Snap for large changes
         }
         else
         {
@@ -212,15 +200,55 @@ public class UIManager : MonoBehaviour
 
         if (healthText != null)
             healthText.text = $"{Mathf.CeilToInt(current)} / {Mathf.CeilToInt(max)}";
-    }  
+    }
 
-    // -------------------------
-    // LEGACY SUPPORT
-    // -------------------------
+    // ============================
+    // DASH COOLDOWN
+    // ============================
+
+    private void UpdateDashDisplay()
+    {
+        if (localMovement == null)
+            return;
+
+        float percent = localMovement.GetDashCooldownPercent();
+        float remaining = localMovement.GetDashCooldownRemaining();
+        bool ready = localMovement.CanDash();
+
+        // Update radial fill
+        if (dashCooldownRadial != null)
+        {
+            dashCooldownRadial.fillAmount = percent;
+
+            // Optional: Change color based on readiness
+            // dashCooldownRadial.color = ready ? Color.yellow : Color.white;
+        }
+
+        // Update text
+        if (dashCooldownText != null)
+        {
+            if (ready)
+            {
+                dashCooldownText.text = "READY";
+                dashCooldownText.color = Color.yellow;
+            }
+            else
+            {
+                dashCooldownText.text = remaining.ToString("0.0") + "s";
+                dashCooldownText.color = Color.white;
+            }
+        }
+    }
+
+    // ============================
+    // LEGACY SUPPORT (for backwards compatibility)
+    // ============================
+
     public void SetTrackedPlayer(NetworkedPlayerInventory player)
     {
         localPlayer = player;
         localStats = player.GetComponent<PlayerStatsHandler>();
+        localMovement = player.GetComponent<PlayerMovement>();
         UpdatePlayerCoinDisplay();
         UpdatePlayerHealthDisplay(true);
     }
