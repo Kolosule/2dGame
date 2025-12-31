@@ -168,6 +168,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 934f6552656bc4645b7e3d403e3336df, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Projectile
+  stunDuration: 0.1
+  stunPlayers: 1
   impactEffect: {fileID: 0}
   trail: {fileID: 0}
   impactSound: {fileID: 0}
