@@ -398,6 +398,12 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     /// </summary>
     private void SpawnPlayer(NetworkRunner runner, PlayerRef player, Vector3 position, int team)
     {
+        // ADD THIS LINE
+        Debug.Log($"🎯 SPAWNING Player {player.PlayerId} at position {position} for Team {team}");
+
+        // ... rest of existing code
+    
+        
         // Validate prefab
         if (playerPrefab == null)
         {
