@@ -149,6 +149,7 @@ GameObject:
   - component: {fileID: 6913999319050724693}
   - component: {fileID: 963116542380703858}
   - component: {fileID: 3973079578160004190}
+  - component: {fileID: 313653908765909695}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -349,6 +350,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   stats: {fileID: 11400000, guid: 210721b53ee27ce4d99595054d7e3477, type: 2}
+  healthBar: {fileID: 0}
   _CurrentHealth: 0
   _IsDead: 0
 --- !u!114 &3938946417030660628
@@ -483,6 +485,7 @@ MonoBehaviour:
   - {fileID: 465053131265936943}
   - {fileID: -4804353808761203150}
   - {fileID: 3973079578160004190}
+  - {fileID: 313653908765909695}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &3973079578160004190
 MonoBehaviour:
@@ -497,6 +500,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerTeamData
   _Team: 0
+--- !u!114 &313653908765909695
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c4bc6f5707307f44bb576a636a80315, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0

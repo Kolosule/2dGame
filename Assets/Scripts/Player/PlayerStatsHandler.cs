@@ -4,6 +4,7 @@ using UnityEngine;
 /// <summary>
 /// FIXED VERSION - Drops flag on death and uses correct float health type
 /// Handles player health, damage, and death/respawn with Photon Fusion networking
+/// INCLUDES SPAWN IMMUNITY to prevent damage on spawn
 /// </summary>
 public class PlayerStatsHandler : NetworkBehaviour
 {
@@ -12,6 +13,10 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     [Header("Health Bar UI")]
     [SerializeField] private UnityEngine.UI.Image healthBar;
+
+    [Header("Spawn Protection")]
+    [Tooltip("Duration of spawn immunity in seconds")]
+    [SerializeField] private float spawnImmunityDuration = 1.5f;
 
     // Networked properties - FIXED: Use float for health
     [Networked, OnChangedRender(nameof(OnHealthChanged))]
@@ -22,6 +27,7 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     // Local variables
     private float lastAttackTime = 0f;
+    private float spawnTime = 0f; // NEW: Track when player spawned
 
     public override void Spawned()
     {
@@ -29,6 +35,7 @@ public class PlayerStatsHandler : NetworkBehaviour
         {
             CurrentHealth = stats.maxHealth;
             IsDead = false;
+            spawnTime = Time.time; // NEW: Record spawn time for immunity
         }
 
         UpdateHealthBar();
@@ -87,6 +94,7 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     /// <summary>
     /// SERVER: Damages the player. Only runs on server.
+    /// INCLUDES SPAWN IMMUNITY CHECK
     /// </summary>
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_TakeDamage(float damage)
@@ -94,6 +102,15 @@ public class PlayerStatsHandler : NetworkBehaviour
         if (!HasStateAuthority) return;
         if (IsDead) return;
 
+        // NEW: Check for spawn immunity
+        float timeSinceSpawn = Time.time - spawnTime;
+        if (timeSinceSpawn < spawnImmunityDuration)
+        {
+            Debug.Log($"🛡️ Player has spawn immunity! ({(spawnImmunityDuration - timeSinceSpawn):F2}s remaining)");
+            return;
+        }
+
+        // Prevent rapid consecutive damage
         if (Time.time - lastAttackTime < 0.1f)
         {
             return;
@@ -187,6 +204,7 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     /// <summary>
     /// FIXED: Respawn the player at their team's spawn point. Only runs on server.
+    /// INCLUDES SPAWN IMMUNITY RESET
     /// </summary>
     private void Respawn()
     {
@@ -198,12 +216,17 @@ public class PlayerStatsHandler : NetworkBehaviour
 
         CurrentHealth = stats.maxHealth;
         IsDead = false;
+        spawnTime = Time.time; // NEW: Reset spawn immunity timer
 
-        PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-        if (teamComponent != null && NetworkedSpawnManager.Instance != null)
+        // Get spawn position using PlayerTeamData (preferred) or fall back to PlayerTeamComponent
+        PlayerTeamData teamData = GetComponent<PlayerTeamData>();
+        if (teamData != null && NetworkedSpawnManager.Instance != null)
         {
-            Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(teamComponent.teamID);
+            int team = teamData.Team;
+            Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(team);
+
             transform.position = spawnPosition;
+            Debug.Log($"✓ Player respawned at team {team} spawn point: {spawnPosition}");
 
             Rigidbody2D rb = GetComponent<Rigidbody2D>();
             if (rb != null)
@@ -211,12 +234,29 @@ public class PlayerStatsHandler : NetworkBehaviour
                 rb.linearVelocity = Vector2.zero;
                 rb.angularVelocity = 0f;
             }
-
-            Debug.Log($"✓ Player respawned at team spawn point: {spawnPosition}");
         }
         else
         {
-            Debug.LogWarning("⚠️ Could not get spawn position - respawning at current location");
+            // Fallback to old method using PlayerTeamComponent
+            PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
+            if (teamComponent != null && NetworkedSpawnManager.Instance != null)
+            {
+                Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(teamComponent.teamID);
+                transform.position = spawnPosition;
+
+                Rigidbody2D rb = GetComponent<Rigidbody2D>();
+                if (rb != null)
+                {
+                    rb.linearVelocity = Vector2.zero;
+                    rb.angularVelocity = 0f;
+                }
+
+                Debug.Log($"✓ Player respawned at team spawn point: {spawnPosition}");
+            }
+            else
+            {
+                Debug.LogWarning("⚠️ Could not get spawn position - respawning at current location");
+            }
         }
 
         RPC_EnablePlayerControls();
