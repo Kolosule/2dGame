@@ -2,7 +2,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Enhanced NetworkPlayerWrapper with proper teammate collision prevention
+/// FINAL FIX - NetworkPlayerWrapper that properly preserves spawn position
 /// </summary>
 [RequireComponent(typeof(NetworkObject))]
 public class NetworkPlayerWrapper : NetworkBehaviour
@@ -11,14 +11,14 @@ public class NetworkPlayerWrapper : NetworkBehaviour
     [SerializeField] private MonoBehaviour yourPlayerControllerScript;
     [SerializeField] private Rigidbody2D rb;
 
-    [Header("Team Settings")]
-    [SerializeField] private int teamId = 0;
-
     // Networked properties - Fusion handles sync and interpolation automatically!
     [Networked] public Vector3 NetworkPosition { get; set; }
     [Networked] public Vector2 NetworkVelocity { get; set; }
     [Networked] public float NetworkScaleX { get; set; } = 1f;
     [Networked] public int NetworkTeamId { get; set; }
+
+    // CRITICAL FIX: Track if we've initialized network position
+    private bool networkPositionInitialized = false;
 
     private void Awake()
     {
@@ -28,22 +28,15 @@ public class NetworkPlayerWrapper : NetworkBehaviour
 
     public override void Spawned()
     {
-        Debug.Log($"Player spawned! HasInputAuthority: {HasInputAuthority}, Position: {transform.position}");
+        Debug.Log($"🎮 Player spawned! HasInputAuthority: {HasInputAuthority}, Position: {transform.position}");
 
-        // IMPORTANT: Team is set by NetworkedSpawnManager via PlayerTeamData
-        // PlayerTeamData then updates PlayerTeamComponent
-        // We sync from PlayerTeamComponent (which is always available)
+        // CRITICAL FIX: Initialize NetworkPosition to current spawn position
         if (HasStateAuthority)
         {
-            // Wait a frame for PlayerTeamData to update PlayerTeamComponent
-            StartCoroutine(SyncTeamFromComponent());
+            NetworkPosition = transform.position;
+            networkPositionInitialized = true;
+            Debug.Log($"✅ [SERVER] Initialized NetworkPosition to spawn position: {NetworkPosition}");
         }
-
-        // Assign team component immediately (both server and client)
-        StartCoroutine(AssignTeamComponent());
-
-        // Setup collision ignoring with teammates
-        StartCoroutine(SetupTeammateCollisionIgnoring());
 
         if (HasInputAuthority)
         {
@@ -56,7 +49,7 @@ public class NetworkPlayerWrapper : NetworkBehaviour
             // Setup camera with a small delay to ensure scene is loaded
             StartCoroutine(SetupCameraDelayed());
 
-            Debug.Log("✓ Local player controls enabled");
+            Debug.Log("✅ Local player controls enabled");
         }
         else
         {
@@ -66,36 +59,37 @@ public class NetworkPlayerWrapper : NetworkBehaviour
                 yourPlayerControllerScript.enabled = false;
             }
 
-            Debug.Log("✓ Remote player - showing synced position");
+            Debug.Log("✅ Remote player - showing synced position");
+        }
+
+        // Setup collision ignoring with teammates (after a small delay)
+        StartCoroutine(SetupTeammateCollisionIgnoring());
+
+        // Sync NetworkTeamId from PlayerTeamData (server only, with delay)
+        if (HasStateAuthority)
+        {
+            StartCoroutine(SyncNetworkTeamId());
         }
     }
 
     /// <summary>
-    /// Sync NetworkTeamId from PlayerTeamComponent after PlayerTeamData updates it
+    /// Sync NetworkTeamId from PlayerTeamData after it's been set by the server
     /// </summary>
-    private System.Collections.IEnumerator SyncTeamFromComponent()
+    private System.Collections.IEnumerator SyncNetworkTeamId()
     {
-        // Wait a frame for PlayerTeamData to set the team
-        yield return null;
+        // Wait for PlayerTeamData to be set by NetworkedSpawnManager
+        yield return new WaitForSeconds(0.1f);
 
-        PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-        if (teamComponent != null && !string.IsNullOrEmpty(teamComponent.teamID))
+        PlayerTeamData teamData = GetComponent<PlayerTeamData>();
+        if (teamData != null && teamData.Team != 0)
         {
-            // Convert team name to team number (Team1 = 0, Team2 = 1)
-            NetworkTeamId = teamComponent.teamID == "Team1" ? 0 : 1;
-            Debug.Log($"✓ Synced NetworkTeamId from PlayerTeamComponent: {teamComponent.teamID} → {NetworkTeamId}");
+            // Convert from 1/2 to 0/1 for backwards compatibility
+            NetworkTeamId = teamData.Team - 1;
+            Debug.Log($"✅ Synced NetworkTeamId: Team {teamData.Team} → NetworkTeamId {NetworkTeamId}");
         }
         else
         {
-            Debug.LogWarning("⚠️ PlayerTeamComponent not found or teamID not set!");
-
-            // Fallback: try to get from NetworkedSpawnManager
-            if (NetworkedSpawnManager.Instance != null)
-            {
-                int assignedTeam = NetworkedSpawnManager.Instance.GetPlayerTeam(Object.InputAuthority);
-                NetworkTeamId = assignedTeam - 1; // Convert from 1/2 to 0/1
-                Debug.Log($"✓ Got team from NetworkedSpawnManager: Team {assignedTeam} → NetworkTeamId {NetworkTeamId}");
-            }
+            Debug.LogWarning("⚠️ Could not sync NetworkTeamId - PlayerTeamData not set yet");
         }
     }
 
@@ -104,13 +98,21 @@ public class NetworkPlayerWrapper : NetworkBehaviour
     /// </summary>
     private System.Collections.IEnumerator SetupTeammateCollisionIgnoring()
     {
-        // Wait for all players to spawn
+        // Wait for all players to spawn and teams to be assigned
         yield return new WaitForSeconds(0.5f);
 
         Collider2D myCollider = GetComponent<Collider2D>();
         if (myCollider == null)
         {
             Debug.LogWarning("NetworkPlayerWrapper: No collider found!");
+            yield break;
+        }
+
+        // Get our team
+        PlayerTeamData myTeamData = GetComponent<PlayerTeamData>();
+        if (myTeamData == null || myTeamData.Team == 0)
+        {
+            Debug.LogWarning("NetworkPlayerWrapper: Team not assigned yet!");
             yield break;
         }
 
@@ -121,15 +123,19 @@ public class NetworkPlayerWrapper : NetworkBehaviour
         {
             if (otherPlayer == this) continue; // Skip self
 
+            // Get other player's team
+            PlayerTeamData otherTeamData = otherPlayer.GetComponent<PlayerTeamData>();
+            if (otherTeamData == null) continue;
+
             // Check if same team
-            if (NetworkTeamId == otherPlayer.NetworkTeamId)
+            if (myTeamData.Team == otherTeamData.Team)
             {
                 Collider2D otherCollider = otherPlayer.GetComponent<Collider2D>();
                 if (otherCollider != null)
                 {
                     // Ignore collision between teammates
                     Physics2D.IgnoreCollision(myCollider, otherCollider, true);
-                    Debug.Log($"Ignoring collision between teammates: {gameObject.name} <-> {otherPlayer.gameObject.name}");
+                    Debug.Log($"🤝 Ignoring collision between teammates: {gameObject.name} <-> {otherPlayer.gameObject.name}");
                 }
             }
         }
@@ -149,13 +155,19 @@ public class NetworkPlayerWrapper : NetworkBehaviour
             NetworkPosition = transform.position;
             NetworkVelocity = rb.linearVelocity;
             NetworkScaleX = transform.localScale.x;
+
+            // Mark as initialized
+            if (!networkPositionInitialized)
+            {
+                networkPositionInitialized = true;
+            }
         }
     }
 
     public override void Render()
     {
-        // Apply networked state to visuals for remote players
-        if (!HasInputAuthority)
+        // CRITICAL FIX: Only apply networked position to remote players AFTER it's been initialized
+        if (!HasInputAuthority && networkPositionInitialized)
         {
             transform.position = NetworkPosition;
 
@@ -168,41 +180,7 @@ public class NetworkPlayerWrapper : NetworkBehaviour
             scale.x = NetworkScaleX;
             transform.localScale = scale;
         }
-    }
-
-    public void SetTeam(int team)
-    {
-        teamId = team;
-        if (HasStateAuthority)
-        {
-            NetworkTeamId = team;
-        }
-    }
-
-    public int GetTeam()
-    {
-        return NetworkTeamId;
-    }
-
-    /// <summary>
-    /// Called when colliding with another object
-    /// Ensures teammates don't collide
-    /// </summary>
-    private void OnCollisionEnter2D(Collision2D collision)
-    {
-        var otherPlayer = collision.gameObject.GetComponent<NetworkPlayerWrapper>();
-        if (otherPlayer != null && NetworkTeamId == otherPlayer.NetworkTeamId)
-        {
-            // Same team - ignore collision
-            Collider2D myCollider = GetComponent<Collider2D>();
-            Collider2D otherCollider = otherPlayer.GetComponent<Collider2D>();
-
-            if (myCollider != null && otherCollider != null)
-            {
-                Physics2D.IgnoreCollision(myCollider, otherCollider, true);
-                Debug.Log("OnCollisionEnter2D: Ignoring teammate collision");
-            }
-        }
+        // If not initialized yet, keep the spawn position set by the server
     }
 
     /// <summary>
@@ -222,7 +200,7 @@ public class NetworkPlayerWrapper : NetworkBehaviour
             if (cameraFollow != null)
             {
                 cameraFollow.SetTarget(transform);
-                Debug.Log("✓ Camera setup complete");
+                Debug.Log("✅ Camera setup complete");
                 yield break;
             }
 
@@ -234,31 +212,44 @@ public class NetworkPlayerWrapper : NetworkBehaviour
     }
 
     /// <summary>
-    /// Assign team component with retry logic
+    /// Get the team this player is on (1 or 2)
     /// </summary>
-    private System.Collections.IEnumerator AssignTeamComponent()
+    public int GetTeam()
     {
-        yield return null;
-
-        int attempts = 0;
-        int maxAttempts = 10;
-
-        while (attempts < maxAttempts)
+        PlayerTeamData teamData = GetComponent<PlayerTeamData>();
+        if (teamData != null)
         {
-            var teamComponent = GetComponent<PlayerTeamComponent>();
-            if (teamComponent != null)
-            {
-                // Convert team ID (0 or 1) to team name ("Team1" or "Team2")
-                string teamName = NetworkTeamId == 0 ? "Team1" : "Team2";
-
-                Debug.Log($"✓ Team component assigned: {teamName}");
-                yield break;
-            }
-
-            attempts++;
-            yield return new WaitForSeconds(0.1f);
+            return teamData.Team;
         }
+        return 0; // No team
+    }
 
-        Debug.LogWarning("⚠️ Could not find PlayerTeamComponent after multiple attempts");
+    /// <summary>
+    /// Called when colliding with another object
+    /// Ensures teammates don't collide (backup safety check)
+    /// </summary>
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        var otherPlayer = collision.gameObject.GetComponent<NetworkPlayerWrapper>();
+        if (otherPlayer != null)
+        {
+            // Check if same team
+            PlayerTeamData myTeamData = GetComponent<PlayerTeamData>();
+            PlayerTeamData otherTeamData = otherPlayer.GetComponent<PlayerTeamData>();
+
+            if (myTeamData != null && otherTeamData != null &&
+                myTeamData.Team == otherTeamData.Team)
+            {
+                // Same team - ignore collision
+                Collider2D myCollider = GetComponent<Collider2D>();
+                Collider2D otherCollider = otherPlayer.GetComponent<Collider2D>();
+
+                if (myCollider != null && otherCollider != null)
+                {
+                    Physics2D.IgnoreCollision(myCollider, otherCollider, true);
+                    Debug.Log("OnCollisionEnter2D: Ignoring teammate collision");
+                }
+            }
+        }
     }
 }
