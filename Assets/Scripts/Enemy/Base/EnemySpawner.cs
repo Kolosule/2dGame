@@ -127,11 +127,11 @@ public class NetworkedEnemySpawner : NetworkBehaviour
         {
             teamComponent.teamID = teamID;
             teamComponent.territorialAdvantage = territorialAdvantage;
-            Debug.Log($"[SERVER] Assigned team {teamID} to {enemyObj.name}");
+            //Debug.Log($"[SERVER] Assigned team {teamID} to {enemyObj.name}");
         }
         else
         {
-            Debug.LogWarning($"[SERVER] Spawned enemy doesn't have EnemyTeamComponent!");
+           // Debug.LogWarning($"[SERVER] Spawned enemy doesn't have EnemyTeamComponent!");
         }
 
         // Assign patrol points to AI (using standard EnemyAI, not NetworkedEnemyAI)
@@ -142,15 +142,15 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             Transform pointA = patrolPointA != null ? patrolPointA : autoPatrolPointA;
             Transform pointB = patrolPointB != null ? patrolPointB : autoPatrolPointB;
 
-            if (pointA != null && pointB != null)
-            {
-                enemyAI.SetPatrolPoints(pointA, pointB);
-                Debug.Log($"[SERVER] Assigned patrol points to {enemyObj.name}");
-            }
-            else
-            {
-                Debug.LogWarning($"[SERVER] No patrol points available for {enemyObj.name}");
-            }
+            //if (pointA != null && pointB != null)
+            //{
+               // enemyAI.SetPatrolPoints(pointA, pointB);
+              //  Debug.Log($"[SERVER] Assigned patrol points to {enemyObj.name}");
+          //  }
+           // else
+           // {
+           //     Debug.LogWarning($"[SERVER] No patrol points available for {enemyObj.name}");
+           // }
         }
         else
         {

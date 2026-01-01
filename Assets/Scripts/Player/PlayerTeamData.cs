@@ -2,8 +2,8 @@
 using Fusion;
 
 /// <summary>
-/// Attach this to your Player Prefab ALONGSIDE PlayerTeamComponent.
-/// This handles NETWORK SYNCING of team data for Photon Fusion.
+/// FIXED VERSION - Network syncing of team data for Photon Fusion.
+/// This handles NETWORK SYNCING of team data.
 /// PlayerTeamComponent handles all the GAMEPLAY logic.
 /// COMPATIBLE WITH FUSION 2.0+
 /// </summary>
@@ -116,7 +116,10 @@ public class PlayerTeamData : NetworkBehaviour
         // Update the PlayerTeamComponent's teamID
         playerTeamComponent.teamID = teamID;
 
-        Debug.Log($"✓ Updated PlayerTeamComponent to {teamID}");
+        Debug.Log($"✅ Updated PlayerTeamComponent to {teamID}");
+
+        // CRITICAL FIX: Call OnTeamChanged to refresh visuals
+        playerTeamComponent.OnTeamChanged();
 
         // The PlayerTeamComponent will handle:
         // - Setting sprite color based on team

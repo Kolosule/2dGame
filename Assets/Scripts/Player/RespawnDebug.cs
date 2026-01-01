@@ -1,69 +1,68 @@
-using UnityEngine;
+﻿using UnityEngine;
 using Fusion;
 
 /// <summary>
-/// Diagnostic script to identify spawn and damage issues
-/// Attach this to your Player prefab temporarily to debug
+/// Add this to your Player prefab to diagnose spawn issues
+/// Will print detailed info about spawn position and team assignment
 /// </summary>
-public class SpawnDiagnostics : NetworkBehaviour
+public class PlayerSpawnDebugger : NetworkBehaviour
 {
     private void Start()
     {
-        Debug.Log("=== SPAWN DIAGNOSTICS ===");
-        Debug.Log($"Player spawned at position: {transform.position}");
-        Debug.Log($"Player name: {gameObject.name}");
+        Debug.Log("═══════════════════════════════════════");
+        Debug.Log($"🎮 PLAYER START (Not networked yet)");
+        Debug.Log($"Position: {transform.position}");
+        Debug.Log($"Name: {gameObject.name}");
+        Debug.Log("═══════════════════════════════════════");
+    }
+
+    public override void Spawned()
+    {
+        Debug.Log("═══════════════════════════════════════");
+        Debug.Log($"🌐 PLAYER SPAWNED ON NETWORK");
+        Debug.Log($"Time: {Time.time:F2}");
+        Debug.Log($"Position: {transform.position}");
+        Debug.Log($"Name: {gameObject.name}");
+        Debug.Log($"HasInputAuthority: {HasInputAuthority}");
+        Debug.Log($"HasStateAuthority: {HasStateAuthority}");
+        Debug.Log($"Object.InputAuthority: {Object.InputAuthority}");
+
+        // Check if this is spawning at origin
+        if (transform.position == Vector3.zero || transform.position.magnitude < 1f)
+        {
+            Debug.LogError("⚠️ PLAYER SPAWNED AT ORIGIN OR NEAR ORIGIN!");
+            Debug.LogError("This suggests spawn position wasn't set correctly!");
+        }
 
         // Check team assignment
-        PlayerTeamComponent teamComp = GetComponent<PlayerTeamComponent>();
-        if (teamComp != null)
-        {
-            Debug.Log($"Team ID: {teamComp.teamID}");
-        }
-        else
-        {
-            Debug.LogError("NO PlayerTeamComponent found!");
-        }
-
-        // Check team data
         PlayerTeamData teamData = GetComponent<PlayerTeamData>();
         if (teamData != null)
         {
-            Debug.Log($"Team Data - Team: {teamData.Team}");
+            Debug.Log($"PlayerTeamData.Team: {teamData.Team}");
+            if (teamData.Team == 0)
+            {
+                Debug.LogError("⚠️ Team is 0! Team assignment hasn't happened yet!");
+            }
         }
         else
         {
-            Debug.LogError("NO PlayerTeamData found!");
+            Debug.LogError("❌ NO PlayerTeamData component!");
         }
 
-        // Check all colliders
-        Collider2D[] colliders = GetComponents<Collider2D>();
-        Debug.Log($"Number of colliders: {colliders.Length}");
-        foreach (var col in colliders)
+        PlayerTeamComponent teamComp = GetComponent<PlayerTeamComponent>();
+        if (teamComp != null)
         {
-            Debug.Log($"  - Collider: Type={col.GetType().Name}, IsTrigger={col.isTrigger}, Layer={LayerMask.LayerToName(gameObject.layer)}");
-        }
-
-        // Check what we're overlapping with at spawn
-        Collider2D[] overlapping = Physics2D.OverlapBoxAll(transform.position, Vector2.one, 0f);
-        Debug.Log($"Overlapping {overlapping.Length} objects at spawn:");
-        foreach (var obj in overlapping)
-        {
-            if (obj.gameObject != gameObject)
+            Debug.Log($"PlayerTeamComponent.teamID: '{teamComp.teamID}'");
+            if (string.IsNullOrEmpty(teamComp.teamID))
             {
-                Debug.Log($"  - {obj.gameObject.name} (Layer: {LayerMask.LayerToName(obj.gameObject.layer)}, IsTrigger: {obj.isTrigger})");
+                Debug.LogError("⚠️ TeamID is empty!");
             }
         }
+        else
+        {
+            Debug.LogError("❌ NO PlayerTeamComponent!");
+        }
 
-        Debug.Log("=== END DIAGNOSTICS ===");
-    }
-
-    private void OnTriggerEnter2D(Collider2D collision)
-    {
-        Debug.Log($"[TRIGGER] Player entered trigger with: {collision.gameObject.name} (Layer: {LayerMask.LayerToName(collision.gameObject.layer)})");
-    }
-
-    private void OnCollisionEnter2D(Collision2D collision)
-    {
-        Debug.Log($"[COLLISION] Player collided with: {collision.gameObject.name} (Layer: {LayerMask.LayerToName(collision.gameObject.layer)})");
+        Debug.Log("═══════════════════════════════════════");
     }
 }
