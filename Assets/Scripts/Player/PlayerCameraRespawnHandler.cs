@@ -2,7 +2,7 @@
 using System.Collections;
 
 /// <summary>
-/// Connects the camera system to player respawn events.
+/// FIXED VERSION - Connects the camera system to player respawn events.
 /// This script triggers smooth camera transitions when the player dies and respawns.
 /// 
 /// SETUP INSTRUCTIONS:
@@ -14,6 +14,11 @@ using System.Collections;
 /// - Detects when the player dies (health reaches 0)
 /// - Triggers a smooth camera transition to the respawn point
 /// - Camera arrives at respawn point before/as player respawns
+/// 
+/// WHAT CHANGED:
+/// - Now uses PlayerTeamData (which stores team as an int: 1 or 2)
+/// - Falls back to PlayerTeamComponent if PlayerTeamData is missing
+/// - Compatible with the fixed NetworkedSpawnManager
 /// </summary>
 public class PlayerCameraRespawnHandler : MonoBehaviour
 {
@@ -143,29 +148,76 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
     }
 
     /// <summary>
-    /// Gets the respawn position for this player
+    /// FIXED: Gets the respawn position for this player using team number (int)
     /// </summary>
     private Vector3 GetRespawnPosition()
     {
         // Try to get respawn position from NetworkedSpawnManager
         if (NetworkedSpawnManager.Instance != null)
         {
+            // PRIORITY 1: Try to get team from PlayerTeamData (preferred, uses int)
+            PlayerTeamData teamData = GetComponent<PlayerTeamData>();
+            if (teamData != null)
+            {
+                int teamNumber = teamData.Team; // This is an int: 1 or 2
 
-            // Get player's team from their team component
+                if (teamNumber != 0) // 0 means no team assigned yet
+                {
+                    Vector3 spawnPos = NetworkedSpawnManager.Instance.GetSpawnPosition(teamNumber);
+
+                    if (showDebugMessages)
+                    {
+                        Debug.Log($"✓ Got respawn position from PlayerTeamData (Team {teamNumber}): {spawnPos}");
+                    }
+
+                    return spawnPos;
+                }
+                else
+                {
+                    Debug.LogWarning("⚠️ PlayerTeamData exists but team is 0 (not assigned yet)");
+                }
+            }
+
+            // PRIORITY 2: Fallback to PlayerTeamComponent (legacy, uses string)
             PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-
             if (teamComponent != null)
             {
-                string teamId = teamComponent.teamID; // Access the public teamID field directly
-                Vector3 spawnPos = NetworkedSpawnManager.Instance.GetSpawnPosition(teamId);
+                string teamId = teamComponent.teamID;
 
-                if (showDebugMessages)
+                // Convert string team ID to int
+                // "Team1" → 1, "Team2" → 2
+                int teamNumber = 0;
+                if (teamId == "Team1")
                 {
-                    Debug.Log($"✓ Got respawn position from NetworkedSpawnManager: {spawnPos}");
+                    teamNumber = 1;
+                }
+                else if (teamId == "Team2")
+                {
+                    teamNumber = 2;
                 }
 
-                return spawnPos;
+                if (teamNumber != 0)
+                {
+                    Vector3 spawnPos = NetworkedSpawnManager.Instance.GetSpawnPosition(teamNumber);
+
+                    if (showDebugMessages)
+                    {
+                        Debug.Log($"✓ Got respawn position from PlayerTeamComponent (Team {teamNumber}): {spawnPos}");
+                    }
+
+                    return spawnPos;
+                }
+                else
+                {
+                    Debug.LogWarning($"⚠️ PlayerTeamComponent has invalid teamID: {teamId}");
+                }
             }
+
+            Debug.LogWarning("⚠️ Player has no team component (PlayerTeamData or PlayerTeamComponent)");
+        }
+        else
+        {
+            Debug.LogWarning("⚠️ NetworkedSpawnManager.Instance is null");
         }
 
         // Fallback: return current position if we can't get spawn point
@@ -193,7 +245,7 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
             }
         }
     }
-
+     
     /// <summary>
     /// Get reference to the player camera (for other scripts)
     /// </summary>
