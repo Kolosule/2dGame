@@ -2,11 +2,17 @@
 using Fusion;
 
 /// <summary>
-/// FIXED VERSION - Now drops coins on death!
-/// Base enemy class handling health, damage, and combat.
-/// Works with non-networked enemies (spawned by server via EnemySpawner).
+/// FIXED VERSION - Now properly networked for multiplayer!
+/// 
+/// WHAT CHANGED:
+/// - Inherits from NetworkBehaviour instead of MonoBehaviour
+/// - Health is now [Networked] so all clients see the same value
+/// - Only server handles damage and death
+/// - Clients automatically sync health changes
+/// 
+/// This ensures that when the host kills an enemy, all clients see it die!
 /// </summary>
-public class Enemy : MonoBehaviour
+public class Enemy : NetworkBehaviour
 {
     [Header("Enemy Configuration")]
     [SerializeField] private EnemyStats stats;
@@ -22,8 +28,10 @@ public class Enemy : MonoBehaviour
     [Tooltip("How far coins should scatter from death position")]
     [SerializeField] private float coinScatterRadius = 1.5f;
 
-    // Health tracking
-    private int currentHealth;
+    // ⭐ CRITICAL FIX: Health is now networked!
+    // This means all clients will see the same health value
+    [Networked]
+    private int CurrentHealth { get; set; }
 
     // Knockback tracking
     private bool isKnockedBack = false;
@@ -35,21 +43,33 @@ public class Enemy : MonoBehaviour
     // Team component reference
     private EnemyTeamComponent teamComponent;
 
-    private void Start()
+    // Rigidbody reference
+    private Rigidbody2D rb;
+
+    /// <summary>
+    /// Called when this enemy spawns on the network
+    /// </summary>
+    public override void Spawned()
     {
         // Initialize health from stats
         if (stats != null)
         {
-            currentHealth = stats.maxHealth;
-            Debug.Log($"{stats.enemyName} initialized with {currentHealth} health");
+            // ⭐ IMPORTANT: Only the server sets initial health
+            // Clients will automatically receive this value
+            if (HasStateAuthority)
+            {
+                CurrentHealth = stats.maxHealth;
+                Debug.Log($"[SERVER] {stats.enemyName} spawned with {CurrentHealth} health");
+            }
         }
         else
         {
             Debug.LogError($"Enemy on {gameObject.name} has no EnemyStats assigned!");
         }
 
-        // Get team component for territorial damage modifiers
+        // Get components
         teamComponent = GetComponent<EnemyTeamComponent>();
+        rb = GetComponent<Rigidbody2D>();
 
         // Warn if coin prefab is missing
         if (coinPrefab == null)
@@ -60,15 +80,29 @@ public class Enemy : MonoBehaviour
 
     /// <summary>
     /// Apply damage to this enemy with knockback
+    /// 
+    /// HOW THIS WORKS:
+    /// - Any client can call this (e.g., when player hits enemy)
+    /// - But only the SERVER actually applies the damage
+    /// - The health change is then synced to all clients automatically
     /// </summary>
     public void TakeDamage(int amount, Vector2 knockbackForce, Vector2 hitPoint)
     {
+        // ⭐ CRITICAL: Only server can modify health
+        // If a client tries to damage an enemy, we need to tell the server
+        if (!HasStateAuthority)
+        {
+            // Client detected a hit - tell the server about it
+            RPC_TakeDamage(amount, knockbackForce, hitPoint);
+            return;
+        }
+
+        // SERVER CODE BELOW:
         // Apply damage
-        currentHealth -= amount;
-        Debug.Log($"{stats.enemyName} took {amount} damage. Health: {currentHealth}/{stats.maxHealth}");
+        CurrentHealth -= amount;
+        Debug.Log($"[SERVER] {stats.enemyName} took {amount} damage. Health: {CurrentHealth}/{stats.maxHealth}");
 
         // Apply knockback
-        Rigidbody2D rb = GetComponent<Rigidbody2D>();
         if (rb != null)
         {
             rb.linearVelocity = Vector2.zero; // Reset current velocity
@@ -80,10 +114,26 @@ public class Enemy : MonoBehaviour
         }
 
         // Check if dead
-        if (currentHealth <= 0)
+        if (CurrentHealth <= 0)
         {
             Die();
         }
+    }
+
+    /// <summary>
+    /// RPC that lets clients tell the server about damage
+    /// 
+    /// WHAT IS AN RPC?
+    /// - RPC = Remote Procedure Call
+    /// - It's like a phone call from client to server
+    /// - Client says "hey, I hit this enemy for X damage"
+    /// - Server then processes the damage
+    /// </summary>
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_TakeDamage(int amount, Vector2 knockbackForce, Vector2 hitPoint)
+    {
+        // This runs on the SERVER when a client reports a hit
+        TakeDamage(amount, knockbackForce, hitPoint);
     }
 
     /// <summary>
@@ -102,9 +152,15 @@ public class Enemy : MonoBehaviour
     /// <summary>
     /// Attack a player
     /// </summary>
-    /// <param name="player">The player to attack</param>
     public void AttackPlayer(PlayerStatsHandler player)
     {
+        // ⭐ IMPORTANT: Only server should attack
+        // Clients will see the attack results through health sync
+        if (!HasStateAuthority)
+        {
+            return;
+        }
+
         if (player == null)
         {
             Debug.LogWarning($"{stats.enemyName} tried to attack null player!");
@@ -114,7 +170,6 @@ public class Enemy : MonoBehaviour
         // Check attack cooldown
         if (Time.time - lastAttackTime < stats.attackCooldown)
         {
-            Debug.Log($"{stats.enemyName} attack on cooldown. Time remaining: {stats.attackCooldown - (Time.time - lastAttackTime):F2}");
             return;
         }
 
@@ -124,22 +179,28 @@ public class Enemy : MonoBehaviour
         {
             float attackModifier = teamComponent.GetDamageDealtModifier();
             finalDamage = Mathf.RoundToInt(stats.attackDamage * attackModifier);
-            Debug.Log($"{stats.enemyName} attacking {player.name} with {finalDamage} damage (base: {stats.attackDamage}, modifier: {attackModifier:F2}x)");
         }
 
         // Deal damage to player
         player.TakeDamage(finalDamage);
         lastAttackTime = Time.time;
 
-        Debug.Log($"{stats.enemyName} successfully attacked {player.name}!");
+        Debug.Log($"[SERVER] {stats.enemyName} attacked {player.name} for {finalDamage} damage!");
     }
 
     /// <summary>
     /// Enemy death handler - NOW DROPS COINS!
+    /// Only runs on server
     /// </summary>
     private void Die()
     {
-        Debug.Log($"{stats.enemyName} has died!");
+        // ⭐ Double-check we're on the server
+        if (!HasStateAuthority)
+        {
+            return;
+        }
+
+        Debug.Log($"[SERVER] {stats.enemyName} has died!");
 
         // Spawn coins if we have a coin prefab
         if (coinPrefab != null)
@@ -147,28 +208,21 @@ public class Enemy : MonoBehaviour
             SpawnCoins();
         }
 
-        // TODO: Add death effects, animations, etc.
-
-        Destroy(gameObject);
+        // ⭐ IMPORTANT: Use Runner.Despawn instead of Destroy
+        // This removes the enemy from the network properly
+        Runner.Despawn(Object);
     }
 
     /// <summary>
     /// Spawns coins at the enemy's death position
+    /// Only called on server
     /// </summary>
     private void SpawnCoins()
     {
-        // Only spawn coins on the server/host
-        NetworkRunner runner = FindFirstObjectByType<NetworkRunner>();
-        if (runner == null || (!runner.IsServer && !runner.IsSharedModeMasterClient))
-        {
-            Debug.Log("Not server - skipping coin spawn");
-            return;
-        }
-
         // Determine how many coins to drop
         int coinCount = Random.Range(coinsToDropMin, coinsToDropMax + 1);
 
-        Debug.Log($"Spawning {coinCount} coins from {stats.enemyName} death");
+        Debug.Log($"[SERVER] Spawning {coinCount} coins from {stats.enemyName} death");
 
         // Spawn each coin with slight scatter
         for (int i = 0; i < coinCount; i++)
@@ -177,8 +231,9 @@ public class Enemy : MonoBehaviour
             Vector2 randomOffset = Random.insideUnitCircle * coinScatterRadius;
             Vector3 spawnPosition = transform.position + new Vector3(randomOffset.x, randomOffset.y, 0);
 
-            // Spawn the coin on the network
-            NetworkObject coin = runner.Spawn(
+            // ⭐ Spawn the coin on the network
+            // Runner.Spawn makes sure ALL clients see the coin!
+            NetworkObject coin = Runner.Spawn(
                 coinPrefab,
                 spawnPosition,
                 Quaternion.identity
@@ -199,7 +254,7 @@ public class Enemy : MonoBehaviour
             }
         }
 
-        Debug.Log($"✓ Successfully spawned {coinCount} coins!");
+        Debug.Log($"[SERVER] Successfully spawned {coinCount} coins!");
     }
 
     /// <summary>
@@ -207,7 +262,7 @@ public class Enemy : MonoBehaviour
     /// </summary>
     public int GetCurrentHealth()
     {
-        return currentHealth;
+        return CurrentHealth;
     }
 
     /// <summary>
