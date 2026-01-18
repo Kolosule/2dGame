@@ -5,6 +5,12 @@ using UnityEngine;
 /// FIXED VERSION - Drops flag on death and uses correct float health type
 /// Handles player health, damage, and death/respawn with Photon Fusion networking
 /// INCLUDES SPAWN IMMUNITY to prevent damage on spawn
+/// 
+/// WHAT CHANGED:
+/// - Fixed Respawn() method to convert string team ID to int
+/// - Works with both PlayerTeamData (int) and PlayerTeamComponent (string)
+/// - Compatible with the fixed NetworkedSpawnManager
+/// - FIXED LINE 244: String-to-int conversion for GetSpawnPosition()
 /// </summary>
 public class PlayerStatsHandler : NetworkBehaviour
 {
@@ -27,7 +33,7 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     // Local variables
     private float lastAttackTime = 0f;
-    private float spawnTime = 0f; // NEW: Track when player spawned
+    private float spawnTime = 0f; // Track when player spawned for immunity
 
     public override void Spawned()
     {
@@ -35,7 +41,7 @@ public class PlayerStatsHandler : NetworkBehaviour
         {
             CurrentHealth = stats.maxHealth;
             IsDead = false;
-            spawnTime = Time.time; // NEW: Record spawn time for immunity
+            spawnTime = Time.time; // Record spawn time for immunity
         }
 
         UpdateHealthBar();
@@ -102,7 +108,7 @@ public class PlayerStatsHandler : NetworkBehaviour
         if (!HasStateAuthority) return;
         if (IsDead) return;
 
-        // NEW: Check for spawn immunity
+        // Check for spawn immunity
         float timeSinceSpawn = Time.time - spawnTime;
         if (timeSinceSpawn < spawnImmunityDuration)
         {
@@ -140,7 +146,7 @@ public class PlayerStatsHandler : NetworkBehaviour
         IsDead = true;
         Debug.Log("Player died!");
 
-        // NEW: Drop flag if carrying one
+        // Drop flag if carrying one
         DropFlagOnDeath();
 
         // Disable camera handler
@@ -159,7 +165,7 @@ public class PlayerStatsHandler : NetworkBehaviour
     }
 
     /// <summary>
-    /// NEW: Drops the flag if the player is carrying one
+    /// Drops the flag if the player is carrying one
     /// </summary>
     private void DropFlagOnDeath()
     {
@@ -204,7 +210,7 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     /// <summary>
     /// FIXED: Respawn the player at their team's spawn point. Only runs on server.
-    /// INCLUDES SPAWN IMMUNITY RESET
+    /// INCLUDES SPAWN IMMUNITY RESET and proper string→int conversion
     /// </summary>
     private void Respawn()
     {
@@ -216,42 +222,62 @@ public class PlayerStatsHandler : NetworkBehaviour
 
         CurrentHealth = stats.maxHealth;
         IsDead = false;
-        spawnTime = Time.time; // NEW: Reset spawn immunity timer
+        spawnTime = Time.time; // Reset spawn immunity timer
 
-        // Get spawn position using PlayerTeamData (preferred) or fall back to PlayerTeamComponent
+        // PRIORITY 1: Try to get spawn position using PlayerTeamData (int-based)
         PlayerTeamData teamData = GetComponent<PlayerTeamData>();
         if (teamData != null && NetworkedSpawnManager.Instance != null)
         {
             int team = teamData.Team;
-            Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(team);
 
-            transform.position = spawnPosition;
-            Debug.Log($"✓ Player respawned at team {team} spawn point: {spawnPosition}");
-
-            Rigidbody2D rb = GetComponent<Rigidbody2D>();
-            if (rb != null)
+            if (team != 0) // 0 means no team assigned
             {
-                rb.linearVelocity = Vector2.zero;
-                rb.angularVelocity = 0f;
-            }
-        }
-        else
-        {
-            // Fallback to old method using PlayerTeamComponent
-            PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-            if (teamComponent != null && NetworkedSpawnManager.Instance != null)
-            {
-                Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(teamComponent.teamID);
+                Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(team);
                 transform.position = spawnPosition;
 
+                Debug.Log($"✓ Player respawned at team {team} spawn point: {spawnPosition}");
+
+                // Reset physics
                 Rigidbody2D rb = GetComponent<Rigidbody2D>();
                 if (rb != null)
                 {
                     rb.linearVelocity = Vector2.zero;
                     rb.angularVelocity = 0f;
                 }
+            }
+            else
+            {
+                Debug.LogWarning("⚠️ PlayerTeamData exists but team is 0 (not assigned yet)");
+            }
+        }
+        else
+        {
+            // PRIORITY 2: Fallback to old method using PlayerTeamComponent (string-based)
+            PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
+            if (teamComponent != null && NetworkedSpawnManager.Instance != null)
+            {
+                string teamId = teamComponent.teamID;
 
-                Debug.Log($"✓ Player respawned at team spawn point: {spawnPosition}");
+                // CRITICAL FIX (LINE 244): Convert string to int
+                // "Team1" → 1, "Team2" → 2
+                int teamNumber = ConvertTeamIdToNumber(teamId);
+
+                if (teamNumber != 0)
+                {
+                    // Now pass the int to GetSpawnPosition
+                    Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(teamNumber);
+                    transform.position = spawnPosition;
+
+                    // Reset physics
+                    Rigidbody2D rb = GetComponent<Rigidbody2D>();
+                    if (rb != null)
+                    {
+                        rb.linearVelocity = Vector2.zero;
+                        rb.angularVelocity = 0f;
+                    }
+
+                    Debug.Log($"✓ Player respawned at team {teamNumber} spawn point: {spawnPosition}");
+                }
             }
             else
             {
@@ -259,8 +285,10 @@ public class PlayerStatsHandler : NetworkBehaviour
             }
         }
 
+        // Re-enable player controls on all clients
         RPC_EnablePlayerControls();
 
+        // Re-enable camera handler
         PlayerCameraRespawnHandler cameraHandler = GetComponent<PlayerCameraRespawnHandler>();
         if (cameraHandler != null)
         {
@@ -287,9 +315,18 @@ public class PlayerStatsHandler : NetworkBehaviour
             color.a = 1f;
             sprite.color = color;
         }
-        else
-        {
-            Debug.LogWarning("PlayerStatsHandler: SpriteRenderer not found in children!");
-        }
+    }
+
+    /// <summary>
+    /// HELPER METHOD: Converts string team ID to int team number
+    /// "Team1" → 1, "Team2" → 2
+    /// </summary>
+    private int ConvertTeamIdToNumber(string teamId)
+    {
+        if (teamId == "Team1") return 1;
+        if (teamId == "Team2") return 2;
+
+        Debug.LogWarning($"⚠️ Unknown team ID: {teamId}. Defaulting to Team 1.");
+        return 1; // Default fallback
     }
 }
