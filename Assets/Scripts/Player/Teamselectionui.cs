@@ -1,15 +1,16 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 using Fusion;
-using TMPro; // If you're using TextMeshPro, otherwise use UnityEngine.UI.Text
 
 /// <summary>
 /// Manages the team selection UI in the MainMenu scene.
 /// Shows team buttons after the player connects to the network.
 /// 
+/// FIXED VERSION - Works with regular Unity Text (no TextMeshPro required)
+/// 
 /// SETUP INSTRUCTIONS:
 /// 1. Attach this script to a new GameObject called "TeamSelectionManager" in MainMenu scene
-/// 2. Create the UI elements (see Setup Instructions section below)
+/// 2. Create the UI elements (see Setup Instructions section in SETUP_GUIDE.md)
 /// 3. Assign all UI references in the Inspector
 /// 4. Link this to GameNetworkManager
 /// 
@@ -33,14 +34,14 @@ public class TeamSelectionUI : MonoBehaviour
     [SerializeField] private Button team1Button;
 
     [Tooltip("Text showing Team 1 player count")]
-    [SerializeField] private TextMeshProUGUI team1CountText; // Change to Text if not using TMP
+    [SerializeField] private Text team1CountText; // Using regular Unity Text
 
     [Header("🔴 Team 2 Button")]
     [Tooltip("Button to join Team 2 (Red Team)")]
     [SerializeField] private Button team2Button;
 
     [Tooltip("Text showing Team 2 player count")]
-    [SerializeField] private TextMeshProUGUI team2CountText; // Change to Text if not using TMP
+    [SerializeField] private Text team2CountText; // Using regular Unity Text
 
     [Header("🎮 Network Settings")]
     [Tooltip("Reference to GameNetworkManager to trigger scene loading")]
@@ -79,6 +80,10 @@ public class TeamSelectionUI : MonoBehaviour
         {
             teamSelectionPanel.SetActive(false);
         }
+        else
+        {
+            Debug.LogError("❌ Team Selection Panel is not assigned in Inspector!");
+        }
 
         // Set up button click listeners
         if (team1Button != null)
@@ -94,7 +99,7 @@ public class TeamSelectionUI : MonoBehaviour
         }
         else
         {
-            Debug.LogError("❌ Team 1 button is not assigned!");
+            Debug.LogError("❌ Team 1 button is not assigned in Inspector!");
         }
 
         if (team2Button != null)
@@ -110,13 +115,13 @@ public class TeamSelectionUI : MonoBehaviour
         }
         else
         {
-            Debug.LogError("❌ Team 2 button is not assigned!");
+            Debug.LogError("❌ Team 2 button is not assigned in Inspector!");
         }
 
         // Validate network manager reference
         if (networkManager == null)
         {
-            Debug.LogError("❌ GameNetworkManager reference is not assigned!");
+            Debug.LogError("❌ GameNetworkManager reference is not assigned in Inspector!");
         }
 
         Debug.Log("✅ TeamSelectionUI initialized");
@@ -222,8 +227,6 @@ public class TeamSelectionUI : MonoBehaviour
         HideTeamSelection();
 
         // Load the gameplay scene using Fusion's scene management
-        // Note: The actual scene loading is handled by Fusion's NetworkSceneManager
-        // which was set up in GameNetworkManager when connecting
         await runner.LoadScene(SceneRef.FromIndex(gameplaySceneIndex));
 
         Debug.Log("✅ Gameplay scene load initiated");
