@@ -3,13 +3,15 @@ using UnityEngine;
 using Fusion;
 using Fusion.Sockets;
 using System;
-using System.Linq;  // ADDED THIS - needed for Count()
+using System.Linq;
 
 /// <summary>
-/// FIXED VERSION - Now handles players who joined before scene loaded!
+/// COMPREHENSIVE FIX - Handles both Host and Client spawning correctly
 /// 
-/// KEY FIX: In AutoHostOrClient mode, players join in MainMenu, but this script
-/// is only in Gameplay scene. We need to spawn existing players when scene loads.
+/// KEY INSIGHT: In Host/Client mode:
+/// - Host (Player 0) spawns themselves locally
+/// - When Client (Player 1) joins, the HOST spawns them
+/// - This is handled automatically by OnPlayerJoined being called on the HOST
 /// </summary>
 public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 {
@@ -61,6 +63,9 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             Debug.Log("✅ ========================================");
             Debug.Log("✅ NetworkedSpawnManager STARTED");
             Debug.Log($"✅ Found NetworkRunner: {runner.name}");
+            Debug.Log($"✅ GameMode: {runner.GameMode}");
+            Debug.Log($"✅ IsServer: {runner.IsServer}");
+            Debug.Log($"✅ IsClient: {runner.IsClient}");
             Debug.Log("✅ Registering callbacks...");
             Debug.Log("✅ ========================================");
 
@@ -69,8 +74,8 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
             Debug.Log("✅ Callbacks registered successfully");
 
-            // CRITICAL FIX: Check if players are already in the session
-            CheckForExistingPlayers();
+            // Wait a moment for the scene to fully load, then check for existing players
+            StartCoroutine(DelayedPlayerCheck());
         }
         else
         {
@@ -83,9 +88,16 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         ValidateSpawnPoints();
     }
 
+    private System.Collections.IEnumerator DelayedPlayerCheck()
+    {
+        // Wait a bit for the scene to fully initialize
+        yield return new WaitForSeconds(0.2f);
+        CheckForExistingPlayers();
+    }
+
     /// <summary>
-    /// CRITICAL FIX: Spawn players who joined before this scene loaded
-    /// This happens in AutoHostOrClient mode where player joins in MainMenu
+    /// CRITICAL: Spawn players who joined in MainMenu but weren't spawned yet
+    /// Only runs on the HOST (not clients)
     /// </summary>
     private void CheckForExistingPlayers()
     {
@@ -95,8 +107,17 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             return;
         }
 
+        // CRITICAL: Only the HOST spawns players in Host/Client mode
+        if (!runner.IsServer)
+        {
+            Debug.Log("⏭️ We're a client - host will handle spawning");
+            return;
+        }
+
         Debug.Log("🔍 ========================================");
         Debug.Log("🔍 Checking for existing players...");
+        Debug.Log($"🔍 Active players count: {runner.ActivePlayers.Count()}");
+        Debug.Log($"🔍 We are the HOST - we will spawn all players");
         Debug.Log("🔍 ========================================");
 
         // Get all active players in the session
@@ -109,16 +130,16 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             // Spawn them if they haven't been spawned yet
             if (!spawnedPlayers.Contains(player))
             {
-                Debug.Log($"🎮 Spawning existing player {player.PlayerId}");
+                Debug.Log($"🎮 Player {player.PlayerId} needs spawning");
                 HandlePlayerJoined(player);
             }
             else
             {
-                Debug.Log($"⏭️ Player {player.PlayerId} already spawned");
+                Debug.Log($"✅ Player {player.PlayerId} already spawned");
             }
         }
 
-        Debug.Log($"🔍 Existing player check complete. Total active players: {playerCount}");
+        Debug.Log($"🔍 Check complete. Processed {playerCount} players");
     }
 
     private void ValidateSpawnPoints()
@@ -147,18 +168,29 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
         Debug.Log($"🎮 ========================================");
-        Debug.Log($"🎮 [SPAWN MANAGER] Player {player.PlayerId} joined");
+        Debug.Log($"🎮 [SPAWN MANAGER] OnPlayerJoined callback");
+        Debug.Log($"🎮 Player: {player.PlayerId}");
+        Debug.Log($"🎮 IsServer: {runner.IsServer}");
+        Debug.Log($"🎮 Scene: {UnityEngine.SceneManagement.SceneManager.GetActiveScene().name}");
         Debug.Log($"🎮 ========================================");
+
+        // This callback runs when:
+        // 1. Player joins AFTER scene loaded (late joiner)
+        // 2. On clients when other players join (but clients can't spawn)
 
         HandlePlayerJoined(player);
     }
 
     private void HandlePlayerJoined(PlayerRef player)
     {
-        // Only server/host spawns players
-        if (!Runner.IsServer && !Runner.IsSharedModeMasterClient)
+        Debug.Log($"🔧 HandlePlayerJoined called for Player {player.PlayerId}");
+        Debug.Log($"🔧 IsServer: {runner.IsServer}");
+        Debug.Log($"🔧 IsInitialized: {isInitialized}");
+
+        // CRITICAL: Only HOST spawns players in Host/Client mode
+        if (!runner.IsServer)
         {
-            Debug.Log($"⏭️ Not server/host - skipping spawn logic");
+            Debug.Log($"⏭️ We're a client - not spawning (host handles this)");
             return;
         }
 
@@ -174,12 +206,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        if (playerTeams.ContainsKey(player))
-        {
-            Debug.LogWarning($"⚠️ Player {player.PlayerId} already has a team assigned. Skipping spawn.");
-            return;
-        }
-
+        // Mark as spawning BEFORE we actually spawn (prevents double-spawn)
         spawnedPlayers.Add(player);
         Debug.Log($"✅ Player {player.PlayerId} marked as spawning");
 
@@ -201,8 +228,12 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         Debug.Log($"🎯    Player ID: {player.PlayerId}");
         Debug.Log($"🎯    Team: {team}");
         Debug.Log($"🎯    Position: {spawnPosition}");
+        Debug.Log($"🎯    GameMode: {runner.GameMode}");
+        Debug.Log($"🎯    IsServer: {runner.IsServer}");
         Debug.Log($"🎯 ========================================");
 
+        // In Host/Client mode, Runner.Spawn on the host will automatically
+        // replicate the spawned object to all clients
         NetworkObject spawnedObject = Runner.Spawn(
             playerPrefab,
             spawnPosition,
@@ -214,10 +245,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         if (spawnedObject != null)
         {
             Debug.Log($"✅ Player {player.PlayerId} spawned successfully!");
+            Debug.Log($"✅ NetworkObject ID: {spawnedObject.Id}");
         }
         else
         {
             Debug.LogError($"❌ Failed to spawn player {player.PlayerId}!");
+            // Remove from spawned list since spawn failed
+            spawnedPlayers.Remove(player);
         }
     }
 
@@ -225,7 +259,11 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     {
         if (verboseLogging)
         {
-            Debug.Log($"🎉 OnPlayerSpawned callback running for team {team}");
+            Debug.Log($"🎉 ========================================");
+            Debug.Log($"🎉 OnPlayerSpawned callback");
+            Debug.Log($"🎉 Team: {team}");
+            Debug.Log($"🎉 Position: {obj.transform.position}");
+            Debug.Log($"🎉 ========================================");
         }
 
         PlayerTeamData teamData = obj.GetComponent<PlayerTeamData>();
@@ -239,14 +277,37 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         {
             Debug.LogError("❌ PlayerTeamData component NOT FOUND!");
         }
+
+        // Force initialize the spawn position
+        NetworkPlayerWrapper wrapper = obj.GetComponent<NetworkPlayerWrapper>();
+        if (wrapper != null)
+        {
+            wrapper.ForceInitializePosition(obj.transform.position);
+            Debug.Log($"✅ Position locked at: {obj.transform.position}");
+        }
+        else
+        {
+            Debug.LogWarning("⚠️ NetworkPlayerWrapper not found - position lock skipped");
+        }
     }
     #endregion
 
     #region Team Assignment
     private int AssignTeam(PlayerRef player)
     {
+        Debug.Log($"🎲 AssignTeam called for Player {player.PlayerId}");
+
+        // Check if player already has a team (reconnecting case)
+        if (playerTeams.TryGetValue(player, out int existingTeam))
+        {
+            Debug.Log($"♻️ Player {player.PlayerId} reconnecting with existing team {existingTeam}");
+            return existingTeam;
+        }
+
         int team = 0;
 
+        // Check if LOCAL player made a team choice
+        // Note: This only works for the local player (player who chose the team)
         if (TeamSelectionData.HasChosenTeam())
         {
             team = TeamSelectionData.GetLocalPlayerTeam();
@@ -264,7 +325,12 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
                 team = 0;
             }
         }
+        else
+        {
+            Debug.Log($"ℹ️ No team choice found for Player {player.PlayerId}");
+        }
 
+        // If no team chosen, auto-balance
         if (team == 0)
         {
             Debug.Log($"⚖️ ========================================");
@@ -276,6 +342,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             team = (team1Count <= team2Count) ? 1 : 2;
         }
 
+        // Update team counts
         if (team == 1)
             team1Count++;
         else if (team == 2)
@@ -299,7 +366,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     {
         Debug.Log($"👋 Player {player.PlayerId} left the game");
 
-        if (!Runner.IsServer && !Runner.IsSharedModeMasterClient)
+        if (!runner.IsServer)
             return;
 
         if (spawnedPlayers.Contains(player))
@@ -364,7 +431,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     public void OnSceneLoadDone(NetworkRunner runner)
     {
-        Debug.Log("🎬 Scene load complete - checking for existing players");
+        Debug.Log("🎬 ========================================");
+        Debug.Log("🎬 Scene load complete");
+        Debug.Log($"🎬 Scene: {UnityEngine.SceneManagement.SceneManager.GetActiveScene().name}");
+        Debug.Log($"🎬 IsServer: {runner.IsServer}");
+        Debug.Log("🎬 Will check for existing players");
+        Debug.Log("🎬 ========================================");
+
         CheckForExistingPlayers();
     }
     public void OnSceneLoadStart(NetworkRunner runner) { }

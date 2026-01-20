@@ -464,12 +464,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 32de5c78d40b762428c5df783c04d47d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkPlayerWrapper
-  yourPlayerControllerScript: {fileID: 4596838793308598492}
-  rb: {fileID: 6614906323051471733}
   _NetworkPosition: {x: 0, y: 0, z: 0}
   _NetworkVelocity: {x: 0, y: 0}
   _NetworkScaleX: 1
-  _NetworkTeamId: 0
 --- !u!114 &791806707811693276
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -560,7 +557,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
   SortKey: 2767735258
   ObjectInterest: 1
-  Flags: 262145
+  Flags: 786433
   NestedObjects: []
   NetworkedBehaviours:
   - {fileID: 1716746421360222117}
