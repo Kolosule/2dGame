@@ -2,7 +2,8 @@
 using Fusion;
 
 /// <summary>
-/// FIXED VERSION - Properly handles spawn position in Shared Mode
+/// FINAL FIX - Properly handles spawn position replication
+/// The key insight: Server sets spawn position, clients receive it
 /// </summary>
 [RequireComponent(typeof(Rigidbody2D))]
 public class NetworkPlayerWrapper : NetworkBehaviour
@@ -15,41 +16,35 @@ public class NetworkPlayerWrapper : NetworkBehaviour
 
     #region Private Fields
     private Rigidbody2D rb;
-    private bool networkPositionInitialized = false;
-    private bool spawnPositionLocked = false;
-    private Vector3 initialSpawnPosition;
     #endregion
 
     public override void Spawned()
     {
         rb = GetComponent<Rigidbody2D>();
 
-        // CRITICAL FIX: Lock the spawn position
-        initialSpawnPosition = transform.position;
-        spawnPositionLocked = true;
-
         Debug.Log($"🌐 ========================================");
         Debug.Log($"🌐 PLAYER SPAWNED ON NETWORK");
         Debug.Log($"🌐 Time: {Time.time:F2}");
-        Debug.Log($"🌐 Initial Position: {initialSpawnPosition}");
+        Debug.Log($"🌐 Position: {transform.position}");
         Debug.Log($"🌐 Name: {gameObject.name}");
         Debug.Log($"🌐 HasInputAuthority: {HasInputAuthority}");
         Debug.Log($"🌐 HasStateAuthority: {HasStateAuthority}");
         Debug.Log($"🌐 GameMode: {Runner.GameMode}");
         Debug.Log($"🌐 ========================================");
 
-        // Check if spawning at origin (this would indicate a problem)
-        if (initialSpawnPosition == Vector3.zero || initialSpawnPosition.magnitude < 1f)
+        // CRITICAL: Initialize NetworkPosition immediately
+        // This happens on both server and client when object spawns
+        if (HasStateAuthority)
         {
-            Debug.LogError("⚠️ PLAYER SPAWNED AT ORIGIN OR NEAR ORIGIN!");
-            Debug.LogError("This suggests spawn position wasn't set correctly!");
+            // Server: Set the initial position
+            NetworkPosition = transform.position;
+            Debug.Log($"✅ [SERVER] Set initial NetworkPosition: {NetworkPosition}");
         }
-
-        // Initialize networked position immediately
-        if (HasInputAuthority)
+        else
         {
-            NetworkPosition = initialSpawnPosition;
-            networkPositionInitialized = true;
+            // Client: Immediately apply the server's position
+            transform.position = NetworkPosition;
+            Debug.Log($"✅ [CLIENT] Applied NetworkPosition from server: {NetworkPosition}");
         }
 
         // Wait a frame before setting up camera and collisions
@@ -73,20 +68,17 @@ public class NetworkPlayerWrapper : NetworkBehaviour
     }
 
     /// <summary>
-    /// CRITICAL FIX: Public method to force initialize position from spawn manager
+    /// Public method to force initialize position from spawn manager
+    /// Called by NetworkedSpawnManager after spawning
     /// </summary>
     public void ForceInitializePosition(Vector3 position)
     {
-        initialSpawnPosition = position;
-        transform.position = position;
-
-        if (HasInputAuthority)
+        if (HasStateAuthority)
         {
             NetworkPosition = position;
-            networkPositionInitialized = true;
+            transform.position = position;
+            Debug.Log($"🔒 [SERVER] Force initialized position to: {position}");
         }
-
-        Debug.Log($"🔒 Force initialized position to: {position}");
     }
 
     private System.Collections.IEnumerator SetupTeammateCollisions()
@@ -135,35 +127,42 @@ public class NetworkPlayerWrapper : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
-        // Physics-based movement input handling
-        if (HasInputAuthority)
+        // CRITICAL FIX: Server always updates NetworkPosition
+        // Client only updates if they have input authority (their own player)
+        if (HasStateAuthority)
         {
-            // CRITICAL FIX: Don't update position until spawn lock is released
-            if (!spawnPositionLocked)
+            // Server: Always update NetworkPosition from transform
+            NetworkPosition = transform.position;
+
+            if (rb != null)
             {
-                NetworkPosition = transform.position;
                 NetworkVelocity = rb.linearVelocity;
-                NetworkScaleX = transform.localScale.x;
             }
-            else
-            {
-                // Release the spawn lock after a short delay
-                if (Time.time > 0.1f)
-                {
-                    spawnPositionLocked = false;
-                    networkPositionInitialized = true;
-                    Debug.Log("🔓 Spawn position lock released");
-                }
-            }
+
+            NetworkScaleX = transform.localScale.x;
         }
+        else if (HasInputAuthority)
+        {
+            // Client with input authority: Update from their local transform
+            // This handles client prediction
+            NetworkPosition = transform.position;
+
+            if (rb != null)
+            {
+                NetworkVelocity = rb.linearVelocity;
+            }
+
+            NetworkScaleX = transform.localScale.x;
+        }
+        // else: Remote player on client - do nothing, just receive updates
     }
 
     public override void Render()
     {
-        // CRITICAL FIX: Only apply networked position to remote players AFTER initialization
-        // AND respect the spawn position lock
-        if (!HasInputAuthority && networkPositionInitialized && !spawnPositionLocked)
+        // CRITICAL FIX: Apply networked position to remote players
+        if (!HasInputAuthority)
         {
+            // This is a remote player - apply the networked position
             transform.position = NetworkPosition;
 
             if (rb != null)
@@ -175,17 +174,14 @@ public class NetworkPlayerWrapper : NetworkBehaviour
             scale.x = NetworkScaleX;
             transform.localScale = scale;
         }
-        // If spawn position is locked, maintain the spawn position
-        else if (spawnPositionLocked)
-        {
-            transform.position = initialSpawnPosition;
-        }
+        // else: Local player - don't override, they control their own position
     }
 
     private System.Collections.IEnumerator SetupCameraDelayed()
     {
         yield return new WaitForSeconds(0.1f);
 
+        // Only setup camera for local player
         if (!HasInputAuthority) yield break;
 
         CameraFollow cam = FindFirstObjectByType<CameraFollow>();
