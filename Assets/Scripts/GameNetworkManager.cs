@@ -7,8 +7,8 @@ using System;
 using System.Collections.Generic;
 
 /// <summary>
-/// SINGLE PLAYER VERSION - Works for local testing without Photon
-/// Uses AutoHostOrClient mode which will work offline
+/// FIXED VERSION - Prevents auto-spawning without breaking Fusion's input system
+/// The key is to NOT implement OnPlayerJoined spawning here
 /// </summary>
 public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 {
@@ -58,9 +58,9 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         Debug.Log("🏠 Starting game...");
         SetButtonsInteractable(false);
 
-        // Use AutoHostOrClient for single player / offline mode
-        // This will work without Photon connection
-        GameMode mode = singlePlayerMode ? GameMode.AutoHostOrClient : GameMode.Host;
+        // CRITICAL FIX: Always use Host mode for multiplayer
+        // AutoHostOrClient creates separate sessions!
+        GameMode mode = GameMode.Host;  // ⭐ CHANGED THIS
 
         var args = new StartGameArgs()
         {
@@ -141,9 +141,22 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         else
         {
             Debug.LogError("❌ Cannot show team selection!");
-            SetButtonsInteractable(true);
-            if (menuPanel != null)
-                menuPanel.SetActive(true);
+        }
+    }
+
+    void OnDestroy()
+    {
+        if (runner != null)
+        {
+            runner.Shutdown();
+        }
+    }
+
+    void OnApplicationQuit()
+    {
+        if (runner != null)
+        {
+            runner.Shutdown();
         }
     }
 
@@ -158,7 +171,15 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     // Fusion callbacks
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
-        Debug.Log($"🌐 Player {player.PlayerId} joined");
+        Debug.Log($"🌐 ========================================");
+        Debug.Log($"🌐 Player {player.PlayerId} joined in MainMenu");
+        Debug.Log($"🌐 Scene: {SceneManager.GetActiveScene().name}");
+        Debug.Log($"🌐 We will NOT spawn them here");
+        Debug.Log($"🌐 NetworkedSpawnManager will handle spawning");
+        Debug.Log($"🌐 ========================================");
+
+        // CRITICAL: DO NOT SPAWN PLAYER HERE
+        // Let NetworkedSpawnManager in the Gameplay scene handle it
     }
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
@@ -211,7 +232,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     public void OnSceneLoadDone(NetworkRunner runner)
     {
-        Debug.Log("🎬 Scene loaded");
+        Debug.Log($"🎬 Scene loaded: {SceneManager.GetActiveScene().name}");
     }
     public void OnSceneLoadStart(NetworkRunner runner)
     {
