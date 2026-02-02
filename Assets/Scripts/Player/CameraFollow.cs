@@ -2,7 +2,11 @@
 using System.Collections;
 
 /// <summary>
-/// Camera follow that handles scene transitions and continuously searches for player
+/// FIXED VERSION - Only follows the LOCAL player, not all players
+/// Key changes:
+/// - Only searches for players with HasInputAuthority = true
+/// - Validates target player before following
+/// - Prevents other players from hijacking the camera
 /// </summary>
 public class CameraFollow : MonoBehaviour
 {
@@ -33,6 +37,7 @@ public class CameraFollow : MonoBehaviour
     private Vector3 targetLookAhead = Vector3.zero;
     private Vector3 originalPos;
     private Coroutine searchCoroutine;
+    private NetworkPlayerWrapper lockedPlayer; // ⭐ NEW: Remember which player we're following
 
     void Awake()
     {
@@ -48,7 +53,6 @@ public class CameraFollow : MonoBehaviour
         originalPos = camTransform.localPosition;
         cam.orthographicSize = zoomOutSize;
 
-        // Start searching for player when enabled
         if (autoFindPlayer && searchCoroutine == null)
         {
             searchCoroutine = StartCoroutine(SearchForPlayer());
@@ -57,7 +61,6 @@ public class CameraFollow : MonoBehaviour
 
     void OnDisable()
     {
-        // Stop searching when disabled
         if (searchCoroutine != null)
         {
             StopCoroutine(searchCoroutine);
@@ -66,43 +69,43 @@ public class CameraFollow : MonoBehaviour
     }
 
     /// <summary>
-    /// Continuously search for the local player until found
+    /// ⭐ FIXED VERSION - Only finds the LOCAL player
     /// </summary>
     private IEnumerator SearchForPlayer()
     {
-        Debug.Log("CameraFollow: Started searching for player...");
+        Debug.Log("CameraFollow: Started searching for LOCAL player...");
 
         while (true)
         {
-            // If we already have a target, check if it's still valid
-            if (Target != null)
+            // If we already have a valid target, check if it's still the local player
+            if (Target != null && lockedPlayer != null)
             {
-                yield return new WaitForSeconds(searchInterval);
-                continue;
-            }
-
-            // Search for player by tag
-            GameObject player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null)
-            {
-                // Check if this is the LOCAL player (has enabled PlayerController)
-                var controller = player.GetComponent<PlayerController>();
-                if (controller != null && controller.enabled)
+                // Verify it's still our player
+                if (lockedPlayer.HasInputAuthority)
                 {
-                    SetTarget(player.transform);
-                    Debug.Log($"✓ CameraFollow: Found local player via tag: {player.name}");
-                    yield break; // Stop searching
+                    yield return new WaitForSeconds(searchInterval);
+                    continue;
+                }
+                else
+                {
+                    // Player lost input authority (shouldn't happen, but handle it)
+                    Debug.LogWarning("CameraFollow: Player lost input authority! Searching again...");
+                    Target = null;
+                    lockedPlayer = null;
                 }
             }
 
-            // Alternative: Search for NetworkPlayerWrapper with IsOwner
+            // Search for the LOCAL player only
             NetworkPlayerWrapper[] players = FindObjectsByType<NetworkPlayerWrapper>(FindObjectsSortMode.None);
+
             foreach (var playerWrapper in players)
             {
+                // ⭐ CRITICAL CHECK: Only follow players with InputAuthority
                 if (playerWrapper.HasInputAuthority)
                 {
                     SetTarget(playerWrapper.transform);
-                    Debug.Log($"✓ CameraFollow: Found local player via NetworkPlayerWrapper: {playerWrapper.name}");
+                    lockedPlayer = playerWrapper;
+                    Debug.Log($"✓ CameraFollow: Found and locked to LOCAL player: {playerWrapper.name}");
                     yield break; // Stop searching
                 }
             }
@@ -114,8 +117,20 @@ public class CameraFollow : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (Target == null)
+        if (Target == null) return;
+
+        // ⭐ SAFETY CHECK: Verify we're still following our player
+        if (lockedPlayer != null && !lockedPlayer.HasInputAuthority)
         {
+            Debug.LogWarning("CameraFollow: Target player lost input authority!");
+            Target = null;
+            lockedPlayer = null;
+
+            // Restart search
+            if (searchCoroutine == null)
+            {
+                searchCoroutine = StartCoroutine(SearchForPlayer());
+            }
             return;
         }
 
@@ -135,12 +150,10 @@ public class CameraFollow : MonoBehaviour
         Vector3 targetPosition = baseTarget + currentLookAhead;
         Vector3 delta = targetPosition - transform.position;
 
-        // Snap if far away
         if (delta.magnitude > 50f)
         {
             transform.position = targetPosition;
         }
-        // Smooth follow if outside deadzone
         else if (Mathf.Abs(delta.x) > deadzoneSize.x || Mathf.Abs(delta.y) > deadzoneSize.y)
         {
             transform.position = Vector3.Lerp(transform.position, targetPosition, followSpeed * Time.deltaTime);
@@ -167,6 +180,9 @@ public class CameraFollow : MonoBehaviour
         shakeDuration = 0.2f;
     }
 
+    /// <summary>
+    /// Sets the camera target - validates that it's the local player
+    /// </summary>
     public void SetTarget(Transform newTarget)
     {
         if (newTarget == null)
@@ -175,7 +191,16 @@ public class CameraFollow : MonoBehaviour
             return;
         }
 
+        // ⭐ VALIDATION: Ensure this is the local player
+        NetworkPlayerWrapper playerWrapper = newTarget.GetComponent<NetworkPlayerWrapper>();
+        if (playerWrapper != null && !playerWrapper.HasInputAuthority)
+        {
+            Debug.LogWarning($"⚠️ CameraFollow: Attempted to set target to NON-LOCAL player {newTarget.name}! Ignoring.");
+            return;
+        }
+
         Target = newTarget;
+        lockedPlayer = playerWrapper;
 
         Vector3 snapPosition = Target.position + offset;
         snapPosition.z = -10f;
@@ -184,7 +209,6 @@ public class CameraFollow : MonoBehaviour
 
         Debug.Log($"✓ CameraFollow: Target locked to {newTarget.name} at {snapPosition}");
 
-        // Stop searching since we found our target
         if (searchCoroutine != null)
         {
             StopCoroutine(searchCoroutine);

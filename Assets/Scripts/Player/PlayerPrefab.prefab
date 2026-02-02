@@ -420,6 +420,11 @@ MonoBehaviour:
   projectileSpeed: 40
   projectileScale: 1
   projectileCooldown: 1
+  groundCheck: {fileID: 0}
+  groundCheckRadius: 0.2
+  groundLayer:
+    serializedVersion: 2
+    m_Bits: 0
 --- !u!114 &1716746421360222117
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -467,6 +472,7 @@ MonoBehaviour:
   _NetworkPosition: {x: 0, y: 0, z: 0}
   _NetworkVelocity: {x: 0, y: 0}
   _NetworkScaleX: 1
+  _IsVisible: 0
 --- !u!114 &791806707811693276
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -560,6 +566,8 @@ MonoBehaviour:
   Flags: 786433
   NestedObjects: []
   NetworkedBehaviours:
+  - {fileID: 4596838793308598492}
+  - {fileID: 1629181840047361504}
   - {fileID: 1716746421360222117}
   - {fileID: 465053131265936943}
   - {fileID: -4804353808761203150}
