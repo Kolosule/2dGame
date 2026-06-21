@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 using Fusion;
+using Fusion.Addons.Physics;
 using Fusion.Sockets;
 using UnityEngine.SceneManagement;
 using System;
@@ -35,6 +36,13 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         DontDestroyOnLoad(gameObject);
         runner = gameObject.AddComponent<NetworkRunner>();
+
+        // Fusion steps Physics2D inside the network tick (required for NetworkRigidbody2D prediction).
+        gameObject.AddComponent<RunnerSimulatePhysics2D>();
+
+        // Register the single input source.
+        var inputProvider = gameObject.AddComponent<NetworkInputProvider>();
+        runner.AddCallbacks(inputProvider);
 
         if (hostButton != null)
             hostButton.onClick.AddListener(StartHost);
