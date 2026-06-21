@@ -677,7 +677,7 @@ namespace Fusion {
         
         // remove this one from the list
         var index = _runningCoroutines.IndexOf((ICoroutine)x);
-        Debug.Assert(index == 0, "Expected the completed coroutine to be the first in the list");
+        Debug.AssertFormat(index >= 0, "Expected the completed coroutine to be the first in the list, but was: {0}", index);
         _runningCoroutines.RemoveAt(index);
 
         // start the next one

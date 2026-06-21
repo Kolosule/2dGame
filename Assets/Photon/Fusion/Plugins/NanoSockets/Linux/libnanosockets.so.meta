@@ -82,6 +82,6 @@ AssetOrigin:
   serializedVersion: 1
   productId: 267958
   packageName: Photon Fusion
-  packageVersion: 2.0.9
+  packageVersion: 2.0.12
   assetPath: Assets/Photon/Fusion/Plugins/NanoSockets/Linux/libnanosockets.so
-  uploadId: 832254
+  uploadId: 888248

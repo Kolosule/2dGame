@@ -649,25 +649,22 @@ namespace Fusion {
 
 #region Assets/Photon/Fusion/Runtime/FusionCoroutine.cs
 
-﻿
-namespace Fusion {
+﻿namespace Fusion {
   using UnityEngine;
   using System;
   using System.Collections;
+  using System.Collections.Generic;
   using System.Runtime.ExceptionServices;
 
-  public sealed class FusionCoroutine : ICoroutine, IDisposable  {
+  public sealed class FusionCoroutine : ICoroutine, IDisposable {
     private readonly IEnumerator             _inner;
     private          Action<IAsyncOperation> _completed;
-    private          float                   _progress;
-    private          Action                  _activateAsync;
 
     public FusionCoroutine(IEnumerator inner) {
       _inner = inner ?? throw new ArgumentNullException(nameof(inner));
     }
-      
-    public event Action<IAsyncOperation> Completed
-    {
+
+    public event Action<IAsyncOperation> Completed {
       add {
         _completed += value;
         if (IsDone) {
@@ -677,34 +674,52 @@ namespace Fusion {
       remove => _completed -= value;
     }
 
-    public bool                  IsDone { get; private set; }
-    public ExceptionDispatchInfo Error  { get; private set; }
+    public bool                  IsDone   { get; private set; }
+    public float                 Progress { get; private set; }
+    public ExceptionDispatchInfo Error    { get; private set; }
 
     bool IEnumerator.MoveNext() {
       try {
         if (_inner.MoveNext()) {
           return true;
-        } else {
-          IsDone = true;
-          _completed?.Invoke(this);
-          return false;
         }
+        Progress = 1f;
+        IsDone = true;
       } catch (Exception e) {
         IsDone = true;
-        Error  = ExceptionDispatchInfo.Capture(e);
-        _completed?.Invoke(this);
-        return false;
+        Error = ExceptionDispatchInfo.Capture(e);
       }
+
+      var completed = _completed;
+      if (completed != null) {
+        List<Exception> errors = null;
+        foreach (var del in completed.GetInvocationList()) {
+          var action = (Action<IAsyncOperation>)del;
+          try {
+            action(this);
+          } catch (Exception ex) {
+            errors ??= new List<Exception>();
+            errors.Add(ex);
+          }
+        }
+        if (errors != null) {
+          throw new AggregateException($"Error during {nameof(Completed)}", errors.ToArray());
+        }
+      }
+
+      return false;
     }
 
     void IEnumerator.Reset() {
       _inner.Reset();
-      IsDone = false;
-      Error  = null;
+      IsDone    = false;
+      Progress  = 0f;
+      Error     = null;
+      _completed = null;
     }
 
     object IEnumerator.Current => _inner.Current;
-      
+
     public void Dispose() {
       if (_inner is IDisposable disposable) {
         disposable.Dispose();
@@ -1074,24 +1089,29 @@ namespace Fusion {
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void RuntimeCheck() {
-      RuntimeUnityFlagsSetup.Check_ENABLE_IL2CPP();
-      RuntimeUnityFlagsSetup.Check_ENABLE_MONO();
-
-      RuntimeUnityFlagsSetup.Check_UNITY_EDITOR();
-      RuntimeUnityFlagsSetup.Check_UNITY_GAMECORE();
-      RuntimeUnityFlagsSetup.Check_UNITY_SWITCH();
+      // BuildFlags
       RuntimeUnityFlagsSetup.Check_UNITY_WEBGL();
       RuntimeUnityFlagsSetup.Check_UNITY_XBOXONE();
-
-      RuntimeUnityFlagsSetup.Check_NETFX_CORE();
-      RuntimeUnityFlagsSetup.Check_NET_4_6();
-      RuntimeUnityFlagsSetup.Check_NET_STANDARD_2_0();
-
+      RuntimeUnityFlagsSetup.Check_UNITY_GAMECORE();
+      RuntimeUnityFlagsSetup.Check_UNITY_EDITOR();
+      RuntimeUnityFlagsSetup.Check_UNITY_SWITCH();
       RuntimeUnityFlagsSetup.Check_UNITY_2019_4_OR_NEWER();
+      RuntimeUnityFlagsSetup.Check_UNITY_6000_0_OR_NEWER();
+      RuntimeUnityFlagsSetup.Check_UNITY_64();
+      RuntimeUnityFlagsSetup.Check_UNITY_FUSION();
+      RuntimeUnityFlagsSetup.Check_UNITY_WSA();
+      // BuildTypes
+      RuntimeUnityFlagsSetup.Check_ENABLE_MONO();
+      RuntimeUnityFlagsSetup.Check_ENABLE_IL2CPP();
+      // DotNetVersion
+      RuntimeUnityFlagsSetup.Check_NET_4_6();
+      RuntimeUnityFlagsSetup.Check_NETFX_CORE();
+      RuntimeUnityFlagsSetup.Check_NET_STANDARD_2_0();
+      RuntimeUnityFlagsSetup.Check_NET_STANDARD_2_1();
+      RuntimeUnityFlagsSetup.Check_NET_LEGACY();
     }
   }
 }
-
 
 #endregion
 
