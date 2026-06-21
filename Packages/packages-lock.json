@@ -233,6 +233,14 @@
         "com.unity.modules.uielements": "1.0.0"
       }
     },
+    "com.unity.multiplayer.playmode": {
+      "version": "file:com.unity.multiplayer.playmode",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.nuget.newtonsoft-json": "2.0.2"
+      }
+    },
     "com.unity.multiplayer.tools": {
       "version": "2.2.6",
       "depth": 0,

@@ -224,7 +224,6 @@ GameObject:
   - component: {fileID: 1629181840047361504}
   - component: {fileID: 1716746421360222117}
   - component: {fileID: 3938946417030660628}
-  - component: {fileID: 465053131265936943}
   - component: {fileID: 791806707811693276}
   - component: {fileID: -4804353808761203150}
   - component: {fileID: 7275137055155341575}
@@ -233,6 +232,7 @@ GameObject:
   - component: {fileID: 963116542380703858}
   - component: {fileID: 3973079578160004190}
   - component: {fileID: 313653908765909695}
+  - component: {fileID: 1952719817621573329}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -378,8 +378,8 @@ MonoBehaviour:
   groundLayer:
     serializedVersion: 2
     m_Bits: 8
-  coyoteTimeFrames: 6
-  jumpBufferFrames: 6
+  coyoteTimeTicks: 6
+  jumpBufferTicks: 6
   jumpCutMultiplier: 0.1
   dashCooldownBar: {fileID: 0}
 --- !u!114 &1629181840047361504
@@ -457,22 +457,6 @@ MonoBehaviour:
   teamID: Team1
   spriteRenderer: {fileID: 0}
   colorizePlayer: 0
---- !u!114 &465053131265936943
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3540110564427285031}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 32de5c78d40b762428c5df783c04d47d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::NetworkPlayerWrapper
-  _NetworkPosition: {x: 0, y: 0, z: 0}
-  _NetworkVelocity: {x: 0, y: 0}
-  _NetworkScaleX: 1
-  _IsVisible: 0
 --- !u!114 &791806707811693276
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -567,12 +551,13 @@ MonoBehaviour:
   NestedObjects: []
   NetworkedBehaviours:
   - {fileID: 4596838793308598492}
+  - {fileID: 2763095343719607636}
   - {fileID: 1629181840047361504}
   - {fileID: 1716746421360222117}
-  - {fileID: 465053131265936943}
   - {fileID: -4804353808761203150}
   - {fileID: 3973079578160004190}
   - {fileID: 313653908765909695}
+  - {fileID: 1952719817621573329}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &3973079578160004190
 MonoBehaviour:
@@ -599,6 +584,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6c4bc6f5707307f44bb576a636a80315, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
+--- !u!114 &1952719817621573329
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c5e690b5fb1084f5ab1c86457af401d4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Addons.Physics::Fusion.Addons.Physics.NetworkRigidbody2D
+  _stateAuthorityChangeErrorCorrectionDelta: 0
+  SyncScale: 0
+  SyncParent: 1
+  _interpolationTarget: {fileID: 0}
+  UsePreciseRotation: 0
+  UseRenderSleepThresholds: 1
+  RenderThresholds:
+    UseEnergy: 1
+    Position: 0.01
+    Rotation: 0.01
+    Scale: 0.01
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0

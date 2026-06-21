@@ -204,12 +204,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             teamData.SetTeam(team);
             Debug.Log($"✅ Team {team} assigned");
         }
-
-        NetworkPlayerWrapper wrapper = obj.GetComponent<NetworkPlayerWrapper>();
-        if (wrapper != null)
-        {
-            wrapper.ForceInitializePosition(obj.transform.position);
-        }
+        // Position is set by Runner.Spawn and synced by NetworkRigidbody2D.
     }
     #endregion
 
