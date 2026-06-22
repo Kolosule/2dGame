@@ -59,10 +59,6 @@ public class PlayerCamera : MonoBehaviour
     [Tooltip("Should the camera arrive before the player respawns?")]
     [SerializeField] private bool arriveBeforeRespawn = true;
 
-    [Header("🔧 Debug")]
-    [Tooltip("Show debug messages in the console")]
-    [SerializeField] private bool showDebugMessages = false;
-
     // === INTERNAL VARIABLES (Don't modify these in Inspector) ===
 
     // The player this camera is following
@@ -115,10 +111,6 @@ public class PlayerCamera : MonoBehaviour
         // Initialize follow position
         currentFollowPosition = transform.position;
 
-        if (showDebugMessages)
-        {
-            Debug.Log("✓ PlayerCamera initialized and ready to find local player");
-        }
     }
 
     /// <summary>
@@ -226,10 +218,6 @@ public class PlayerCamera : MonoBehaviour
                 currentFollowPosition.z = cameraZPosition;
                 transform.position = currentFollowPosition;
 
-                if (showDebugMessages)
-                {
-                    Debug.Log($"✓ PlayerCamera: Found and following local player '{targetPlayer.name}'");
-                }
 
                 return;
             }
@@ -285,10 +273,6 @@ public class PlayerCamera : MonoBehaviour
         shakeTimer = shakeDuration;
         currentShakeIntensity = shakeIntensity;
 
-        if (showDebugMessages)
-        {
-            Debug.Log("📳 Camera shake triggered!");
-        }
     }
 
     /// <summary>
@@ -301,10 +285,6 @@ public class PlayerCamera : MonoBehaviour
         shakeTimer = duration;
         currentShakeIntensity = intensity;
 
-        if (showDebugMessages)
-        {
-            Debug.Log($"📳 Camera shake triggered! Intensity: {intensity}, Duration: {duration}");
-        }
     }
 
     /// <summary>
@@ -320,10 +300,6 @@ public class PlayerCamera : MonoBehaviour
         respawnTargetPosition.z = cameraZPosition;
         respawnTransitionTimer = 0f;
 
-        if (showDebugMessages)
-        {
-            Debug.Log($"💀 Starting respawn transition to {respawnPosition}");
-        }
     }
 
     /// <summary>
@@ -362,10 +338,6 @@ public class PlayerCamera : MonoBehaviour
             isTransitioningToRespawn = false;
             currentFollowPosition = respawnTargetPosition;
 
-            if (showDebugMessages)
-            {
-                Debug.Log("✓ Respawn transition complete");
-            }
         }
     }
 
@@ -399,10 +371,6 @@ public class PlayerCamera : MonoBehaviour
         // Cancel any ongoing transitions
         isTransitioningToRespawn = false;
 
-        if (showDebugMessages)
-        {
-            Debug.Log($"📸 Camera snapped to position: {position}");
-        }
     }
 
     /// <summary>
@@ -415,10 +383,6 @@ public class PlayerCamera : MonoBehaviour
         targetRigidbody = null;
         FindLocalPlayer();
 
-        if (showDebugMessages)
-        {
-            Debug.Log("🔄 Camera target refreshed");
-        }
     }
 
     // === PUBLIC GETTERS (for other scripts to access) ===

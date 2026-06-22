@@ -54,10 +54,6 @@ public static class TeamSelectionData
         localPlayerChosenTeam = teamNumber;
         hasTeamBeenChosen = true;
 
-        Debug.Log($"✅ ========================================");
-        Debug.Log($"✅ TEAM SELECTED: Team {teamNumber}");
-        Debug.Log($"✅ This choice will be used when spawning");
-        Debug.Log($"✅ ========================================");
     }
 
     /// <summary>
@@ -74,7 +70,6 @@ public static class TeamSelectionData
             return 0;
         }
 
-        Debug.Log($"📖 Retrieved team choice: Team {localPlayerChosenTeam}");
         return localPlayerChosenTeam;
     }
 
@@ -97,7 +92,6 @@ public static class TeamSelectionData
     {
         localPlayerChosenTeam = 0;
         hasTeamBeenChosen = false;
-        Debug.Log("🧹 Team selection cleared");
     }
 
     /// <summary>
@@ -106,7 +100,6 @@ public static class TeamSelectionData
     public static void Reset()
     {
         ClearTeamSelection();
-        Debug.Log("🔄 TeamSelectionData reset");
     }
 
     #endregion

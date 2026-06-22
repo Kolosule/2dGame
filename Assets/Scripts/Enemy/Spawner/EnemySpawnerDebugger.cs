@@ -17,9 +17,6 @@ public class EnemySpawnerDebugger : NetworkBehaviour
 
     private void LogSpawnerStatus()
     {
-        Debug.Log($"🐛 ENEMY SPAWNER: {gameObject.name}");
-        Debug.Log($"  HasStateAuthority: {HasStateAuthority}");
-        Debug.Log($"  IsServer: {Runner.IsServer}");
 
         NetworkObject[] enemies = FindObjectsByType<NetworkObject>(FindObjectsSortMode.None);
         int enemyCount = 0;
@@ -29,10 +26,8 @@ public class EnemySpawnerDebugger : NetworkBehaviour
             if (obj.GetComponent<EnemyAI>() != null)
             {
                 enemyCount++;
-                Debug.Log($"  Enemy found: {obj.name} at {obj.transform.position}");
             }
         }
 
-        Debug.Log($"  Total enemies: {enemyCount}");
     }
 }

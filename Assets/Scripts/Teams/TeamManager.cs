@@ -35,15 +35,9 @@ public class TeamManager : MonoBehaviour
         // Validate team data
         if (team1Data == null)
             Debug.LogError("⚠️ Team1Data not assigned in TeamManager!");
-        else
-            Debug.Log($"✓ Team1Data loaded: {team1Data.teamName} (ID: {team1Data.teamID})");
 
         if (team2Data == null)
             Debug.LogError("⚠️ Team2Data not assigned in TeamManager!");
-        else
-            Debug.Log($"✓ Team2Data loaded: {team2Data.teamName} (ID: {team2Data.teamID})");
-
-        Debug.Log("✓ TeamManager initialized");
     }
 
     // ---- Enum-keyed API. Bridges to the configured TeamData assets via TeamUtil. ----
@@ -72,6 +66,31 @@ public class TeamManager : MonoBehaviour
     {
         if (defender == Team.Team3AI && !aiUsesTerritory) return 1.0f;
         return GetDamageDealtModifier(defender, -territorialAdvantage);
+    }
+
+    /// <summary>
+    /// Distance-based territorial advantage for a team at a world position:
+    /// +1 at own base, -1 at enemy base, 0 at midpoint (or when data is missing).
+    /// Single source of the formula — players and the unified damage pipeline both use it.
+    /// </summary>
+    public float GetTerritorialAdvantage(Team team, Vector2 position)
+    {
+        if (team == Team.None) return 0f;
+
+        TeamData myTeam = GetTeamData(team);
+        if (myTeam == null) return 0f;
+
+        Team opposing = team == Team.Team1 ? Team.Team2 : Team.Team1;
+        TeamData enemyTeam = GetTeamData(opposing);
+        if (enemyTeam == null) return 0f;
+
+        float distToOwnBase = Vector2.Distance(position, myTeam.basePosition);
+        float distToEnemyBase = Vector2.Distance(position, enemyTeam.basePosition);
+        float totalDist = distToOwnBase + distToEnemyBase;
+        if (totalDist < 0.01f) return 0f;
+
+        float advantage = 1f - (2f * distToOwnBase / totalDist);
+        return Mathf.Clamp(advantage, -1f, 1f);
     }
 
     /// <summary>PvPvE: distinct assigned teams are hostile.</summary>

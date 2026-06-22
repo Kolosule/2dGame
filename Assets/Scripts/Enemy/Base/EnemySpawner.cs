@@ -57,7 +57,6 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             CreateRelativePatrolPoints();
         }
 
-        Debug.Log($"[SERVER] NetworkedEnemySpawner initialized: {gameObject.name}");
     }
 
     private void CreateRelativePatrolPoints()
@@ -74,7 +73,6 @@ public class NetworkedEnemySpawner : NetworkBehaviour
         pointBObj.transform.parent = transform;
         autoPatrolPointB = pointBObj.transform;
 
-        Debug.Log($"[SERVER] Created automatic patrol points for {gameObject.name}");
     }
 
     public override void FixedUpdateNetwork()
@@ -110,7 +108,6 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             }
         );
 
-        Debug.Log($"[SERVER] Spawned enemy at {transform.position}");
     }
 
     /// <summary>
@@ -127,7 +124,6 @@ public class NetworkedEnemySpawner : NetworkBehaviour
         {
             teamComponent.teamID = teamID;
             teamComponent.territorialAdvantage = territorialAdvantage;
-            //Debug.Log($"[SERVER] Assigned team {teamID} to {enemyObj.name}");
         }
         else
         {
@@ -145,7 +141,6 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             //if (pointA != null && pointB != null)
             //{
                // enemyAI.SetPatrolPoints(pointA, pointB);
-              //  Debug.Log($"[SERVER] Assigned patrol points to {enemyObj.name}");
           //  }
            // else
            // {
@@ -175,7 +170,6 @@ public class NetworkedEnemySpawner : NetworkBehaviour
         if (HasStateAuthority)
         {
             CurrentEnemyCount--;
-            Debug.Log($"[SERVER] Enemy despawned. Count: {CurrentEnemyCount}/{maxEnemies}");
         }
     }
 

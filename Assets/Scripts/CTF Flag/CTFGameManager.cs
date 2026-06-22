@@ -133,14 +133,10 @@ public class CTFGameManager : NetworkBehaviour
                 team2Flag = flag;
         }
 
-        if (team1Flag != null)
-            Debug.Log($"✓ Found Team1 flag: {team1Flag.name}");
-        else
+        if (team1Flag == null)
             Debug.LogError("⚠️ Team1 flag not found!");
 
-        if (team2Flag != null)
-            Debug.Log($"✓ Found Team2 flag: {team2Flag.name}");
-        else
+        if (team2Flag == null)
             Debug.LogError("⚠️ Team2 flag not found!");
     }
 
@@ -195,10 +191,6 @@ public class CTFGameManager : NetworkBehaviour
         float team1FlagToTeam2Base = Vector3.Distance(team1Flag.transform.position, team2BasePos);
         float team2FlagToTeam2Base = Vector3.Distance(team2Flag.transform.position, team2BasePos);
 
-        // Debug logging
-       // Debug.Log($"[CTF] Team1 flag to Team1 base: {team1FlagToTeam1Base:F2} | Team2 flag to Team1 base: {team2FlagToTeam1Base:F2}");
-      //  Debug.Log($"[CTF] Team1 flag to Team2 base: {team1FlagToTeam2Base:F2} | Team2 flag to Team2 base: {team2FlagToTeam2Base:F2}");
-
         // Check if team1 has both flags at their base
         bool team1FlagAtTeam1Base = team1FlagToTeam1Base < captureDistance;
         bool team2FlagAtTeam1Base = team2FlagToTeam1Base < captureDistance;
@@ -211,12 +203,10 @@ public class CTFGameManager : NetworkBehaviour
 
         if (Team1HasBothFlags)
         {
-            Debug.Log("[CTF] TEAM 1 WINS!");
             EndGame(1);
         }
         else if (Team2HasBothFlags)
         {
-            Debug.Log("[CTF] TEAM 2 WINS!");
             EndGame(2);
         }
     }
@@ -366,8 +356,6 @@ public class CTFGameManager : NetworkBehaviour
     public void OnFlagCaptured(string flagOwner, string capturingTeam)
     {
         if (!HasStateAuthority) return;
-
-        Debug.Log($"Flag captured! {flagOwner} flag captured by {capturingTeam}");
 
         // Check if capturing team now has both flags in their base
         CheckWinCondition();

@@ -83,7 +83,6 @@ public class TeamSelectionUI : MonoBehaviour
         SetButtonsInteractable(true);
         SetStatus("Choose your team!");
 
-        Debug.Log("📱 TEAM SELECTION UI SHOWN");
     }
 
     public void HideTeamSelection()
@@ -96,7 +95,6 @@ public class TeamSelectionUI : MonoBehaviour
 
     private void OnTeamButtonClicked(int teamNumber)
     {
-        Debug.Log($"🎯 TEAM {teamNumber} SELECTED");
 
         if (teamNumber != 1 && teamNumber != 2)
         {
@@ -117,7 +115,6 @@ public class TeamSelectionUI : MonoBehaviour
         SetButtonsInteractable(false);
         SetStatus($"Joined Team {teamNumber}.\nWaiting for other players...");
 
-        Debug.Log("⏳ Waiting for all players to choose...");
     }
 
     /// <summary>Sets the status message, creating a fallback label if none was assigned.</summary>

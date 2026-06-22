@@ -85,7 +85,6 @@ public class PlayerStatsHandler : NetworkBehaviour
     {
         // This is used by the old RespawnManager system
         // We don't actually need to store this since Fusion handles it
-        Debug.Log($"SetPlayerID called with ID: {id} (using Fusion networking instead)");
     }
 
     /// <summary>
@@ -112,7 +111,6 @@ public class PlayerStatsHandler : NetworkBehaviour
         float timeSinceSpawn = Time.time - spawnTime;
         if (timeSinceSpawn < spawnImmunityDuration)
         {
-            Debug.Log($"🛡️ Player has spawn immunity! ({(spawnImmunityDuration - timeSinceSpawn):F2}s remaining)");
             return;
         }
 
@@ -125,7 +123,6 @@ public class PlayerStatsHandler : NetworkBehaviour
         CurrentHealth -= damage;
         CurrentHealth = Mathf.Max(0, CurrentHealth);
 
-        Debug.Log($"Player took {damage} damage. Current health: {CurrentHealth}/{stats.maxHealth}");
 
         if (CurrentHealth <= 0)
         {
@@ -144,7 +141,6 @@ public class PlayerStatsHandler : NetworkBehaviour
         if (!HasStateAuthority) return;
 
         IsDead = true;
-        Debug.Log("Player died!");
 
         // Drop flag if carrying one
         DropFlagOnDeath();
@@ -154,7 +150,6 @@ public class PlayerStatsHandler : NetworkBehaviour
         if (cameraHandler != null)
         {
             cameraHandler.enabled = false;
-            Debug.Log("Disabled PlayerCameraRespawnHandler to prevent camera jump issues");
         }
 
         // Disable player controls on all clients
@@ -179,7 +174,6 @@ public class PlayerStatsHandler : NetworkBehaviour
             // Check if this player is carrying this flag
             if (flag.IsCarriedBy(Object.InputAuthority))
             {
-                Debug.Log($"Player was carrying {flag.OwningTeam}'s flag - dropping it!");
                 flag.DropFlagRpc();
                 return; // Player can only carry one flag
             }
@@ -239,7 +233,6 @@ public class PlayerStatsHandler : NetworkBehaviour
                 rb.angularVelocity = 0f;
             }
 
-            Debug.Log($"✓ Player respawned at team {teamData.Team} spawn point: {spawnPosition}");
         }
         else
         {
@@ -254,10 +247,8 @@ public class PlayerStatsHandler : NetworkBehaviour
         if (cameraHandler != null)
         {
             cameraHandler.enabled = true;
-            Debug.Log("Re-enabled PlayerCameraRespawnHandler after respawn");
         }
 
-        Debug.Log("Player respawned!");
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]

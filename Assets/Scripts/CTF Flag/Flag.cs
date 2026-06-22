@@ -82,7 +82,6 @@ public class Flag : NetworkBehaviour
             HomePosition = transform.position;
             CurrentState = FlagState.AtHome;
             CarrierPlayerRef = PlayerRef.None;
-            Debug.Log($"✓ {owningTeam} flag spawned at {HomePosition}");
         }
 
         // Initialize visuals on all clients based on current state
@@ -189,7 +188,6 @@ public class Flag : NetworkBehaviour
             CTFGameManager.Instance.RPC_ShowNotification(notification);
         }
 
-        Debug.Log($"✓ {owningTeam} flag picked up by {player.name} (Player {playerRef})");
     }
 
     /// <summary>
@@ -232,7 +230,6 @@ public class Flag : NetworkBehaviour
             CTFGameManager.Instance.RPC_ShowNotification($"{TeamUtil.DisplayName(TeamUtil.Normalize(owningTeam))} flag has been dropped!");
         }
 
-        Debug.Log($"✓ {owningTeam} flag dropped at {dropPosition}");
     }
 
     /// <summary>
@@ -271,7 +268,6 @@ public class Flag : NetworkBehaviour
             CTFGameManager.Instance.RPC_ShowNotification($"{TeamUtil.DisplayName(TeamUtil.Normalize(owningTeam))} flag has been returned!");
         }
 
-        Debug.Log($"✓ {owningTeam} flag returned to home");
     }
 
     /// <summary>
@@ -312,7 +308,6 @@ public class Flag : NetworkBehaviour
                     if (Runner.TryGetPlayerObject(player, out NetworkObject networkObject))
                     {
                         carrierGameObject = networkObject.gameObject;
-                        Debug.Log($"Found carrier: {carrierGameObject.name}");
                         break;
                     }
                 }

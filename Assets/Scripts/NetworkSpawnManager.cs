@@ -56,7 +56,6 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         }
 
         Instance = this;
-        Debug.Log("✅ NetworkedSpawnManager singleton initialized");
     }
 
     private void OnDestroy()
@@ -69,7 +68,6 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     #region Fusion Lifecycle
     public override void Spawned()
     {
-        Debug.Log("✅ NetworkedSpawnManager spawned into the Gameplay scene");
         Runner.AddCallbacks(this);
 
         if (!Object.HasStateAuthority)
@@ -97,13 +95,11 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     #region Player Spawning
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
-        Debug.Log($"🎮 [SPAWN MANAGER] OnPlayerJoined: Player {player.PlayerId}");
         TrySpawnPlayer(player);
     }
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
-        Debug.Log($"👋 [SPAWN MANAGER] OnPlayerLeft: Player {player.PlayerId}");
 
         if (playerTeams.TryGetValue(player, out int team))
         {
@@ -113,8 +109,6 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
                 team2Count--;
 
             playerTeams.Remove(player);
-            Debug.Log($"✅ Removed Player {player.PlayerId} from Team {team}");
-            Debug.Log($"📊 Updated counts - Team 1: {team1Count}, Team 2: {team2Count}");
         }
 
         spawnedPlayers.Remove(player);
@@ -135,7 +129,6 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         if (!Runner.ActivePlayers.Contains(player))
         {
-            Debug.Log($"⏳ Player {player.PlayerId} not active yet - waiting to spawn");
             return;
         }
 
@@ -162,7 +155,6 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        Debug.Log($"🎯 SPAWNING Player {player.PlayerId} on Team {team} at {spawnPosition}");
 
         NetworkObject spawnedObject = Runner.Spawn(
             playerPrefab,
@@ -172,11 +164,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             (runner, obj) => OnPlayerSpawned(runner, obj, team)
         );
 
-        if (spawnedObject != null)
-        {
-            Debug.Log($"✅ Player {player.PlayerId} spawned successfully!");
-        }
-        else
+        if (spawnedObject == null)
         {
             Debug.LogError($"❌ Failed to spawn player {player.PlayerId}!");
             // Roll the bookkeeping back so a later trigger can retry the spawn cleanly.
@@ -196,7 +184,6 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         if (teamData != null)
         {
             teamData.SetTeam(TeamUtil.FromNumber(team));
-            Debug.Log($"✅ Team {team} assigned");
         }
         // Position is set by Runner.Spawn and synced by NetworkRigidbody2D.
     }
@@ -205,11 +192,9 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     #region Team Assignment
     private int AssignTeam(PlayerRef player, int choice)
     {
-        Debug.Log($"🎲 AssignTeam for Player {player.PlayerId} (choice: {choice})");
 
         if (playerTeams.TryGetValue(player, out int existingTeam))
         {
-            Debug.Log($"♻️ Player {player.PlayerId} rejoining with Team {existingTeam}");
             return existingTeam;
         }
 
@@ -222,7 +207,6 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
                 Debug.LogWarning($"⚠️ No team choice for Player {player.PlayerId} - using auto-balance");
 
             team = (team1Count <= team2Count) ? 1 : 2;
-            Debug.Log($"⚖️ Auto-balanced to Team {team} (T1: {team1Count}, T2: {team2Count})");
         }
 
         playerTeams[player] = team;
@@ -232,8 +216,6 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         else if (team == 2)
             team2Count++;
 
-        Debug.Log($"✅ Player {player.PlayerId} assigned to Team {team}");
-        Debug.Log($"📊 Team counts - Team 1: {team1Count}, Team 2: {team2Count}");
 
         return team;
     }
@@ -273,7 +255,6 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     public void OnSceneLoadDone(NetworkRunner runner)
     {
-        Debug.Log("🎬 Scene load complete");
         // Safety net: reconcile the roster in case any join signal was missed.
         if (Object.HasStateAuthority)
         {

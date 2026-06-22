@@ -9,23 +9,10 @@ public class PlayerSpawnDebugger : NetworkBehaviour
 {
     private void Start()
     {
-        Debug.Log("═══════════════════════════════════════");
-        Debug.Log($"🎮 PLAYER START (Not networked yet)");
-        Debug.Log($"Position: {transform.position}");
-        Debug.Log($"Name: {gameObject.name}");
-        Debug.Log("═══════════════════════════════════════");
     }
 
     public override void Spawned()
     {
-        Debug.Log("═══════════════════════════════════════");
-        Debug.Log($"🌐 PLAYER SPAWNED ON NETWORK");
-        Debug.Log($"Time: {Time.time:F2}");
-        Debug.Log($"Position: {transform.position}");
-        Debug.Log($"Name: {gameObject.name}");
-        Debug.Log($"HasInputAuthority: {HasInputAuthority}");
-        Debug.Log($"HasStateAuthority: {HasStateAuthority}");
-        Debug.Log($"Object.InputAuthority: {Object.InputAuthority}");
 
         // Check if this is spawning at origin
         if (transform.position == Vector3.zero || transform.position.magnitude < 1f)
@@ -38,7 +25,6 @@ public class PlayerSpawnDebugger : NetworkBehaviour
         PlayerTeamData teamData = GetComponent<PlayerTeamData>();
         if (teamData != null)
         {
-            Debug.Log($"PlayerTeamData.Team: {teamData.Team}");
             if (teamData.Team == Team.None)
             {
                 Debug.LogError("⚠️ Team is 0! Team assignment hasn't happened yet!");
@@ -52,7 +38,6 @@ public class PlayerSpawnDebugger : NetworkBehaviour
         PlayerTeamComponent teamComp = GetComponent<PlayerTeamComponent>();
         if (teamComp != null)
         {
-            Debug.Log($"PlayerTeamComponent.Team: {teamComp.Team}");
             if (teamComp.Team == Team.None)
             {
                 Debug.LogError("⚠️ Team is None!");
@@ -63,6 +48,5 @@ public class PlayerSpawnDebugger : NetworkBehaviour
             Debug.LogError("❌ NO PlayerTeamComponent!");
         }
 
-        Debug.Log("═══════════════════════════════════════");
     }
 }
