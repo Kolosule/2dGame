@@ -3,10 +3,11 @@ using UnityEngine.Events;
 using Fusion;
 
 /// <summary>
-/// DIAGNOSTIC VERSION - Added extensive logging to troubleshoot score not updating
-/// Singleton manager that tracks team scores and unlocks territory buffs.
-/// Place this on an empty GameObject in your scene (only one needed).
-/// PHOTON FUSION VERSION - Compatible with network team names (Team1/Team2)
+/// Singleton manager that tracks team scores and unlocks coin-milestone buffs.
+/// META-LAYER MODEL (review item #4): CTF is the win condition; coin milestones lift the
+/// territorial combat nerf. HasDamageBuff/HasDefenseBuff feed CombatConfig.ResolveDamage.
+/// See docs/superpowers/specs/2026-06-22-unified-damage-pipeline-design.md.
+/// Place one on an empty GameObject in the Gameplay scene. PHOTON FUSION networked.
 /// </summary>
 public class TeamScoreManager : NetworkBehaviour
 {
@@ -160,37 +161,19 @@ public class TeamScoreManager : NetworkBehaviour
         // since Team1Score and Team2Score are [Networked] properties
     }
 
-    /// <summary>
-    /// Gets the damage multiplier for a team in their territory
-    /// </summary>
-    public float GetTerritoryDamageMultiplier(string team)
+    /// <summary>True once the team has unlocked its coin-milestone damage buff.</summary>
+    public bool HasDamageBuff(Team team)
     {
-        bool isTeam1 = TeamUtil.Normalize(team) == Team.Team1;
-
-        if (isTeam1)
-        {
-            return Team1DamageBuff ? 1.0f : 0.5f;
-        }
-        else
-        {
-            return Team2DamageBuff ? 1.0f : 0.5f;
-        }
+        if (team == Team.Team1) return Team1DamageBuff;
+        if (team == Team.Team2) return Team2DamageBuff;
+        return false;
     }
 
-    /// <summary>
-    /// Gets the damage resistance multiplier for a team in their territory
-    /// </summary>
-    public float GetTerritoryDefenseMultiplier(string team)
+    /// <summary>True once the team has unlocked its coin-milestone defense buff.</summary>
+    public bool HasDefenseBuff(Team team)
     {
-        bool isTeam1 = TeamUtil.Normalize(team) == Team.Team1;
-
-        if (isTeam1)
-        {
-            return Team1DefenseBuff ? 1.0f : 0.5f;
-        }
-        else
-        {
-            return Team2DefenseBuff ? 1.0f : 0.5f;
-        }
+        if (team == Team.Team1) return Team1DefenseBuff;
+        if (team == Team.Team2) return Team2DefenseBuff;
+        return false;
     }
 }
