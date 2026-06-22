@@ -171,12 +171,18 @@ public class Enemy : NetworkBehaviour
             return;
         }
 
-        // Calculate damage with territorial modifier
+        // Calculate damage through the unified pipeline (review item #4).
         int finalDamage = stats.attackDamage;
-        if (teamComponent != null)
+        CombatConfig config = GameSettingsManager.Instance != null
+            ? GameSettingsManager.Instance.GetCombatConfig()
+            : null;
+        if (config != null)
         {
-            float attackModifier = teamComponent.GetDamageDealtModifier();
-            finalDamage = Mathf.RoundToInt(stats.attackDamage * attackModifier);
+            Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
+            PlayerTeamComponent playerTeam = player.GetComponent<PlayerTeamComponent>();
+            Team defenderTeam = playerTeam != null ? playerTeam.Team : Team.None;
+            finalDamage = config.ResolveDamage(stats.attackDamage, myTeam, transform.position,
+                                               defenderTeam, player.transform.position);
         }
 
         // Deal damage to player
