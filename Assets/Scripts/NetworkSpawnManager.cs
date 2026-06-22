@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 using Fusion;
 using Fusion.Sockets;
@@ -6,8 +6,11 @@ using System;
 using System.Linq;
 
 /// <summary>
-/// FINAL VERSION - Fixed GetSpawnPosition() accessibility
-/// Made GetSpawnPosition() public so other scripts can access it
+/// Spawns each player only once their team choice is known, via an explicit handshake instead of a
+/// timed poll. A client sends its team choice to the state authority (host) over an RPC when its
+/// NetworkedSpawnManager spawns into the Gameplay scene; the host spawns the player as soon as BOTH
+/// signals are present — the player has joined AND their choice has arrived — regardless of order.
+/// This removes the old 0.5s coroutine race and the host-only static TeamSelectionData fallback.
 /// </summary>
 public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 {
@@ -32,12 +35,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     #endregion
 
     #region Private Fields
+    // Auto-balance sentinel: a player explicitly expressing "no preference".
+    private const int NoTeamChoice = 0;
+
     private Dictionary<PlayerRef, int> playerTeams = new Dictionary<PlayerRef, int>();
     private Dictionary<PlayerRef, int> pendingTeamChoices = new Dictionary<PlayerRef, int>();
     private int team1Count = 0;
     private int team2Count = 0;
-    private NetworkRunner runner;
-    private bool isInitialized = false;
     private HashSet<PlayerRef> spawnedPlayers = new HashSet<PlayerRef>();
     #endregion
 
@@ -55,61 +59,42 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         Debug.Log("✅ NetworkedSpawnManager singleton initialized");
     }
 
-    private void Start()
+    private void OnDestroy()
     {
-        runner = FindFirstObjectByType<NetworkRunner>();
-
-        if (runner != null)
-        {
-            Debug.Log("✅ NetworkedSpawnManager STARTED");
-            runner.AddCallbacks(this);
-            isInitialized = true;
-            StartCoroutine(DelayedPlayerCheck());
-        }
-        else
-        {
-            Debug.LogError("❌ NetworkRunner NOT FOUND!");
-        }
+        if (Instance == this)
+            Instance = null;
     }
+    #endregion
 
-    private System.Collections.IEnumerator DelayedPlayerCheck()
+    #region Fusion Lifecycle
+    public override void Spawned()
     {
-        yield return new WaitForSeconds(0.5f);
-        CheckForExistingPlayers();
-    }
+        Debug.Log("✅ NetworkedSpawnManager spawned into the Gameplay scene");
+        Runner.AddCallbacks(this);
 
-    private void CheckForExistingPlayers()
-    {
-        if (runner == null || !isInitialized) return;
+        if (Object.HasStateAuthority)
+            ValidateSpawnPoints();
 
-        Debug.Log($"🔍 Checking for existing players...");
-        int playerCount = 0;
+        // Step 1 of the handshake: tell the host which team this peer's local player picked.
+        SendLocalTeamChoice();
 
-        foreach (var playerRef in runner.ActivePlayers)
+        // The OnPlayerJoined callbacks for players who joined back in the MainMenu scene fired
+        // before this manager existed, so reconcile against the current roster once. TrySpawnPlayer
+        // is choice-gated, so this never spawns a player whose choice hasn't arrived yet.
+        if (Object.HasStateAuthority)
         {
-            if (!spawnedPlayers.Contains(playerRef))
-            {
-                Debug.Log($"📋 Found unspawned player: {playerRef.PlayerId}");
-                HandlePlayerJoined(playerRef);
-                playerCount++;
-            }
+            foreach (var player in Runner.ActivePlayers)
+                TrySpawnPlayer(player);
         }
-
-        ValidateSpawnPoints();
-        Debug.Log($"✅ Processed {playerCount} players");
     }
 
     private void ValidateSpawnPoints()
     {
         if (team1SpawnPoints == null || team1SpawnPoints.Length == 0)
-        {
             Debug.LogError("❌ Team 1 spawn points not assigned!");
-        }
 
         if (team2SpawnPoints == null || team2SpawnPoints.Length == 0)
-        {
             Debug.LogError("❌ Team 2 spawn points not assigned!");
-        }
     }
     #endregion
 
@@ -117,7 +102,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
         Debug.Log($"🎮 [SPAWN MANAGER] OnPlayerJoined: Player {player.PlayerId}");
-        HandlePlayerJoined(player);
+        TrySpawnPlayer(player);
     }
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
@@ -140,30 +125,37 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         pendingTeamChoices.Remove(player);
     }
 
-    private void HandlePlayerJoined(PlayerRef player)
+    /// <summary>
+    /// Server-only. Spawns the player the moment BOTH handshake signals are present: the player is
+    /// an active member of the session AND we have received their team choice. Safe to call from
+    /// either trigger (join callback or choice RPC) and idempotent for already-spawned players.
+    /// </summary>
+    private void TrySpawnPlayer(PlayerRef player)
     {
-        if (!runner.IsServer)
-        {
-            Debug.Log($"⏭️ We're a client - not spawning");
+        if (!Object.HasStateAuthority)
             return;
-        }
-
-        if (!isInitialized)
-        {
-            Debug.LogError("❌ NetworkedSpawnManager not initialized!");
-            return;
-        }
 
         if (spawnedPlayers.Contains(player))
+            return;
+
+        if (!Runner.ActivePlayers.Contains(player))
         {
-            Debug.LogWarning($"⚠️ Player {player.PlayerId} already spawned!");
+            Debug.Log($"⏳ Player {player.PlayerId} not active yet - waiting to spawn");
+            return;
+        }
+
+        if (!pendingTeamChoices.TryGetValue(player, out int choice))
+        {
+            Debug.Log($"⏳ No team choice yet for Player {player.PlayerId} - waiting to spawn");
             return;
         }
 
         spawnedPlayers.Add(player);
-        int team = AssignTeam(player);
+        int team = AssignTeam(player, choice);
+        pendingTeamChoices.Remove(player);
+
         Vector3 spawnPosition = GetSpawnPosition(team);
-        SpawnPlayer(runner, player, spawnPosition, team);
+        SpawnPlayer(Runner, player, spawnPosition, team);
     }
 
     private void SpawnPlayer(NetworkRunner runner, PlayerRef player, Vector3 spawnPosition, int team)
@@ -191,7 +183,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         else
         {
             Debug.LogError($"❌ Failed to spawn player {player.PlayerId}!");
+            // Roll the bookkeeping back so a later trigger can retry the spawn cleanly.
             spawnedPlayers.Remove(player);
+            if (playerTeams.Remove(player))
+            {
+                if (team == 1) team1Count--;
+                else if (team == 2) team2Count--;
+            }
         }
     }
 
@@ -214,7 +212,8 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     {
         Debug.Log($"🎯 [SERVER] Received team choice from Player {player.PlayerId}: Team {teamChoice}");
 
-        if (teamChoice != 1 && teamChoice != 2)
+        // NoTeamChoice is a deliberate "no preference -> auto-balance" request; 1/2 are real picks.
+        if (teamChoice != NoTeamChoice && teamChoice != 1 && teamChoice != 2)
         {
             Debug.LogError($"❌ Invalid team choice: {teamChoice}");
             return;
@@ -222,23 +221,34 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         pendingTeamChoices[player] = teamChoice;
         Debug.Log($"✅ Team choice stored for Player {player.PlayerId}");
+
+        // Second handshake signal arrived - spawn now if the player has also joined.
+        TrySpawnPlayer(player);
     }
 
-    public void SetLocalPlayerTeamChoice(int teamChoice)
+    /// <summary>
+    /// Sends this peer's local player's menu choice to the host. Called from Spawned() once the
+    /// manager (and therefore the networked RPC channel) exists in the Gameplay scene.
+    /// </summary>
+    private void SendLocalTeamChoice()
     {
-        if (runner == null || runner.LocalPlayer == null)
+        if (Runner.LocalPlayer == PlayerRef.None)
         {
-            Debug.LogError("❌ Cannot set team choice - no runner or local player!");
+            // Dedicated server with no local player - nothing to send.
             return;
         }
 
-        Debug.Log($"📤 [CLIENT] Sending team choice to server: Team {teamChoice}");
-        RPC_SetPlayerTeamChoice(runner.LocalPlayer, teamChoice);
+        int choice = TeamSelectionData.HasChosenTeam()
+            ? TeamSelectionData.GetLocalPlayerTeam()
+            : NoTeamChoice;
+
+        Debug.Log($"📤 Sending local team choice to host: Team {choice}");
+        RPC_SetPlayerTeamChoice(Runner.LocalPlayer, choice);
     }
 
-    private int AssignTeam(PlayerRef player)
+    private int AssignTeam(PlayerRef player, int choice)
     {
-        Debug.Log($"🎲 AssignTeam for Player {player.PlayerId}");
+        Debug.Log($"🎲 AssignTeam for Player {player.PlayerId} (choice: {choice})");
 
         if (playerTeams.TryGetValue(player, out int existingTeam))
         {
@@ -246,33 +256,15 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             return existingTeam;
         }
 
-        int team = 0;
+        int team = (choice == 1 || choice == 2) ? choice : NoTeamChoice;
 
-        if (pendingTeamChoices.TryGetValue(player, out int chosenTeam))
+        if (team == NoTeamChoice)
         {
-            team = chosenTeam;
-            pendingTeamChoices.Remove(player);
-            Debug.Log($"🎯 Using player's network choice: Team {team}");
-        }
-        else if (TeamSelectionData.HasChosenTeam())
-        {
-            team = TeamSelectionData.GetLocalPlayerTeam();
-            TeamSelectionData.ClearTeamSelection();
-            Debug.Log($"🎯 Using local team choice: Team {team}");
-
-            if (team != 1 && team != 2)
-            {
-                Debug.LogError($"❌ Invalid team: {team}");
-                team = 0;
-            }
-        }
-
-        if (team == 0)
-        {
-            if (allowUnbalancedTeams)
-            {
+            // Deliberate "no choice made" path - auto-balance onto the smaller team.
+            if (!allowUnbalancedTeams)
+                Debug.Log($"⚖️ Balancing Player {player.PlayerId} (no choice made)");
+            else
                 Debug.LogWarning($"⚠️ No team choice for Player {player.PlayerId} - using auto-balance");
-            }
 
             team = (team1Count <= team2Count) ? 1 : 2;
             Debug.Log($"⚖️ Auto-balanced to Team {team} (T1: {team1Count}, T2: {team2Count})");
@@ -327,7 +319,12 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void OnSceneLoadDone(NetworkRunner runner)
     {
         Debug.Log("🎬 Scene load complete");
-        CheckForExistingPlayers();
+        // Safety net: reconcile the roster in case any join/choice signal was missed.
+        if (Object.HasStateAuthority)
+        {
+            foreach (var player in Runner.ActivePlayers)
+                TrySpawnPlayer(player);
+        }
     }
     public void OnSceneLoadStart(NetworkRunner runner) { }
     public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }

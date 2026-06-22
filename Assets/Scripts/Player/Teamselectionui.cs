@@ -3,10 +3,11 @@ using UnityEngine.UI;
 using Fusion;
 
 /// <summary>
-/// UPDATED VERSION - Sends team choice to server via RPC
-/// Key changes:
-/// - Calls NetworkedSpawnManager.SetLocalPlayerTeamChoice() instead of only using TeamSelectionData
-/// - This ensures all players' team choices are sent to the server
+/// Records the local player's team choice before the Gameplay scene loads.
+/// NetworkedSpawnManager (a NetworkBehaviour that only exists in the Gameplay scene) reads this
+/// local choice in Spawned() and relays it to the host over RPC_SetPlayerTeamChoice, which is the
+/// explicit signal that gates spawning. We do not touch NetworkedSpawnManager.Instance here because
+/// it has not been spawned yet while this menu UI is on screen.
 /// </summary>
 public class TeamSelectionUI : MonoBehaviour
 {
@@ -86,9 +87,6 @@ public class TeamSelectionUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// ⭐ UPDATED: Sends team choice to server via RPC
-    /// </summary>
     private void OnTeamButtonClicked(int teamNumber)
     {
         Debug.Log($"🎯 TEAM {teamNumber} SELECTED");
@@ -99,18 +97,9 @@ public class TeamSelectionUI : MonoBehaviour
             return;
         }
 
-        // ⭐ NEW: Send team choice to server via NetworkedSpawnManager
-        if (NetworkedSpawnManager.Instance != null)
-        {
-            NetworkedSpawnManager.Instance.SetLocalPlayerTeamChoice(teamNumber);
-            Debug.Log($"✅ Team choice sent to server");
-        }
-        else
-        {
-            Debug.LogWarning("⚠️ NetworkedSpawnManager not found! Using fallback local storage.");
-            // Fallback for host player (who might spawn before reaching Gameplay scene)
-            TeamSelectionData.SetLocalPlayerTeam(teamNumber);
-        }
+        // Store the local choice. NetworkedSpawnManager reads it in Spawned() once the Gameplay
+        // scene loads and relays it to the host, which spawns this player on the chosen team.
+        TeamSelectionData.SetLocalPlayerTeam(teamNumber);
 
         SetButtonsInteractable(false);
         LoadGameplayScene();
