@@ -3,11 +3,10 @@ using UnityEngine.UI;
 using Fusion;
 
 /// <summary>
-/// Records the local player's team choice before the Gameplay scene loads.
-/// NetworkedSpawnManager (a NetworkBehaviour that only exists in the Gameplay scene) reads this
-/// local choice in Spawned() and relays it to the host over RPC_SetPlayerTeamChoice, which is the
-/// explicit signal that gates spawning. We do not touch NetworkedSpawnManager.Instance here because
-/// it has not been spawned yet while this menu UI is on screen.
+/// MainMenu team-selection panel. On a button click it submits the local player's choice to the
+/// host via GameNetworkManager.SubmitLocalTeamChoice and then locks the buttons ("waiting for
+/// other players"). It does NOT load the Gameplay scene - the host loads it once every connected
+/// player has chosen, so no player is ever dragged into gameplay before picking a team.
 /// </summary>
 public class TeamSelectionUI : MonoBehaviour
 {
@@ -24,7 +23,6 @@ public class TeamSelectionUI : MonoBehaviour
 
     [Header("🎮 Network Settings")]
     [SerializeField] private GameNetworkManager networkManager;
-    [SerializeField] private int gameplaySceneIndex = 1;
 
     [Header("🎨 Visual Settings")]
     [SerializeField] private Color team1Color = new Color(0.2f, 0.4f, 1f);
@@ -97,27 +95,19 @@ public class TeamSelectionUI : MonoBehaviour
             return;
         }
 
-        // Store the local choice. NetworkedSpawnManager reads it in Spawned() once the Gameplay
-        // scene loads and relays it to the host, which spawns this player on the chosen team.
-        TeamSelectionData.SetLocalPlayerTeam(teamNumber);
-
-        SetButtonsInteractable(false);
-        LoadGameplayScene();
-    }
-
-    private async void LoadGameplayScene()
-    {
-        if (runner == null)
+        if (networkManager == null)
         {
-            Debug.LogError("❌ NetworkRunner is null!");
+            Debug.LogError("❌ NetworkManager not assigned - cannot submit team choice!");
             return;
         }
 
-        Debug.Log("🎬 Loading Gameplay Scene...");
-        HideTeamSelection();
+        // Submit the choice to the host. The host loads the Gameplay scene only once every
+        // connected player has chosen, so we do NOT load the scene here. Lock the buttons so the
+        // player sees they are now waiting for the others.
+        networkManager.SubmitLocalTeamChoice(teamNumber);
+        SetButtonsInteractable(false);
 
-        await runner.LoadScene(SceneRef.FromIndex(gameplaySceneIndex));
-        Debug.Log("✅ Gameplay scene load initiated");
+        Debug.Log("⏳ Waiting for all players to choose...");
     }
 
     private void UpdateTeamCounts()
