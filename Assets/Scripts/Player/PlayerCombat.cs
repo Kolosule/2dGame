@@ -199,11 +199,7 @@ public class PlayerCombat : NetworkBehaviour
     private void ShootProjectile(Vector2 aimWorldPoint)
     {
         if (anim != null) anim.SetTrigger("Shoot");
-        if (projectilePrefab == null || projectileSpawnPoint == null)
-        {
-            Debug.LogWarning($"[SHOOT-DIAG] missing ref: prefab={(projectilePrefab == null ? "NULL" : "ok")} spawnPoint={(projectileSpawnPoint == null ? "NULL" : "ok")}");
-            return;
-        }
+        if (projectilePrefab == null || projectileSpawnPoint == null) return;
         if (!HasStateAuthority)
         {
             return; // only the server spawns networked objects
