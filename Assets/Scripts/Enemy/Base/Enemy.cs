@@ -33,18 +33,26 @@ public class Enemy : NetworkBehaviour
     [Networked]
     private int CurrentHealth { get; set; }
 
-    // Knockback tracking
-    private bool isKnockedBack = false;
-    private float knockbackEndTime = 0f;
+    // Networked visual state so proxies (other clients) still see the attack
+    // telegraph flash and correct facing — the AI itself only runs on the
+    // state authority, so these must be synced for remote viewers.
+    [Networked] public NetworkBool IsTelegraphing { get; set; }
+    [Networked] public NetworkBool FacingLeft { get; set; }
 
-    // Combat tracking
-    private float lastAttackTime = -999f;
+    // Knockback tracking (TickTimer = simulation-path timing, authority only)
+    private TickTimer knockbackTimer;
+
+    // Combat tracking (attack cooldown, authority only)
+    private TickTimer attackCooldownTimer;
 
     // Team component reference
     private EnemyTeamComponent teamComponent;
 
     // Rigidbody reference
     private Rigidbody2D rb;
+
+    // AI driver (authority only)
+    private EnemyAI ai;
 
     /// <summary>
     /// Called when this enemy spawns on the network
@@ -69,12 +77,30 @@ public class Enemy : NetworkBehaviour
         // Get components
         teamComponent = GetComponent<EnemyTeamComponent>();
         rb = GetComponent<Rigidbody2D>();
+        ai = GetComponent<EnemyAI>();
 
         // Warn if coin prefab is missing
         if (coinPrefab == null)
         {
             Debug.LogWarning($"{gameObject.name} has no coin prefab assigned - won't drop coins on death!");
         }
+    }
+
+    /// <summary>
+    /// Authoritative AI step. The state machine and Rigidbody2D are only driven on
+    /// the state authority; proxies interpolate position via NetworkRigidbody2D and
+    /// read the networked visual state in Render().
+    /// </summary>
+    public override void FixedUpdateNetwork()
+    {
+        if (!HasStateAuthority) return;
+        if (ai != null) ai.Tick();
+    }
+
+    /// <summary>Applies networked visual state (facing + telegraph flash) on every client.</summary>
+    public override void Render()
+    {
+        if (ai != null) ai.RenderVisuals();
     }
 
     /// <summary>
@@ -106,9 +132,8 @@ public class Enemy : NetworkBehaviour
             rb.linearVelocity = Vector2.zero; // Reset current velocity
             rb.AddForce(knockbackForce, ForceMode2D.Impulse);
 
-            // Set knockback state with duration
-            isKnockedBack = true;
-            knockbackEndTime = Time.time + 0.3f; // 0.3 second knockback duration
+            // Set knockback state with duration (0.3s) — pauses AI movement
+            knockbackTimer = TickTimer.CreateFromSeconds(Runner, 0.3f);
         }
 
         // Check if dead
@@ -139,12 +164,8 @@ public class Enemy : NetworkBehaviour
     /// </summary>
     public bool IsKnockedBack()
     {
-        // Clear knockback state if time has expired
-        if (isKnockedBack && Time.time >= knockbackEndTime)
-        {
-            isKnockedBack = false;
-        }
-        return isKnockedBack;
+        // Knocked back while the timer is running and not yet expired.
+        return !knockbackTimer.ExpiredOrNotRunning(Runner);
     }
 
     /// <summary>
@@ -166,22 +187,28 @@ public class Enemy : NetworkBehaviour
         }
 
         // Check attack cooldown
-        if (Time.time - lastAttackTime < stats.attackCooldown)
+        if (!attackCooldownTimer.ExpiredOrNotRunning(Runner))
         {
             return;
         }
 
-        // Calculate damage with territorial modifier
+        // Calculate damage through the unified pipeline (review item #4).
         int finalDamage = stats.attackDamage;
-        if (teamComponent != null)
+        CombatConfig config = GameSettingsManager.Instance != null
+            ? GameSettingsManager.Instance.GetCombatConfig()
+            : null;
+        if (config != null)
         {
-            float attackModifier = teamComponent.GetDamageDealtModifier();
-            finalDamage = Mathf.RoundToInt(stats.attackDamage * attackModifier);
+            Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
+            PlayerTeamComponent playerTeam = player.GetComponent<PlayerTeamComponent>();
+            Team defenderTeam = playerTeam != null ? playerTeam.Team : Team.None;
+            finalDamage = config.ResolveDamage(stats.attackDamage, myTeam, transform.position,
+                                               defenderTeam, player.transform.position);
         }
 
         // Deal damage to player
         player.TakeDamage(finalDamage);
-        lastAttackTime = Time.time;
+        attackCooldownTimer = TickTimer.CreateFromSeconds(Runner, stats.attackCooldown);
 
     }
 

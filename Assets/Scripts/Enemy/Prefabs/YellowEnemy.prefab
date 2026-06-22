@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 1057860978440285187}
   - component: {fileID: 1088235477252150459}
   - component: {fileID: -2222247814501764798}
+  - component: {fileID: 1748000000000000001}
   m_Layer: 7
   m_Name: YellowEnemy
   m_TagString: Untagged
@@ -242,4 +243,28 @@ MonoBehaviour:
   NestedObjects: []
   NetworkedBehaviours:
   - {fileID: 7101480511692835348}
+  - {fileID: 1748000000000000001}
   ForceRemoteRenderTimeframe: 0
+--- !u!114 &1748000000000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8054919171351746083}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c5e690b5fb1084f5ab1c86457af401d4, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Fusion.Addons.Physics::Fusion.Addons.Physics.NetworkRigidbody2D
+  _stateAuthorityChangeErrorCorrectionDelta: 0
+  SyncScale: 0
+  SyncParent: 1
+  _interpolationTarget: {fileID: 0}
+  UsePreciseRotation: 0
+  UseRenderSleepThresholds: 1
+  RenderThresholds:
+    UseEnergy: 1
+    Position: 0.01
+    Rotation: 0.01
+    Scale: 0.01

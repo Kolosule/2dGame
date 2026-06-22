@@ -414,7 +414,7 @@ MonoBehaviour:
   useGroundPound: 1
   groundPoundForce: 20
   groundPoundImpactEffect: {fileID: 0}
-  projectilePrefab: {fileID: 4920318945033129665, guid: 0493ec13f599f9842be9fd7309303029, type: 3}
+  projectilePrefab: {fileID: -5213064401592941734, guid: 0493ec13f599f9842be9fd7309303029, type: 3}
   projectileSpawnPoint: {fileID: 8846297479289465317}
   projectileDamage: 15
   projectileSpeed: 40

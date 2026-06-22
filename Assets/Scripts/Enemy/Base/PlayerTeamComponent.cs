@@ -55,21 +55,7 @@ public class PlayerTeamComponent : MonoBehaviour
     private float CalculateTerritorialAdvantage()
     {
         if (TeamManager.Instance == null || Team == Team.None) return 0f;
-
-        TeamData myTeam = TeamManager.Instance.GetTeamData(Team);
-        if (myTeam == null) return 0f;
-
-        Team opposing = Team == Team.Team1 ? Team.Team2 : Team.Team1;
-        TeamData enemyTeam = TeamManager.Instance.GetTeamData(opposing);
-        if (enemyTeam == null) return 0f;
-
-        float distToOwnBase = Vector2.Distance(transform.position, myTeam.basePosition);
-        float distToEnemyBase = Vector2.Distance(transform.position, enemyTeam.basePosition);
-        float totalDist = distToOwnBase + distToEnemyBase;
-        if (totalDist < 0.01f) return 0f;
-
-        float advantage = 1f - (2f * distToOwnBase / totalDist);
-        return Mathf.Clamp(advantage, -1f, 1f);
+        return TeamManager.Instance.GetTerritorialAdvantage(Team, transform.position);
     }
 
     public float GetCurrentTerritorialAdvantage()

@@ -1,9 +1,13 @@
-﻿using UnityEngine;
+using UnityEngine;
+using Fusion;
 
 /// <summary>
-/// FULLY FIXED VERSION - Attack telegraphing with proper range checking!
-/// Now the enemy only attacks if the player is still in range after the telegraph completes.
-/// Controls enemy AI behavior: patrolling, chasing, and attacking players.
+/// Networked enemy AI: patrolling, chasing, attack telegraphing and attacking.
+///
+/// The state machine and Rigidbody2D are driven ONLY on the state authority via
+/// <see cref="Tick"/> (called from Enemy.FixedUpdateNetwork). Proxies interpolate
+/// position through NetworkRigidbody2D and reproduce the facing + telegraph visuals
+/// from networked state via <see cref="RenderVisuals"/> (called from Enemy.Render).
 /// </summary>
 public class EnemyAI : MonoBehaviour
 {
@@ -56,9 +60,8 @@ public class EnemyAI : MonoBehaviour
     private Enemy enemyComponent;
     private SpriteRenderer spriteRenderer;
 
-    // Telegraph tracking
-    private bool isTelegraphing = false;
-    private float telegraphStartTime;
+    // Telegraph tracking (TickTimer = simulation-path timing, authority only)
+    private TickTimer telegraphTimer;
     private Color originalColor;
 
     private void Start()
@@ -87,24 +90,25 @@ public class EnemyAI : MonoBehaviour
         {
             Debug.LogWarning($"{gameObject.name}: No SpriteRenderer found - telegraph effect won't work!");
         }
-
     }
 
-    private void Update()
+    /// <summary>
+    /// Authority-only AI step, driven by Enemy.FixedUpdateNetwork. Proxies never run this.
+    /// </summary>
+    public void Tick()
     {
+        if (rb == null || enemyComponent == null) return;
+
         // Don't move if being knocked back
-        if (enemyComponent != null && enemyComponent.IsKnockedBack())
+        if (enemyComponent.IsKnockedBack())
         {
             return;
         }
 
-        // Handle telegraph effect
-        if (isTelegraphing)
+        // Handle telegraph: wait for the timer, then resolve the attack
+        if (currentState == State.Telegraphing)
         {
-            UpdateTelegraphEffect();
-
-            // Check if telegraph duration is complete
-            if (Time.time >= telegraphStartTime + attackTelegraphDuration)
+            if (telegraphTimer.Expired(enemyComponent.Runner))
             {
                 CompleteTelegraph();
             }
@@ -132,6 +136,30 @@ public class EnemyAI : MonoBehaviour
     }
 
     /// <summary>
+    /// Runs on EVERY client (from Enemy.Render) to reproduce the networked visual state:
+    /// sprite facing and the attack telegraph flash.
+    /// </summary>
+    public void RenderVisuals()
+    {
+        if (spriteRenderer == null || enemyComponent == null) return;
+
+        // Facing (networked so proxies match the authority)
+        spriteRenderer.flipX = enemyComponent.FacingLeft;
+
+        // Telegraph flash (driven by networked bool; phase is cosmetic/local)
+        if (enemyComponent.IsTelegraphing)
+        {
+            float flashSpeed = 8f;
+            float t = Mathf.PingPong(Time.time * flashSpeed, 1f);
+            spriteRenderer.color = Color.Lerp(originalColor, telegraphColor, t);
+        }
+        else
+        {
+            spriteRenderer.color = originalColor;
+        }
+    }
+
+    /// <summary>
     /// Patrol between two points
     /// </summary>
     private void Patrol()
@@ -146,8 +174,8 @@ public class EnemyAI : MonoBehaviour
         Vector2 direction = ((Vector2)currentTarget.position - rb.position).normalized;
         rb.linearVelocity = new Vector2(direction.x * moveSpeed, rb.linearVelocity.y);
 
-        // Flip sprite to face movement direction
-        FlipSprite(direction.x);
+        // Face movement direction
+        SetFacing(direction.x);
 
         // Check if reached target
         float distance = Vector2.Distance(rb.position, currentTarget.position);
@@ -194,8 +222,8 @@ public class EnemyAI : MonoBehaviour
         Vector2 direction = ((Vector2)currentPlayer.position - rb.position).normalized;
         rb.linearVelocity = new Vector2(direction.x * moveSpeed, rb.linearVelocity.y);
 
-        // Flip sprite to face player
-        FlipSprite(direction.x);
+        // Face player
+        SetFacing(direction.x);
     }
 
     /// <summary>
@@ -219,45 +247,25 @@ public class EnemyAI : MonoBehaviour
     /// </summary>
     private void StartTelegraph()
     {
-        isTelegraphing = true;
-        telegraphStartTime = Time.time;
         currentState = State.Telegraphing;
+        telegraphTimer = TickTimer.CreateFromSeconds(enemyComponent.Runner, attackTelegraphDuration);
+        enemyComponent.IsTelegraphing = true;
 
         // Stop movement if configured to freeze
         if (freezeDuringTelegraph)
         {
             rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
         }
-
     }
 
     /// <summary>
-    /// Updates the visual telegraph effect (color flashing)
-    /// </summary>
-    private void UpdateTelegraphEffect()
-    {
-        if (spriteRenderer == null) return;
-
-        // Flash between telegraph color and original color
-        float flashSpeed = 8f; // How fast to flash
-        float t = Mathf.PingPong(Time.time * flashSpeed, 1f);
-        spriteRenderer.color = Color.Lerp(originalColor, telegraphColor, t);
-    }
-
-    /// <summary>
-    /// FIXED - Completes the telegraph and checks if player is still in range before attacking
+    /// Completes the telegraph and checks if player is still in range before attacking
     /// </summary>
     private void CompleteTelegraph()
     {
-        isTelegraphing = false;
+        enemyComponent.IsTelegraphing = false;
 
-        // Restore original color
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = originalColor;
-        }
-
-        // IMPORTANT FIX: Check if player is STILL in attack range
+        // Check if player is STILL in attack range
         if (currentPlayer != null)
         {
             float distance = Vector2.Distance(transform.position, currentPlayer.position);
@@ -325,19 +333,19 @@ public class EnemyAI : MonoBehaviour
     }
 
     /// <summary>
-    /// Flip sprite to face movement direction
+    /// Record facing direction into networked state so all clients flip the sprite alike.
     /// </summary>
-    private void FlipSprite(float directionX)
+    private void SetFacing(float directionX)
     {
-        if (spriteRenderer == null) return;
+        if (enemyComponent == null) return;
 
         if (directionX > 0)
         {
-            spriteRenderer.flipX = false;
+            enemyComponent.FacingLeft = false;
         }
         else if (directionX < 0)
         {
-            spriteRenderer.flipX = true;
+            enemyComponent.FacingLeft = true;
         }
     }
 
