@@ -162,9 +162,38 @@ public class PlayerCombat : NetworkBehaviour
             {
                 Vector2 knockbackDirection = (hit.transform.position - transform.position).normalized;
                 Vector2 knockbackForce = new Vector2(knockbackDirection.x * knockbackStrength, knockbackUpward);
-                enemy.TakeDamage(damageAmount, knockbackForce, hit.transform.position);
+                int finalDamage = ResolveMeleeDamage(hit.gameObject, hit.transform.position);
+                enemy.TakeDamage(finalDamage, knockbackForce, hit.transform.position);
             }
         }
+    }
+
+    /// <summary>
+    /// Resolves melee damage to a hit target through the unified pipeline (review item #4).
+    /// Falls back to raw base damage if no CombatConfig is available.
+    /// </summary>
+    private int ResolveMeleeDamage(GameObject target, Vector2 targetPos)
+    {
+        CombatConfig config = GameSettingsManager.Instance != null
+            ? GameSettingsManager.Instance.GetCombatConfig()
+            : null;
+        if (config == null) return damageAmount;
+
+        Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
+
+        Team targetTeam = Team.None;
+        EnemyTeamComponent etc = target.GetComponent<EnemyTeamComponent>();
+        if (etc != null)
+        {
+            targetTeam = etc.Team;
+        }
+        else
+        {
+            PlayerTeamComponent ptc = target.GetComponent<PlayerTeamComponent>();
+            if (ptc != null) targetTeam = ptc.Team;
+        }
+
+        return config.ResolveDamage(damageAmount, myTeam, transform.position, targetTeam, targetPos);
     }
 
     private void ShootProjectile(Vector2 aimWorldPoint)
