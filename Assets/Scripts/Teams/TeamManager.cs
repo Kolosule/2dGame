@@ -35,15 +35,9 @@ public class TeamManager : MonoBehaviour
         // Validate team data
         if (team1Data == null)
             Debug.LogError("⚠️ Team1Data not assigned in TeamManager!");
-        else
-            Debug.Log($"✓ Team1Data loaded: {team1Data.teamName} (ID: {team1Data.teamID})");
 
         if (team2Data == null)
             Debug.LogError("⚠️ Team2Data not assigned in TeamManager!");
-        else
-            Debug.Log($"✓ Team2Data loaded: {team2Data.teamName} (ID: {team2Data.teamID})");
-
-        Debug.Log("✓ TeamManager initialized");
     }
 
     // ---- Enum-keyed API. Bridges to the configured TeamData assets via TeamUtil. ----

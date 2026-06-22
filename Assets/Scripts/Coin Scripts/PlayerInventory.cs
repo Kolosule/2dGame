@@ -74,7 +74,6 @@ public class NetworkedPlayerInventory : NetworkBehaviour
         // Check if player has reached max capacity
         if (maxCoins > 0 && heldCoins.Count >= maxCoins)
         {
-            Debug.Log($"{gameObject.name} inventory is full! ({maxCoins} coins max)");
             return false;
         }
 
@@ -85,7 +84,6 @@ public class NetworkedPlayerInventory : NetworkBehaviour
         CoinCount = heldCoins.Count;
         TotalCoinValue = CalculateTotalValue();
 
-        Debug.Log($"[SERVER] {gameObject.name} picked up a {coinData.coinTeam} coin. Total: {CoinCount}");
 
         // Notify clients to play sound/effects
         RPC_OnCoinAdded();
@@ -94,7 +92,6 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     }
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        Debug.Log($"PLAYER TRIGGERED BY: {collision.gameObject.name} on layer {LayerMask.LayerToName(collision.gameObject.layer)}");
     }
     /// <summary>
     /// RPC to notify all clients that a coin was added (for visual/audio feedback)
@@ -130,7 +127,6 @@ public class NetworkedPlayerInventory : NetworkBehaviour
         // Calculate total points
         int totalPoints = CalculateTotalValue();
 
-        Debug.Log($"[SERVER] {gameObject.name} deposited {heldCoins.Count} coins for {totalPoints} points!");
 
         // Clear the inventory
         heldCoins.Clear();
@@ -181,7 +177,6 @@ public class NetworkedPlayerInventory : NetworkBehaviour
 
         if (heldCoins.Count == 0) return;
 
-        Debug.Log($"[SERVER] {gameObject.name} died and dropped {heldCoins.Count} coins!");
 
         // TODO: If you want coins to drop on death, spawn them here
         // For now, we'll just clear the inventory
@@ -212,10 +207,6 @@ public class NetworkedPlayerInventory : NetworkBehaviour
         if (team == Team.None)
         {
             Debug.LogWarning($"NetworkedPlayerInventory on {gameObject.name} has no team assigned!");
-        }
-        else
-        {
-            Debug.Log($"[SERVER] ✓ {gameObject.name} inventory initialized for team: {team}");
         }
     }
 }

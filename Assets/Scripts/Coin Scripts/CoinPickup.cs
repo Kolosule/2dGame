@@ -75,7 +75,6 @@ public class NetworkedCoinPickup : NetworkBehaviour
 
         // Mark as ready for pickup
         isReadyForPickup = true;
-        Debug.Log($"[CoinPickup] {gameObject.name} initialized and ready for pickup");
     }
 
     /// <summary>
@@ -84,12 +83,10 @@ public class NetworkedCoinPickup : NetworkBehaviour
     /// </summary>
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        Debug.Log($"[CoinPickup] Trigger entered by: {collision.gameObject.name}");
 
         // IMPORTANT: Check if coin is ready for pickup
         if (!isReadyForPickup)
         {
-            Debug.Log("[CoinPickup] Coin not ready for pickup yet (still initializing)");
             return;
         }
 
@@ -103,7 +100,6 @@ public class NetworkedCoinPickup : NetworkBehaviour
         // Only process if this coin hasn't been collected yet
         if (IsCollected)
         {
-            Debug.Log("[CoinPickup] Coin already collected, ignoring");
             return;
         }
 
@@ -112,12 +108,10 @@ public class NetworkedCoinPickup : NetworkBehaviour
 
         if (player != null && coinData != null)
         {
-            Debug.Log($"[CoinPickup] Player detected: {player.name}, HasInputAuthority: {player.HasInputAuthority}");
 
             // Only the local player should request pickup
             if (player.HasInputAuthority)
             {
-                Debug.Log("[CoinPickup] Requesting pickup from server");
 
                 // FIXED: Pass the player's NetworkObject directly instead of PlayerRef
                 // This avoids the Runner.TryGetPlayerObject() lookup issue
@@ -126,10 +120,6 @@ public class NetworkedCoinPickup : NetworkBehaviour
         }
         else
         {
-            if (player == null)
-            {
-                Debug.Log($"[CoinPickup] No NetworkedPlayerInventory found on {collision.gameObject.name}");
-            }
             if (coinData == null)
             {
                 Debug.LogError("[CoinPickup] CoinData is NULL! Assign it in the Inspector!");
@@ -160,12 +150,10 @@ public class NetworkedCoinPickup : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_RequestPickup(NetworkObject playerNetObj)
     {
-        Debug.Log("[SERVER] RPC_RequestPickup called");
 
         // Double-check coin hasn't been collected (race condition protection)
         if (IsCollected)
         {
-            Debug.Log("[SERVER] Coin already collected, ignoring pickup request");
             return;
         }
 
@@ -176,21 +164,18 @@ public class NetworkedCoinPickup : NetworkBehaviour
             return;
         }
 
-        Debug.Log($"[SERVER] Processing pickup for {playerNetObj.name}");
 
         // Get the inventory component
         NetworkedPlayerInventory inventory = playerNetObj.GetComponent<NetworkedPlayerInventory>();
 
         if (inventory != null)
         {
-            Debug.Log("[SERVER] Found NetworkedPlayerInventory component");
 
             // Try to add coin to player's inventory
             bool pickedUp = inventory.ServerAddCoin(coinData);
 
             if (pickedUp)
             {
-                Debug.Log("[SERVER] Coin successfully added to inventory - despawning coin");
 
                 // Mark as collected
                 IsCollected = true;
@@ -219,7 +204,6 @@ public class NetworkedCoinPickup : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnCoinCollected(Vector3 playerPosition)
     {
-        Debug.Log("[CLIENT] Coin collected - playing effects");
 
         // Play pickup sound if assigned
         if (pickupSound != null)

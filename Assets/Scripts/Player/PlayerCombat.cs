@@ -88,7 +88,6 @@ public class PlayerCombat : NetworkBehaviour
 
         if (pressed.IsSet((int)PlayerButton.Shoot))
         {
-            Debug.Log($"[SHOOT-DIAG] Shoot pressed | StateAuth={HasStateAuthority} InputAuth={HasInputAuthority} cooldownReady={ShootCooldownTimer.ExpiredOrNotRunning(Runner)} aim={input.AimWorldPoint}");
             if (ShootCooldownTimer.ExpiredOrNotRunning(Runner))
             {
                 ShootCooldownTimer = TickTimer.CreateFromSeconds(Runner, projectileCooldown);
@@ -178,13 +177,11 @@ public class PlayerCombat : NetworkBehaviour
         }
         if (!HasStateAuthority)
         {
-            Debug.Log("[SHOOT-DIAG] not StateAuthority -> host will spawn this for us");
             return; // only the server spawns networked objects
         }
 
         Vector2 aimDirection = (aimWorldPoint - (Vector2)projectileSpawnPoint.position).normalized;
         Team shooterTeam = teamComponent != null ? teamComponent.Team : Team.None;
-        Debug.Log($"[SHOOT-DIAG] SERVER spawning | dir={aimDirection} from={projectileSpawnPoint.position} team={shooterTeam}");
 
         NetworkObject spawned = Runner.Spawn(
             projectilePrefab,
@@ -197,7 +194,6 @@ public class PlayerCombat : NetworkBehaviour
                 Projectile p = obj.GetComponent<Projectile>();
                 if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam);
             });
-        Debug.Log($"[SHOOT-DIAG] Runner.Spawn returned {(spawned == null ? "NULL" : spawned.name)}");
     }
 
     void OnDrawGizmosSelected()

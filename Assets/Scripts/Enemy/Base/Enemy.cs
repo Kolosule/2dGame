@@ -59,7 +59,6 @@ public class Enemy : NetworkBehaviour
             if (HasStateAuthority)
             {
                 CurrentHealth = stats.maxHealth;
-                Debug.Log($"[SERVER] {stats.enemyName} spawned with {CurrentHealth} health");
             }
         }
         else
@@ -100,7 +99,6 @@ public class Enemy : NetworkBehaviour
         // SERVER CODE BELOW:
         // Apply damage
         CurrentHealth -= amount;
-        Debug.Log($"[SERVER] {stats.enemyName} took {amount} damage. Health: {CurrentHealth}/{stats.maxHealth}");
 
         // Apply knockback
         if (rb != null)
@@ -185,7 +183,6 @@ public class Enemy : NetworkBehaviour
         player.TakeDamage(finalDamage);
         lastAttackTime = Time.time;
 
-        Debug.Log($"[SERVER] {stats.enemyName} attacked {player.name} for {finalDamage} damage!");
     }
 
     /// <summary>
@@ -200,7 +197,6 @@ public class Enemy : NetworkBehaviour
             return;
         }
 
-        Debug.Log($"[SERVER] {stats.enemyName} has died!");
 
         // Spawn coins if we have a coin prefab
         if (coinPrefab != null)
@@ -222,7 +218,6 @@ public class Enemy : NetworkBehaviour
         // Determine how many coins to drop
         int coinCount = Random.Range(coinsToDropMin, coinsToDropMax + 1);
 
-        Debug.Log($"[SERVER] Spawning {coinCount} coins from {stats.enemyName} death");
 
         // Spawn each coin with slight scatter
         for (int i = 0; i < coinCount; i++)
@@ -254,7 +249,6 @@ public class Enemy : NetworkBehaviour
             }
         }
 
-        Debug.Log($"[SERVER] Successfully spawned {coinCount} coins!");
     }
 
     /// <summary>

@@ -46,7 +46,6 @@ public class CameraFollow : MonoBehaviour
         camTransform = transform;
         Cursor.visible = false;
 
-        Debug.Log("CameraFollow: Awake");
     }
 
     void OnEnable()
@@ -74,7 +73,6 @@ public class CameraFollow : MonoBehaviour
     /// </summary>
     private IEnumerator SearchForPlayer()
     {
-        Debug.Log("CameraFollow: Started searching for LOCAL player...");
 
         while (true)
         {
@@ -106,7 +104,6 @@ public class CameraFollow : MonoBehaviour
                 {
                     SetTarget(player.transform);
                     lockedPlayer = player;
-                    Debug.Log($"✓ CameraFollow: Found and locked to LOCAL player: {player.name}");
                     yield break; // Stop searching
                 }
             }
@@ -213,7 +210,6 @@ public class CameraFollow : MonoBehaviour
         transform.position = snapPosition;
         currentLookAhead = Vector3.zero;
 
-        Debug.Log($"✓ CameraFollow: Target locked to {newTarget.name} at {snapPosition}");
 
         if (searchCoroutine != null)
         {

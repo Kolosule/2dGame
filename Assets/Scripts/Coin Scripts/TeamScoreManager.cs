@@ -42,7 +42,6 @@ public class TeamScoreManager : NetworkBehaviour
         if (instance == null)
         {
             instance = this;
-            Debug.Log("✓ TeamScoreManager instance created");
         }
         else
         {
@@ -53,9 +52,6 @@ public class TeamScoreManager : NetworkBehaviour
 
     public override void Spawned()
     {
-        Debug.Log($"[TeamScoreManager] Spawned! HasStateAuthority: {HasStateAuthority}");
-        Debug.Log($"[TeamScoreManager] Object.IsValid: {Object != null && Object.IsValid}");
-        Debug.Log($"[TeamScoreManager] Initial scores - Team1: {Team1Score}, Team2: {Team2Score}");
     }
 
     /// <summary>
@@ -68,15 +64,7 @@ public class TeamScoreManager : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_AddPoints(string team, int points)
     {
-        Debug.Log($"[TeamScoreManager] ===== RPC_AddPoints CALLED =====");
-        Debug.Log($"[TeamScoreManager] Team: '{team}', Points: {points}");
-        Debug.Log($"[TeamScoreManager] HasStateAuthority: {HasStateAuthority}");
-        Debug.Log($"[TeamScoreManager] Object null? {Object == null}");
 
-        if (Object != null)
-        {
-            Debug.Log($"[TeamScoreManager] Object.IsValid: {Object.IsValid}");
-        }
 
         // Only execute on server/state authority
         if (!HasStateAuthority)
@@ -85,25 +73,21 @@ public class TeamScoreManager : NetworkBehaviour
             return;
         }
 
-        Debug.Log("[TeamScoreManager] Running on SERVER - processing points...");
 
         // Normalize team name
         Team scoring = TeamUtil.Normalize(team);
 
-        Debug.Log($"[TeamScoreManager] Scoring team: {scoring}");
 
         if (scoring == Team.Team1)
         {
             int oldScore = Team1Score;
             Team1Score += points;
-            Debug.Log($"[SERVER] ✓ Team1 score updated: {oldScore} → {Team1Score} (+{points})");
             CheckMilestones("Team1");
         }
         else if (scoring == Team.Team2)
         {
             int oldScore = Team2Score;
             Team2Score += points;
-            Debug.Log($"[SERVER] ✓ Team2 score updated: {oldScore} → {Team2Score} (+{points})");
             CheckMilestones("Team2");
         }
         else
@@ -120,7 +104,6 @@ public class TeamScoreManager : NetworkBehaviour
     /// </summary>
     public void AddPoints(string team, int points)
     {
-        Debug.Log($"[TeamScoreManager] AddPoints (local wrapper) called for team '{team}' with {points} points");
         RPC_AddPoints(team, points);
     }
 
@@ -135,7 +118,6 @@ public class TeamScoreManager : NetworkBehaviour
         bool isTeam1 = TeamUtil.Normalize(team) == Team.Team1;
         int teamScore = isTeam1 ? Team1Score : Team2Score;
 
-        Debug.Log($"[SERVER] Checking milestones for {team}: Score={teamScore}");
 
         // Check damage buff milestone (50 points)
         if (teamScore >= damageBuffThreshold)
@@ -143,13 +125,11 @@ public class TeamScoreManager : NetworkBehaviour
             if (isTeam1 && !Team1DamageBuff)
             {
                 Team1DamageBuff = true;
-                Debug.Log($"[SERVER] <color=blue>TEAM 1 UNLOCKED DAMAGE BUFF!</color> Territory damage now 1.0x");
                 onDamageBuffUnlocked?.Invoke("Team1");
             }
             else if (!isTeam1 && !Team2DamageBuff)
             {
                 Team2DamageBuff = true;
-                Debug.Log($"[SERVER] <color=red>TEAM 2 UNLOCKED DAMAGE BUFF!</color> Territory damage now 1.0x");
                 onDamageBuffUnlocked?.Invoke("Team2");
             }
         }
@@ -160,13 +140,11 @@ public class TeamScoreManager : NetworkBehaviour
             if (isTeam1 && !Team1DefenseBuff)
             {
                 Team1DefenseBuff = true;
-                Debug.Log($"[SERVER] <color=blue>TEAM 1 UNLOCKED DEFENSE BUFF!</color> Territory damage taken now 1.0x");
                 onDefenseBuffUnlocked?.Invoke("Team1");
             }
             else if (!isTeam1 && !Team2DefenseBuff)
             {
                 Team2DefenseBuff = true;
-                Debug.Log($"[SERVER] <color=red>TEAM 2 UNLOCKED DEFENSE BUFF!</color> Territory damage taken now 1.0x");
                 onDefenseBuffUnlocked?.Invoke("Team2");
             }
         }
@@ -177,7 +155,6 @@ public class TeamScoreManager : NetworkBehaviour
     /// </summary>
     private void UpdateUI()
     {
-        Debug.Log($"[TeamScoreManager] UpdateUI called - Team1: {Team1Score}, Team2: {Team2Score}");
 
         // The UIManager should automatically pick up the changed values
         // since Team1Score and Team2Score are [Networked] properties
