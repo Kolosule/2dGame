@@ -663,17 +663,6 @@
             Used to tag the Messages in <see cref="T:Fusion.Protocol.ICommunicator"/>.
             </summary>
         </member>
-        <member name="T:Fusion.Common.ExceptionConstants">
-            <summary>
-            Hold Exception Key used to attach extra data to exception within the SDK
-            </summary>
-        </member>
-        <member name="F:Fusion.Common.ExceptionConstants.TrackerId">
-            <summary>
-            Used to associate a unique ID to an Exception
-            It must contain a long value
-            </summary>
-        </member>
         <member name="T:Fusion.ArrayLengthAttribute">
             <summary>
             Editor attribute for selecting the minimum and maximum length constraints for an array field.
@@ -1364,6 +1353,42 @@
         <member name="F:Fusion.SpaceAfterAttribute.Height">
             <summary>
             Height of the space.
+            </summary>
+        </member>
+        <member name="T:Fusion.StructExplicitAttribute">
+            <summary>
+            Marks a struct for automatic generation of fixed layout constants and [StructLayout(LayoutKind.Explicit, Size = ...)]. 
+            Fields must have [FieldOffset].
+            </summary>
+            <param name="Size"><seealso cref="F:System.Runtime.InteropServices.StructLayoutAttribute.Size"/></param>
+        </member>
+        <member name="M:Fusion.StructExplicitAttribute.#ctor(System.Int32)">
+            <summary>
+            Marks a struct for automatic generation of fixed layout constants and [StructLayout(LayoutKind.Explicit, Size = ...)]. 
+            Fields must have [FieldOffset].
+            </summary>
+            <param name="Size"><seealso cref="F:System.Runtime.InteropServices.StructLayoutAttribute.Size"/></param>
+        </member>
+        <member name="P:Fusion.StructExplicitAttribute.Size">
+            <summary> <seealso cref="F:System.Runtime.InteropServices.StructLayoutAttribute.Size"/> </summary>
+        </member>
+        <member name="P:Fusion.StructExplicitAttribute.Pack">
+            <summary> <seealso cref="F:System.Runtime.InteropServices.StructLayoutAttribute.Pack"/> </summary>
+        </member>
+        <member name="P:Fusion.StructExplicitAttribute.AllowOversizing">
+            <summary>If true, allows for the struct to be larger than its contents.</summary>
+        </member>
+        <member name="P:Fusion.StructExplicitAttribute.EmitWordOffsets">
+            <summary>If true, emits word offsets for each field not marked with <seealso cref="T:Fusion.FieldNotWordAlignedAttribute"/>.</summary>
+        </member>
+        <member name="P:Fusion.StructExplicitAttribute.WordCountName">
+            <summary>Custom name for the WORD_COUNT constant. Default is "WORD_COUNT".</summary>
+        </member>
+        <member name="T:Fusion.FieldNotWordAlignedAttribute">
+            <summary>
+            Marks a field as not word-aligned. Fields with this attribute will be skipped
+            when generating word-based constants (WORD_OF_*, WORD_COUNT_OF_*) and byte-based
+            field constants (BYTE_OF_*, BYTE_COUNT_OF_*).
             </summary>
         </member>
         <member name="T:Fusion.ToggleLeftAttribute">
@@ -2281,6 +2306,27 @@
             <param name="source">The source pointer.</param>
             <param name="size">The number of bytes to copy.</param>
         </member>
+        <member name="M:Fusion.Native.CopyTo(System.Span{System.Int32},System.Span{System.Int32})">
+            <summary>
+            Copy from s to d, with CopyTo semantics: d must be the same size or bigger than s.
+            If s is smaller than d the excess part of d is not written to.
+            </summary>
+            <param name="d">The Destination</param>
+            <param name="s">The Source</param>
+        </member>
+        <member name="M:Fusion.Native.CopyTo(System.Span{System.Byte},System.Span{System.Byte})">
+            <inheritdoc cref="M:Fusion.Native.CopyTo(System.Span{System.Int32},System.Span{System.Int32})"/>
+        </member>
+        <member name="M:Fusion.Native.CopyToExact(System.Span{System.Int32},System.Span{System.Int32})">
+            <summary>
+            Copy from s to d, like CopyTo but s and d must be the same size.
+            </summary>
+            <param name="d">The Destination</param>
+            <param name="s">The Source</param>
+        </member>
+        <member name="M:Fusion.Native.CopyToExact(System.Span{System.Byte},System.Span{System.Byte})">
+            <inheritdoc cref="M:Fusion.Native.CopyToExact(System.Span{System.Int32},System.Span{System.Int32})"/>
+        </member>
         <member name="M:Fusion.Native.MemClear(System.Void*,System.Int32)">
             <summary>
             Clears a block of memory by setting it to zero.
@@ -2877,82 +2923,112 @@
         </member>
         <member name="T:Fusion.RuntimeUnityFlagsSetup">
             <summary>
-            Contains methods to setup runtime flags for Unity.
+            Contains methods to setup runtime _flags for Unity.
             </summary>
         </member>
-        <member name="F:Fusion.RuntimeUnityFlagsSetup.flagsBuildFlags">
+        <member name="F:Fusion.RuntimeUnityFlagsSetup._flagsBuildFlags">
             <summary>
             Flags for BuildFlags
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_UNITY_WEBGL">
             <summary>
-            Checks if the UNITY_WEBGL flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the UNITY_WEBGL flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_UNITY_XBOXONE">
             <summary>
-            Checks if the UNITY_XBOXONE flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the UNITY_XBOXONE flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_UNITY_GAMECORE">
             <summary>
-            Checks if the UNITY_GAMECORE flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the UNITY_GAMECORE flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_UNITY_EDITOR">
             <summary>
-            Checks if the UNITY_EDITOR flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the UNITY_EDITOR flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_UNITY_SWITCH">
             <summary>
-            Checks if the UNITY_SWITCH flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the UNITY_SWITCH flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_UNITY_2019_4_OR_NEWER">
             <summary>
-            Checks if the UNITY_2019_4_OR_NEWER flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the UNITY_2019_4_OR_NEWER flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
-        <member name="F:Fusion.RuntimeUnityFlagsSetup.flagsBuildTypes">
+        <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_UNITY_6000_0_OR_NEWER">
+            <summary>
+            Checks if the UNITY_6000_0_OR_NEWER flag is set and updates the _flagsDotNetVersion accordingly.
+            </summary>
+        </member>
+        <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_UNITY_64">
+            <summary>
+            Checks if the UNITY_64 flag is set and updates the _flagsDotNetVersion accordingly.
+            </summary>
+        </member>
+        <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_UNITY_FUSION">
+            <summary>
+            Checks if the UNITY_FUSION flag is set and updates the _flagsDotNetVersion accordingly.
+            </summary>
+        </member>
+        <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_UNITY_WSA">
+            <summary>
+            Checks if the UNITY_WSA flag is set and updates the _flagsDotNetVersion accordingly.
+            </summary>
+        </member>
+        <member name="F:Fusion.RuntimeUnityFlagsSetup._flagsBuildTypes">
             <summary>
             Flags for BuildTypes
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_ENABLE_MONO">
             <summary>
-            Checks if the ENABLE_MONO flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the ENABLE_MONO flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_ENABLE_IL2CPP">
             <summary>
-            Checks if the ENABLE_IL2CPP flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the ENABLE_IL2CPP flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
-        <member name="F:Fusion.RuntimeUnityFlagsSetup.flagsDotNetVersion">
+        <member name="F:Fusion.RuntimeUnityFlagsSetup._flagsDotNetVersion">
             <summary>
             Flags for DotNetVersion
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_NET_4_6">
             <summary>
-            Checks if the NET_4_6 flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the NET_4_6 flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_NETFX_CORE">
             <summary>
-            Checks if the NETFX_CORE flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the NETFX_CORE flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_NET_STANDARD_2_0">
             <summary>
-            Checks if the NET_STANDARD_2_0 flag is set and updates the flagsDotNetVersion accordingly.
+            Checks if the NET_STANDARD_2_0 flag is set and updates the _flagsDotNetVersion accordingly.
+            </summary>
+        </member>
+        <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_NET_STANDARD_2_1">
+            <summary>
+            Checks if the NET_STANDARD_2_1 flag is set and updates the _flagsDotNetVersion accordingly.
+            </summary>
+        </member>
+        <member name="M:Fusion.RuntimeUnityFlagsSetup.Check_NET_LEGACY">
+            <summary>
+            Checks if the NET_LEGACY flag is set and updates the _flagsDotNetVersion accordingly.
             </summary>
         </member>
         <member name="M:Fusion.RuntimeUnityFlagsSetup.Reset">
             <summary>
-            Resets all runtime flags to their default values.
+            Resets all runtime _flags to their default values.
             </summary>
         </member>
         <member name="T:Fusion.Unsafe">

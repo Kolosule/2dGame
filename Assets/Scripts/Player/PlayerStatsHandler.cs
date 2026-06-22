@@ -224,65 +224,26 @@ public class PlayerStatsHandler : NetworkBehaviour
         IsDead = false;
         spawnTime = Time.time; // Reset spawn immunity timer
 
-        // PRIORITY 1: Try to get spawn position using PlayerTeamData (int-based)
+        // Resolve the respawn position from the single networked team source.
         PlayerTeamData teamData = GetComponent<PlayerTeamData>();
-        if (teamData != null && NetworkedSpawnManager.Instance != null)
+        if (teamData != null && teamData.Team != Team.None && NetworkedSpawnManager.Instance != null)
         {
-            int team = teamData.Team;
+            int teamNumber = TeamUtil.ToNumber(teamData.Team);
+            Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(teamNumber);
+            transform.position = spawnPosition;
 
-            if (team != 0) // 0 means no team assigned
+            Rigidbody2D rb = GetComponent<Rigidbody2D>();
+            if (rb != null)
             {
-                Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(team);
-                transform.position = spawnPosition;
-
-                Debug.Log($"✓ Player respawned at team {team} spawn point: {spawnPosition}");
-
-                // Reset physics
-                Rigidbody2D rb = GetComponent<Rigidbody2D>();
-                if (rb != null)
-                {
-                    rb.linearVelocity = Vector2.zero;
-                    rb.angularVelocity = 0f;
-                }
+                rb.linearVelocity = Vector2.zero;
+                rb.angularVelocity = 0f;
             }
-            else
-            {
-                Debug.LogWarning("⚠️ PlayerTeamData exists but team is 0 (not assigned yet)");
-            }
+
+            Debug.Log($"✓ Player respawned at team {teamData.Team} spawn point: {spawnPosition}");
         }
         else
         {
-            // PRIORITY 2: Fallback to old method using PlayerTeamComponent (string-based)
-            PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-            if (teamComponent != null && NetworkedSpawnManager.Instance != null)
-            {
-                string teamId = teamComponent.teamID;
-
-                // CRITICAL FIX (LINE 244): Convert string to int
-                // "Team1" → 1, "Team2" → 2
-                int teamNumber = ConvertTeamIdToNumber(teamId);
-
-                if (teamNumber != 0)
-                {
-                    // Now pass the int to GetSpawnPosition
-                    Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(teamNumber);
-                    transform.position = spawnPosition;
-
-                    // Reset physics
-                    Rigidbody2D rb = GetComponent<Rigidbody2D>();
-                    if (rb != null)
-                    {
-                        rb.linearVelocity = Vector2.zero;
-                        rb.angularVelocity = 0f;
-                    }
-
-                    Debug.Log($"✓ Player respawned at team {teamNumber} spawn point: {spawnPosition}");
-                }
-            }
-            else
-            {
-                Debug.LogWarning("⚠️ Could not get spawn position - respawning at current location");
-            }
+            Debug.LogWarning("⚠️ Could not resolve team spawn position - respawning at current location");
         }
 
         // Re-enable player controls on all clients
@@ -317,16 +278,4 @@ public class PlayerStatsHandler : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// HELPER METHOD: Converts string team ID to int team number
-    /// "Team1" → 1, "Team2" → 2
-    /// </summary>
-    private int ConvertTeamIdToNumber(string teamId)
-    {
-        if (teamId == "Team1") return 1;
-        if (teamId == "Team2") return 2;
-
-        Debug.LogWarning($"⚠️ Unknown team ID: {teamId}. Defaulting to Team 1.");
-        return 1; // Default fallback
-    }
 }

@@ -46,95 +46,49 @@ public class TeamManager : MonoBehaviour
         Debug.Log("✓ TeamManager initialized");
     }
 
-    /// <summary>
-    /// Get damage dealt modifier based on territorial advantage
-    /// </summary>
-    public float GetDamageDealtModifier(string attackerTeam, float territorialAdvantage)
+    // ---- Enum-keyed API. Bridges to the configured TeamData assets via TeamUtil. ----
+
+    /// <summary>Get the TeamData asset for a Team enum value.</summary>
+    public TeamData GetTeamData(Team team)
     {
-        // If AI team and they don't use territory, return neutral modifier
-        if (attackerTeam == team3Data?.teamID && !aiUsesTerritory)
-        {
-            return 1.0f;
-        }
-
-        // Clamp territorial advantage between -1 and 1
-        territorialAdvantage = Mathf.Clamp(territorialAdvantage, -1f, 1f);
-
-        // Convert from range [-1, 1] to [minMultiplier, maxMultiplier]
-        float normalizedValue = (territorialAdvantage + 1f) / 2f;
-        float modifier = Mathf.Lerp(minDamageMultiplier, maxDamageMultiplier, normalizedValue);
-
-        return modifier;
-    }
-
-    /// <summary>
-    /// Get damage received modifier based on territorial advantage
-    /// </summary>
-    public float GetDamageReceivedModifier(string defenderTeam, float territorialAdvantage)
-    {
-        // If AI team and they don't use territory, return neutral modifier
-        if (defenderTeam == team3Data?.teamID && !aiUsesTerritory)
-        {
-            return 1.0f;
-        }
-
-        // Inverse the territorial advantage for defense
-        return GetDamageDealtModifier(defenderTeam, -territorialAdvantage);
-    }
-
-    /// <summary>
-    /// Get team data by team ID
-    /// </summary>
-    public TeamData GetTeamData(string teamID)
-    {
-        if (string.IsNullOrEmpty(teamID))
-        {
-            Debug.LogWarning("GetTeamData called with empty teamID!");
-            return null;
-        }
-
-        if (team1Data != null && team1Data.teamID == teamID)
-            return team1Data;
-
-        if (team2Data != null && team2Data.teamID == teamID)
-            return team2Data;
-
-        if (team3Data != null && team3Data.teamID == teamID)
-            return team3Data;
-
-        Debug.LogWarning($"Team data not found for team: '{teamID}'");
+        if (team == Team.None) return null;
+        if (team1Data != null && TeamUtil.Normalize(team1Data.teamID) == team) return team1Data;
+        if (team2Data != null && TeamUtil.Normalize(team2Data.teamID) == team) return team2Data;
+        if (team3Data != null && TeamUtil.Normalize(team3Data.teamID) == team) return team3Data;
         return null;
     }
 
-    /// <summary>
-    /// Check if two teams are enemies
-    /// </summary>
-    public bool AreEnemies(string teamA, string teamB)
+    /// <summary>Damage dealt modifier for an attacking team given its territorial advantage.</summary>
+    public float GetDamageDealtModifier(Team attacker, float territorialAdvantage)
     {
-        if (string.IsNullOrEmpty(teamA) || string.IsNullOrEmpty(teamB))
-            return false;
-
-        // Same team = not enemies
-        if (teamA == teamB)
-            return false;
-
-        // In PvPvE: All teams are hostile to each other
-        return true;
+        if (attacker == Team.Team3AI && !aiUsesTerritory) return 1.0f;
+        territorialAdvantage = Mathf.Clamp(territorialAdvantage, -1f, 1f);
+        float normalizedValue = (territorialAdvantage + 1f) / 2f;
+        return Mathf.Lerp(minDamageMultiplier, maxDamageMultiplier, normalizedValue);
     }
 
-    /// <summary>
-    /// Check if a team is the AI team
-    /// </summary>
-    public bool IsAITeam(string teamID)
+    /// <summary>Damage received modifier for a defending team given its territorial advantage.</summary>
+    public float GetDamageReceivedModifier(Team defender, float territorialAdvantage)
     {
-        return teamID == team3Data?.teamID;
+        if (defender == Team.Team3AI && !aiUsesTerritory) return 1.0f;
+        return GetDamageDealtModifier(defender, -territorialAdvantage);
     }
 
-    /// <summary>
-    /// Get all player teams (non-AI teams)
-    /// </summary>
-    public string[] GetPlayerTeams()
+    /// <summary>PvPvE: distinct assigned teams are hostile.</summary>
+    public bool AreEnemies(Team a, Team b)
     {
-        return new string[] { team1Data?.teamID, team2Data?.teamID };
+        return TeamUtil.AreEnemies(a, b);
+    }
+
+    /// <summary>True if the team is the AI team.</summary>
+    public bool IsAITeam(Team team)
+    {
+        return team == Team.Team3AI;
+    }
+
+    /// <summary>The two human teams.</summary>
+    public Team[] GetPlayerTeamsEnum()
+    {
+        return new Team[] { Team.Team1, Team.Team2 };
     }
 }

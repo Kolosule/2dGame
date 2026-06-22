@@ -1,200 +1,118 @@
 using UnityEngine;
+using Fusion;
 
 /// <summary>
-/// FIXED VERSION - Now includes stunning effect!
-/// Projectile script for player ranged attacks
-/// Features:
-/// - Gravity-affected arc trajectory
-/// - Collision with surfaces, players, and enemies
-/// - Team-based damage (respects friendly fire settings)
-/// - Stunning effect that prevents dash/jump until grounded
-/// - Auto-destroys on impact
+/// Server-spawned networked projectile. Velocity is set on the server and synced by
+/// NetworkRigidbody2D; hit detection, damage, stun, and despawn run on the state authority.
+/// Full friendly-fire/effects polish is a later pass — this is the minimal correct version.
 /// </summary>
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(CircleCollider2D))]
-public class Projectile : MonoBehaviour
+public class Projectile : NetworkBehaviour
 {
-    [Header("Projectile Stats")]
-    [Tooltip("Damage dealt on hit")]
-    private int damage = 15;
-
-    [Tooltip("Initial speed multiplier")]
-    private float speed = 10f;
-
-    [Header("NEW: Stun Settings")]
-    [Tooltip("Duration of stun effect in seconds")]
+    [Header("Stun")]
     [SerializeField] private float stunDuration = 1.5f;
-
-    [Tooltip("Should the projectile stun players?")]
     [SerializeField] private bool stunPlayers = true;
 
     [Header("Visual Effects")]
-    [Tooltip("Particle effect on impact (optional)")]
     [SerializeField] private GameObject impactEffect;
 
-    [Tooltip("Trail renderer for projectile path (optional)")]
-    [SerializeField] private TrailRenderer trail;
+    [Networked] private Vector2 Direction { get; set; }
+    [Networked] private float Speed { get; set; }
+    [Networked] private int Damage { get; set; }
+    [Networked] private Team ShooterTeam { get; set; }
 
-    [Header("Audio")]
-    [Tooltip("Sound played on impact (optional)")]
-    [SerializeField] private AudioClip impactSound;
-
-    // Runtime variables
     private Rigidbody2D rb;
-    private CircleCollider2D col;
-    private string shooterTeam;
-    private bool hasHit = false;
+    private bool hasHit;
 
-    /// <summary>
-    /// Initialize the projectile with direction, speed, damage, and shooter team
-    /// Called by PlayerCombat when spawning
-    /// </summary>
-    public void Initialize(Vector2 direction, float projectileSpeed, int projectileDamage, string team)
+    /// <summary>SERVER: set from PlayerCombat's spawn callback before Spawned runs.</summary>
+    public void ServerInitialize(Vector2 dir, float speed, int damage, Team team)
     {
-        speed = projectileSpeed;
-        damage = projectileDamage;
-        shooterTeam = team;
-
-        if (rb != null)
-        {
-            rb.linearVelocity = direction.normalized * speed;
-        }
-
-        Debug.Log($"Projectile initialized: Speed={speed}, Damage={damage}, Team={shooterTeam}, Stun={stunDuration}s");
+        Direction = dir.normalized;
+        Speed = speed;
+        Damage = damage;
+        ShooterTeam = team;
     }
 
-    void Awake()
+    public override void Spawned()
     {
         rb = GetComponent<Rigidbody2D>();
-        col = GetComponent<CircleCollider2D>();
+        var col = GetComponent<CircleCollider2D>();
+        if (col != null) col.isTrigger = true;
+        if (rb != null) rb.gravityScale = 1f;
 
-        if (rb != null)
-        {
-            rb.gravityScale = 1f;
-            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-        }
+        Debug.Log($"[PROJ-DIAG] Spawned | StateAuth={HasStateAuthority} dir={Direction} speed={Speed} pos={transform.position} hasRB={(rb != null)} hasNetRB={(GetComponent<Fusion.Addons.Physics.NetworkRigidbody2D>() != null)}");
 
-        if (col != null)
-        {
-            col.isTrigger = true;
-        }
+        if (HasStateAuthority && rb != null)
+            rb.linearVelocity = Direction * Speed;
     }
 
-    void Update()
+    public override void Render()
     {
-        if (rb != null && rb.linearVelocity.magnitude > 0.1f)
+        if (rb != null && rb.linearVelocity.sqrMagnitude > 0.01f)
         {
             float angle = Mathf.Atan2(rb.linearVelocity.y, rb.linearVelocity.x) * Mathf.Rad2Deg;
-            transform.rotation = Quaternion.Euler(0, 0, angle);
+            transform.rotation = Quaternion.Euler(0f, 0f, angle);
         }
     }
 
-    /// <summary>
-    /// FIXED: Handle collisions with triggers - now includes stunning!
-    /// </summary>
-    void OnTriggerEnter2D(Collider2D other)
+    private void OnTriggerEnter2D(Collider2D other)
     {
-        if (hasHit) return;
+        if (!HasStateAuthority || hasHit) return;
 
-        Debug.Log($"Projectile hit trigger: {other.gameObject.name}");
+        Debug.Log($"[PROJ-DIAG] trigger with '{other.name}' layer={LayerMask.LayerToName(other.gameObject.layer)}");
 
-        bool shouldDestroy = false;
-
-        // Check for player hit
+        // Player hit (skip same team)
         PlayerStatsHandler playerStats = other.GetComponent<PlayerStatsHandler>();
         if (playerStats != null)
         {
-            PlayerTeamComponent playerTeam = other.GetComponent<PlayerTeamComponent>();
-
-            // Check if friendly fire or enemy hit
-            if (playerTeam == null || playerTeam.teamID != shooterTeam)
+            PlayerTeamComponent pt = other.GetComponent<PlayerTeamComponent>();
+            Team targetTeam = pt != null ? pt.Team : Team.None;
+            bool friendly = targetTeam != Team.None && targetTeam == ShooterTeam;
+            if (!friendly)
             {
-                // Damage the player
-                playerStats.RPC_TakeDamage(damage);
-                Debug.Log($"Projectile hit player for {damage} damage!");
-
-                // NEW: Apply stun effect to the player
+                playerStats.RPC_TakeDamage(Damage);
                 if (stunPlayers)
                 {
-                    PlayerMovement playerMovement = other.GetComponent<PlayerMovement>();
-                    if (playerMovement != null)
-                    {
-                        playerMovement.ApplyStun(stunDuration);
-                        Debug.Log($"Player stunned for {stunDuration} seconds!");
-                    }
+                    PlayerMovement pm = other.GetComponent<PlayerMovement>();
+                    if (pm != null) pm.ApplyStun(stunDuration);
                 }
-
-                shouldDestroy = true;
+                Hit();
             }
-            else
-            {
-                Debug.Log("Projectile hit friendly player - no damage");
-            }
+            return;
         }
 
-        // Check for enemy hit
+        // Enemy hit
         Enemy enemy = other.GetComponent<Enemy>();
         if (enemy != null)
         {
-            Vector2 knockbackDirection = (other.transform.position - transform.position).normalized;
-            Vector2 knockbackForce = knockbackDirection * 5f;
-
-            enemy.TakeDamage(damage, knockbackForce, other.transform.position);
-            Debug.Log($"Projectile hit enemy for {damage} damage!");
-
-            shouldDestroy = true;
+            Vector2 dir = ((Vector2)other.transform.position - (Vector2)transform.position).normalized;
+            enemy.TakeDamage(Damage, dir * 5f, other.transform.position);
+            Hit();
+            return;
         }
 
-        // Check for ground/wall collision
-        if (other.gameObject.layer == LayerMask.NameToLayer("Ground") ||
-            other.gameObject.CompareTag("Wall"))
-        {
-            Debug.Log("Projectile hit surface");
-            shouldDestroy = true;
-        }
-
-        if (shouldDestroy)
-        {
-            DestroyProjectile(other.ClosestPoint(transform.position));
-        }
+        // Ground / wall
+        if (other.gameObject.layer == LayerMask.NameToLayer("Ground") || other.CompareTag("Wall"))
+            Hit();
     }
 
-    /// <summary>
-    /// Handle collisions with non-trigger colliders
-    /// </summary>
-    void OnCollisionEnter2D(Collision2D collision)
+    private void Hit()
     {
         if (hasHit) return;
-
-        Debug.Log($"Projectile collided with: {collision.gameObject.name}");
-        DestroyProjectile(collision.contacts[0].point);
-    }
-
-    /// <summary>
-    /// Destroy projectile with effects
-    /// </summary>
-    void DestroyProjectile(Vector3 hitPosition)
-    {
-        if (hasHit) return;
+        Debug.Log("[PROJ-DIAG] Hit -> Runner.Despawn");
         hasHit = true;
+        if (impactEffect != null) RPC_Impact(transform.position);
+        Runner.Despawn(Object);
+    }
 
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_Impact(Vector3 position)
+    {
         if (impactEffect != null)
         {
-            GameObject effect = Instantiate(impactEffect, hitPosition, Quaternion.identity);
-            Destroy(effect, 2f);
+            GameObject fx = Instantiate(impactEffect, position, Quaternion.identity);
+            Destroy(fx, 2f);
         }
-
-        if (impactSound != null)
-        {
-            AudioSource.PlayClipAtPoint(impactSound, transform.position);
-        }
-
-        if (trail != null)
-        {
-            trail.transform.SetParent(null);
-            Destroy(trail.gameObject, trail.time);
-        }
-
-        Destroy(gameObject);
     }
 }

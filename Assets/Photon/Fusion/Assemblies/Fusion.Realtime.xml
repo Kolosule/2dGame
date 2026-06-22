@@ -2814,7 +2814,7 @@
             </remarks>
         </member>
         <member name="F:Fusion.Photon.Realtime.ActorProperties.PlayerName">
-            <summary>(255) Name of a player/actor.</summary>
+            <summary>(255) NickName of a player/actor.</summary>
         </member>
         <member name="F:Fusion.Photon.Realtime.ActorProperties.IsInactive">
             <summary>(254) Tells you if the player is currently in this game (getting events live).</summary>
@@ -3796,7 +3796,7 @@
             </summary>
         </member>
         <member name="P:Fusion.Photon.Realtime.Player.IsInactive">
-            <summary>If this player is active in the room (and getting events which are currently being sent).</summary>
+            <summary>If this player in the room is currently inactive (not being connected and not getting "live" events).</summary>
             <remarks>
             Inactive players keep their spot in a room but otherwise behave as if offline (no matter what their actual connection status is).
             The room needs a PlayerTTL != 0. If a player is inactive for longer than PlayerTTL, the server will remove this player from the room.
@@ -3945,7 +3945,7 @@
              </returns>
         </member>
         <member name="M:Fusion.Photon.Realtime.Player.UpdateNickNameOnJoined">
-            <summary>If there is a nickname in the room props, but it's not the current (local) one, update the room when joining/joined.</summary>
+            <summary>Updates the server, if the NickName in the custom properties (coming from the server) is not correct.</summary>
         </member>
         <member name="M:Fusion.Photon.Realtime.Player.SetPlayerNameProperty">
             <summary>Uses OpSetPropertiesOfActor to sync this player's NickName (server is being updated with this.NickName).</summary>
@@ -4546,6 +4546,12 @@
             <summary>
             Photon client to log information and statistics from.
             </summary>
+        </member>
+        <member name="F:Fusion.Photon.Realtime.SupportLogger.LogStatsInterval">
+            <summary>Seconds between logging network stats.</summary>
+        </member>
+        <member name="F:Fusion.Photon.Realtime.SupportLogger.TrackValuesInterval">
+            <summary>Seconds between internally tracking network stats.</summary>
         </member>
         <member name="M:Fusion.Photon.Realtime.SupportLogger.LogStats">
             <summary>

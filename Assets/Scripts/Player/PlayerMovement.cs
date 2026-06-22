@@ -1,7 +1,12 @@
 using UnityEngine;
-using System.Collections;
+using Fusion;
 
-public class PlayerMovement : MonoBehaviour
+/// <summary>
+/// Tick-based, networked player movement. Driven by PlayerController.FixedUpdateNetwork.
+/// All gameplay timing uses TickTimer / networked counters so prediction + resimulation
+/// reconcile correctly. NetworkRigidbody2D (on the prefab) syncs the body.
+/// </summary>
+public class PlayerMovement : NetworkBehaviour
 {
     [Header("Stats")]
     [SerializeField] private PlayerStats stats;
@@ -12,370 +17,207 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField] private LayerMask groundLayer;
 
     [Header("Jump Settings")]
-    [SerializeField] private int coyoteTimeFrames = 6;
-    [SerializeField] private int jumpBufferFrames = 6;
+    [SerializeField] private int coyoteTimeTicks = 6;
+    [SerializeField] private int jumpBufferTicks = 6;
     [SerializeField] private float jumpCutMultiplier = 0.1f;
 
     [Header("UI References")]
     [SerializeField] private UnityEngine.UI.Image dashCooldownBar;
 
-    // Component references
+    // Component refs
     private Rigidbody2D rb;
     private Animator anim;
-    private FlagCarrierMarker flagCarrierMarker; // NEW: Reference to flag carrier component
+    private FlagCarrierMarker flagCarrierMarker;
+    private float baseGravity = 5f;
 
-    // Jump mechanics
-    private int remainingAirJumps;
-    private int coyoteTimeCounter;
-    private int jumpBufferCounter;
-    private bool isJumping;
-    private bool isJumpCut;
+    // Networked simulation state
+    [Networked] private int RemainingAirJumps { get; set; }
+    [Networked] private int CoyoteCounter { get; set; }
+    [Networked] private int JumpBufferCounter { get; set; }
+    [Networked] private NetworkBool Jumping { get; set; }
+    [Networked] private NetworkBool JumpCut { get; set; }
+    [Networked] private NetworkBool Dashing { get; set; }
+    [Networked] private float DashDir { get; set; }
+    [Networked] private NetworkBool FacingRight { get; set; }
+    [Networked] private TickTimer DashDurationTimer { get; set; }
+    [Networked] private TickTimer DashCooldownTimer { get; set; }
+    [Networked] private TickTimer StunTimer { get; set; }
 
-    // Dash mechanics
-    private bool isDashing;
-    private bool canDash = true;
-
-    // NEW: Stun mechanics
-    private bool isStunned = false;
-    private float stunEndTime = 0f;
-
-    // ============================
-    // UNITY LIFECYCLE
-    // ============================
-
-    void Awake()
+    public override void Spawned()
     {
         rb = GetComponent<Rigidbody2D>();
         anim = GetComponentInChildren<Animator>();
-        flagCarrierMarker = GetComponent<FlagCarrierMarker>(); // NEW: Get flag carrier component
+        flagCarrierMarker = GetComponent<FlagCarrierMarker>();
+        if (rb != null) baseGravity = rb.gravityScale;
 
-        if (anim == null)
+        if (HasStateAuthority)
         {
-            Debug.LogWarning("PlayerMovement: Animator not found in children! Make sure the Sprite child has an Animator component.");
-        }
-
-        if (rb == null)
-        {
-            Debug.LogError("PlayerMovement: Rigidbody2D is missing!");
+            FacingRight = transform.localScale.x >= 0f;
+            RemainingAirJumps = stats.maxAirJumps;
         }
     }
 
-    void Update()
+    /// <summary>Called every tick by PlayerController when input is available.</summary>
+    public void Simulate(NetInput input, NetworkButtons pressed, NetworkButtons released)
     {
-        HandleInput();
-        UpdateJumpVariables();
-        HandleVariableJumpHeight();
+        if (rb == null) return;
 
-        // NEW: Update stun status
-        if (isStunned && Time.time >= stunEndTime)
-        {
-            isStunned = false;
-            Debug.Log("Player stun ended");
-        }
-    }
+        bool grounded = groundCheck != null &&
+                        Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+        bool stunned = IsStunned();
 
-    void FixedUpdate()
-    {
-        float xAxis = Input.GetAxisRaw("Horizontal");
-
-        // Don't override velocity if dashing
-        if (!isDashing)
-        {
-            // NEW: Don't move if stunned
-            if (isStunned)
-            {
-                rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
-            }
-            else
-            {
-                // Normal movement - FIXED: Use walkSpeed
-                float moveSpeed = xAxis * stats.walkSpeed;
-                rb.linearVelocity = new Vector2(moveSpeed, rb.linearVelocity.y);
-            }
-        }
-
-        // Flip sprite based on movement direction (allow during dash)
-        if (xAxis < 0)
-        {
-            transform.localScale = new Vector3(-1, 1, 1);
-        }
-        else if (xAxis > 0)
-        {
-            transform.localScale = new Vector3(1, 1, 1);
-        }
-
-        // Update walking animation
-        if (anim != null)
-        {
-            anim.SetBool("Walking", xAxis != 0 && !isDashing);
-        }
-    }
-
-    public void HandleInput()
-    {
-        // NEW: Don't handle input if stunned
-        if (isStunned)
-        {
-            return;
-        }
-
-        float xAxis = Input.GetAxisRaw("Horizontal");
-
-        if (anim != null)
-        {
-            anim.SetBool("Walking", xAxis != 0);
-        }
-
-        // Buffer jump input for responsive controls
-        if (Input.GetButtonDown("Jump"))
-        {
-            jumpBufferCounter = jumpBufferFrames;
-
-            // Cancel dash and jump immediately if dashing
-            if (isDashing)
-            {
-                StopAllCoroutines();
-                EndDash();
-
-                if (rb != null)
-                {
-                    rb.gravityScale = 5f;
-                }
-
-                Jump();
-                StartCoroutine(DashCooldown());
-            }
-        }
-
-        // FIXED: Check if carrying flag before allowing dash
-        if (Input.GetKeyDown(KeyCode.LeftShift) && canDash && !isDashing)
-        {
-            // NEW: Check if carrying flag
-            if (flagCarrierMarker != null && flagCarrierMarker.IsCarryingFlag())
-            {
-                Debug.Log("Cannot dash while carrying flag!");
-                return; // Block dash if carrying flag
-            }
-
-            StartCoroutine(Dash());
-        }
-
-        // NEW: Cancel dash early when releasing shift
-        if (Input.GetKeyUp(KeyCode.LeftShift) && isDashing)
-        {
-            StopAllCoroutines();
+        // Resolve dash lifetime first (pure function of networked timers).
+        if (Dashing && DashDurationTimer.ExpiredOrNotRunning(Runner))
             EndDash();
 
-            if (rb != null)
-            {
-                rb.gravityScale = 5f; // Restore gravity
-            }
+        // Gravity is a pure function of dash state (resimulation-safe).
+        rb.gravityScale = Dashing ? 0f : baseGravity;
 
-            StartCoroutine(DashCooldown());
-        }
-    }
-
-    // ============================
-    // JUMP MECHANICS
-    // ============================
-
-    private void UpdateJumpVariables()
-    {
-        bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-
-        // Coyote time: grace period after leaving ground
-        if (grounded)
+        // ---- Horizontal velocity ----
+        if (Dashing)
         {
-            coyoteTimeCounter = coyoteTimeFrames;
-            remainingAirJumps = stats.maxAirJumps;
-
-            // NEW: Clear stun when grounded
-            if (isStunned && Time.time >= stunEndTime)
-            {
-                isStunned = false;
-            }
+            rb.linearVelocity = new Vector2(DashDir * stats.dashSpeed, 0f);
+        }
+        else if (stunned)
+        {
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
         }
         else
         {
-            coyoteTimeCounter--;
+            rb.linearVelocity = new Vector2(input.Horizontal * stats.walkSpeed, rb.linearVelocity.y);
         }
 
-        // Jump buffer countdown
-        if (jumpBufferCounter > 0)
+        // ---- Facing ----
+        if (input.Horizontal < 0) FacingRight = false;
+        else if (input.Horizontal > 0) FacingRight = true;
+        ApplyFacing();
+
+        // ---- Coyote / air jumps ----
+        if (grounded)
         {
-            jumpBufferCounter--;
+            CoyoteCounter = coyoteTimeTicks;
+            RemainingAirJumps = stats.maxAirJumps;
+            if (Jumping && rb.linearVelocity.y <= 0.01f) Jumping = false;
         }
-
-        // Execute buffered jump if conditions are met
-        if (jumpBufferCounter > 0 && (coyoteTimeCounter > 0 || remainingAirJumps > 0))
+        else if (CoyoteCounter > 0)
         {
-            // NEW: Don't allow jump if stunned
-            if (!isStunned)
-            {
-                Jump();
-                jumpBufferCounter = 0;
-            }
+            CoyoteCounter--;
         }
-    }
 
-    private void Jump()
-    {
-        bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-
-        if (grounded || coyoteTimeCounter > 0)
+        // ---- Dash start / cancel ----
+        if (!stunned && pressed.IsSet((int)PlayerButton.Dash) && !Dashing &&
+            DashCooldownTimer.ExpiredOrNotRunning(Runner))
         {
-            rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
-            coyoteTimeCounter = 0;
+            bool carrying = flagCarrierMarker != null && flagCarrierMarker.IsCarryingFlag();
+            if (!carrying) StartDash();
         }
-        else if (remainingAirJumps > 0)
+        if (released.IsSet((int)PlayerButton.Dash) && Dashing)
+            EndDash();
+
+        // ---- Jump buffer ----
+        if (!stunned && pressed.IsSet((int)PlayerButton.Jump))
         {
-            rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
-            remainingAirJumps--;
+            JumpBufferCounter = jumpBufferTicks;
+            if (Dashing) EndDash(); // jump cancels dash
         }
-
-        isJumping = true;
-        isJumpCut = false;
-
-        if (anim != null)
+        else if (JumpBufferCounter > 0)
         {
-            anim.SetTrigger("Jump");
+            JumpBufferCounter--;
         }
-    }
 
-    private void HandleVariableJumpHeight()
-    {
-        if (Input.GetButtonUp("Jump") && rb.linearVelocity.y > 0 && !isJumpCut)
+        if (!stunned && JumpBufferCounter > 0 && (CoyoteCounter > 0 || RemainingAirJumps > 0))
+        {
+            DoJump(grounded);
+            JumpBufferCounter = 0;
+        }
+
+        // ---- Variable jump height (release cuts upward velocity) ----
+        if (released.IsSet((int)PlayerButton.Jump) && rb.linearVelocity.y > 0f && Jumping && !JumpCut)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.y * jumpCutMultiplier);
-            isJumpCut = true;
-        }
-
-        bool grounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-        if (grounded && isJumping)
-        {
-            isJumping = false;
+            JumpCut = true;
         }
     }
 
-    // ============================
-    // DASH MECHANICS
-    // ============================
-
-    private IEnumerator Dash()
+    private void DoJump(bool grounded)
     {
-        canDash = false;
-        isDashing = true;
-
-        float originalGravity = rb.gravityScale;
-        rb.gravityScale = 0;
-
-        float dashDirection = Mathf.Sign(transform.localScale.x);
-        rb.linearVelocity = new Vector2(dashDirection * stats.dashSpeed, 0);
-
-        if (anim != null)
+        if (grounded || CoyoteCounter > 0)
         {
-            anim.SetBool("Dashing", true);
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
+            CoyoteCounter = 0;
         }
+        else if (RemainingAirJumps > 0)
+        {
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
+            RemainingAirJumps--;
+        }
+        Jumping = true;
+        JumpCut = false;
+        if (anim != null) anim.SetTrigger("Jump");
+    }
 
-        yield return new WaitForSeconds(stats.dashTime);
-
-        EndDash();
-        rb.gravityScale = originalGravity;
-
-        yield return StartCoroutine(DashCooldown());
+    private void StartDash()
+    {
+        Dashing = true;
+        DashDir = FacingRight ? 1f : -1f;
+        DashDurationTimer = TickTimer.CreateFromSeconds(Runner, stats.dashTime);
+        rb.linearVelocity = new Vector2(DashDir * stats.dashSpeed, 0f);
     }
 
     private void EndDash()
     {
-        isDashing = false;
+        if (!Dashing) return;
+        Dashing = false;
+        DashCooldownTimer = TickTimer.CreateFromSeconds(Runner, stats.dashCooldown);
+    }
+
+    /// <summary>SERVER: stun the player for a duration (set by projectile hits).</summary>
+    public void ApplyStun(float duration)
+    {
+        if (!HasStateAuthority) return;
+        StunTimer = TickTimer.CreateFromSeconds(Runner, duration);
+        if (Dashing) EndDash();
+    }
+
+    private void ApplyFacing()
+    {
+        Vector3 s = transform.localScale;
+        float mag = Mathf.Abs(s.x);
+        s.x = FacingRight ? mag : -mag;
+        transform.localScale = s;
+    }
+
+    public override void Render()
+    {
+        if (rb == null) return;
+        ApplyFacing();
 
         if (anim != null)
         {
-            anim.SetBool("Dashing", false);
-        }
-    }
-
-    private IEnumerator DashCooldown()
-    {
-        float elapsed = 0;
-
-        while (elapsed < stats.dashCooldown)
-        {
-            elapsed += Time.deltaTime;
-
-            if (dashCooldownBar != null)
-            {
-                dashCooldownBar.fillAmount = elapsed / stats.dashCooldown;
-            }
-
-            yield return null;
+            anim.SetBool("Walking", Mathf.Abs(rb.linearVelocity.x) > 0.1f && !Dashing);
+            anim.SetBool("Dashing", Dashing);
         }
 
-        canDash = true;
+        if (dashCooldownBar != null && HasInputAuthority)
+            dashCooldownBar.fillAmount = GetDashCooldownPercent();
     }
 
-    // ============================
-    // NEW: STUN MECHANICS
-    // ============================
-
-    /// <summary>
-    /// Stuns the player, preventing dash and jump until grounded
-    /// </summary>
-    public void ApplyStun(float duration)
-    {
-        isStunned = true;
-        stunEndTime = Time.time + duration;
-
-        // Cancel dash if currently dashing
-        if (isDashing)
-        {
-            StopAllCoroutines();
-            EndDash();
-            rb.gravityScale = 5f;
-            StartCoroutine(DashCooldown());
-        }
-
-        Debug.Log($"Player stunned for {duration} seconds");
-    }
-
-    /// <summary>
-    /// Check if player is currently stunned
-    /// </summary>
-    public bool IsStunned()
-    {
-        return isStunned;
-    }
-
-    // ============================
-    // PUBLIC METHODS
-    // ============================
-
-    public bool IsDashing()
-    {
-        return isDashing;
-    }
+    // ---- Public accessors (used by other scripts) ----
+    public bool IsDashing() => Dashing;
+    public bool IsStunned() => !StunTimer.ExpiredOrNotRunning(Runner);
 
     public float GetDashCooldownPercent()
     {
-        if (canDash) return 1f;
-        return Mathf.Clamp01((stats.dashCooldown - GetDashCooldownRemaining()) / stats.dashCooldown);
+        if (stats.dashCooldown <= 0f) return 1f;
+        float remaining = DashCooldownTimer.RemainingTime(Runner) ?? 0f;
+        return 1f - Mathf.Clamp01(remaining / stats.dashCooldown);
     }
 
-    public float GetDashCooldownRemaining()
-    {
-        return canDash ? 0f : stats.dashCooldown;
-    }
+    public float GetDashCooldownRemaining() => DashCooldownTimer.RemainingTime(Runner) ?? 0f;
 
-    public bool CanDash()
-    {
-        return canDash;
-    }
+    public bool CanDash() => !Dashing && DashCooldownTimer.ExpiredOrNotRunning(Runner);
 
-    // ============================
-    // DEBUG
-    // ============================
-
-    void OnDrawGizmosSelected()
+    private void OnDrawGizmosSelected()
     {
         if (groundCheck != null)
         {

@@ -202,8 +202,8 @@ public class PlayerCamera : MonoBehaviour
     /// </summary>
     private void FindLocalPlayer()
     {
-        // Find all NetworkPlayerWrapper objects in the scene
-        NetworkPlayerWrapper[] allPlayers = FindObjectsByType<NetworkPlayerWrapper>(FindObjectsSortMode.None);
+        // Find all player objects in the scene
+        PlayerController[] allPlayers = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
 
         if (allPlayers.Length == 0)
         {
@@ -212,7 +212,7 @@ public class PlayerCamera : MonoBehaviour
         }
 
         // Look through all players to find the one owned by this client
-        foreach (NetworkPlayerWrapper player in allPlayers)
+        foreach (PlayerController player in allPlayers)
         {
             // Check if this player is owned by the local client
             if (player.HasInputAuthority)

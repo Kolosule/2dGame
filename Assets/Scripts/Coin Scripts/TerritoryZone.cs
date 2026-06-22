@@ -28,11 +28,8 @@ public class TerritoryZone : MonoBehaviour
     public float CalculateOutgoingDamage(string attackerTeam, float baseDamage)
     {
         // Only modify damage if attacker is in their own territory
-        bool inOwnTerritory = (attackerTeam == territoryTeam) ||
-                              (attackerTeam == "Red" && territoryTeam == "team2") ||
-                              (attackerTeam == "team2" && territoryTeam == "Red") ||
-                              (attackerTeam == "Blue" && territoryTeam == "team1") ||
-                              (attackerTeam == "team1" && territoryTeam == "Blue");
+        Team attacker = TeamUtil.Normalize(attackerTeam);
+        bool inOwnTerritory = attacker != Team.None && attacker == TeamUtil.Normalize(territoryTeam);
         
         if (!inOwnTerritory)
         {
@@ -65,11 +62,8 @@ public class TerritoryZone : MonoBehaviour
     public float CalculateIncomingDamage(string defenderTeam, float incomingDamage)
     {
         // Only modify damage if defender is in their own territory
-        bool inOwnTerritory = (defenderTeam == territoryTeam) ||
-                              (defenderTeam == "Red" && territoryTeam == "team2") ||
-                              (defenderTeam == "team2" && territoryTeam == "Red") ||
-                              (defenderTeam == "Blue" && territoryTeam == "team1") ||
-                              (defenderTeam == "team1" && territoryTeam == "Blue");
+        Team defender = TeamUtil.Normalize(defenderTeam);
+        bool inOwnTerritory = defender != Team.None && defender == TeamUtil.Normalize(territoryTeam);
         
         if (!inOwnTerritory)
         {

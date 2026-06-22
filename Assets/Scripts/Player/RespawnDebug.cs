@@ -39,7 +39,7 @@ public class PlayerSpawnDebugger : NetworkBehaviour
         if (teamData != null)
         {
             Debug.Log($"PlayerTeamData.Team: {teamData.Team}");
-            if (teamData.Team == 0)
+            if (teamData.Team == Team.None)
             {
                 Debug.LogError("⚠️ Team is 0! Team assignment hasn't happened yet!");
             }
@@ -52,10 +52,10 @@ public class PlayerSpawnDebugger : NetworkBehaviour
         PlayerTeamComponent teamComp = GetComponent<PlayerTeamComponent>();
         if (teamComp != null)
         {
-            Debug.Log($"PlayerTeamComponent.teamID: '{teamComp.teamID}'");
-            if (string.IsNullOrEmpty(teamComp.teamID))
+            Debug.Log($"PlayerTeamComponent.Team: {teamComp.Team}");
+            if (teamComp.Team == Team.None)
             {
-                Debug.LogError("⚠️ TeamID is empty!");
+                Debug.LogError("⚠️ Team is None!");
             }
         }
         else

@@ -1,163 +1,73 @@
-﻿using UnityEngine;
+using UnityEngine;
 using Fusion;
 
 /// <summary>
-/// FIXED VERSION - Network syncing of team data for Photon Fusion.
-/// This handles NETWORK SYNCING of team data.
-/// PlayerTeamComponent handles all the GAMEPLAY logic.
-/// COMPATIBLE WITH FUSION 2.0+
+/// The single networked source of truth for a player's team. The [Networked] Team replicates to
+/// all clients; an OnChanged render callback (no per-tick polling) pushes updates into the
+/// gameplay/visual component. Authoritative changes happen only under state authority.
 /// </summary>
 public class PlayerTeamData : NetworkBehaviour
 {
-    #region Networked Properties
+    /// <summary>The authoritative team for this player. Replicated to all clients.</summary>
+    [Networked, OnChangedRender(nameof(OnTeamChanged))]
+    public Team Team { get; set; }
 
-    /// <summary>
-    /// The team this player belongs to (1 or 2).
-    /// [Networked] means this value is synchronized across all clients.
-    /// </summary>
-    [Networked]
-    public int Team { get; set; }
-
-    #endregion
-
-    #region References
-
-    // Reference to the existing PlayerTeamComponent
     private PlayerTeamComponent playerTeamComponent;
-
-    // Track previous team value to detect changes
-    private int previousTeam = 0;
-
-    #endregion
-
-    #region Unity Lifecycle
 
     private void Awake()
     {
-        // Get reference to PlayerTeamComponent on the same GameObject
         playerTeamComponent = GetComponent<PlayerTeamComponent>();
-
         if (playerTeamComponent == null)
         {
             Debug.LogError("PlayerTeamData requires PlayerTeamComponent on the same GameObject!");
         }
     }
 
-    #endregion
-
-    #region Fusion Lifecycle
-
-    /// <summary>
-    /// Called every network tick - we use this to detect team changes
-    /// </summary>
-    public override void FixedUpdateNetwork()
+    public override void Spawned()
     {
-        // Check if team has changed
-        if (Team != previousTeam && Team != 0)
-        {
-            Debug.Log($"[NETWORK] Player team changed from {previousTeam} to {Team}");
-            UpdatePlayerTeamComponent(Team);
-            previousTeam = Team;
-        }
+        // OnChangedRender does not fire for the value a late joiner receives as initial state,
+        // so initialize gameplay/visuals once here.
+        OnTeamChanged();
     }
 
-    #endregion
-
-    #region Public Methods
-
-    /// <summary>
-    /// Call this from the server to set the player's team.
-    /// Only the server should call this!
-    /// </summary>
-    public void SetTeam(int teamNumber)
+    /// <summary>Server-only: assign this player's team. Rejects None and the AI team.</summary>
+    public void SetTeam(Team team)
     {
-        // Validate team number
-        if (teamNumber != 1 && teamNumber != 2)
+        if (!TeamUtil.IsPlayerTeam(team))
         {
-            Debug.LogError($"Invalid team number: {teamNumber}. Must be 1 or 2.");
+            Debug.LogError($"Invalid player team assignment: {team}. Must be Team1 or Team2.");
             return;
         }
 
-        // Only server can set networked properties
-        if (Object.HasStateAuthority)
+        if (!Object.HasStateAuthority)
         {
-            Team = teamNumber;
-            previousTeam = teamNumber;
-            Debug.Log($"[SERVER] Player team set to: {teamNumber}");
-
-            // Update immediately on server
-            UpdatePlayerTeamComponent(teamNumber);
-        }
-        else
-        {
-            Debug.LogWarning("Only the server can set team assignment!");
-        }
-    }
-
-    #endregion
-
-    #region Integration with PlayerTeamComponent
-
-    /// <summary>
-    /// Updates the existing PlayerTeamComponent with the networked team value.
-    /// This bridges the network sync (PlayerTeamData) with gameplay logic (PlayerTeamComponent).
-    /// </summary>
-    private void UpdatePlayerTeamComponent(int teamNumber)
-    {
-        if (playerTeamComponent == null)
-        {
-            Debug.LogError("PlayerTeamComponent not found!");
+            Debug.LogWarning("Only the state authority can set team assignment!");
             return;
         }
 
-        // Convert team number (1 or 2) to teamID string ("Team1" or "Team2")
-        string teamID = $"Team{teamNumber}";
+        Team = team;
+        Debug.Log($"[SERVER] Player team set to: {team}");
 
-        // Update the PlayerTeamComponent's teamID
-        playerTeamComponent.teamID = teamID;
-
-        Debug.Log($"✅ Updated PlayerTeamComponent to {teamID}");
-
-        // CRITICAL FIX: Call OnTeamChanged to refresh visuals
-        playerTeamComponent.OnTeamChanged();
-
-        // The PlayerTeamComponent will handle:
-        // - Setting sprite color based on team
-        // - Calculating territorial advantages
-        // - Applying damage modifiers
-        // - All the existing gameplay logic
+        // Apply immediately on the authority; remote clients get it via OnChangedRender.
+        OnTeamChanged();
     }
 
-    #endregion
-
-    #region Utility Methods
-
-    /// <summary>
-    /// Checks if this player is on the same team as another player.
-    /// </summary>
-    public bool IsSameTeam(PlayerTeamData otherPlayer)
+    /// <summary>Render-time callback: refresh gameplay/visuals from the networked value.</summary>
+    private void OnTeamChanged()
     {
-        if (otherPlayer == null)
-            return false;
-
-        return this.Team == otherPlayer.Team;
+        if (playerTeamComponent != null)
+        {
+            playerTeamComponent.OnTeamChanged();
+        }
     }
 
-    /// <summary>
-    /// Checks if this player is on a specific team.
-    /// </summary>
-    public bool IsOnTeam(int teamNumber)
+    public bool IsSameTeam(PlayerTeamData other)
     {
-        return this.Team == teamNumber;
+        return other != null && Team != Team.None && Team == other.Team;
     }
 
-    /// <summary>
-    /// Get the team ID string (e.g., "Team1" or "Team2")
-    /// </summary>
-    public string GetTeamID()
+    public bool IsOnTeam(Team team)
     {
-        return $"Team{Team}";
+        return Team == team;
     }
-
-    #endregion
 }

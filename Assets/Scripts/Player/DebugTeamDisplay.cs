@@ -22,7 +22,7 @@ public class DebugTeamDisplay : MonoBehaviour
         style.fontSize = 20;
         style.normal.textColor = Color.white;
 
-        string teamInfo = $"Team: {teamComponent.teamID}\n";
+        string teamInfo = $"Team: {teamComponent.Team} ({TeamUtil.DisplayName(teamComponent.Team)})\n";
         teamInfo += $"Position: {transform.position}\n";
 
         float territorial = teamComponent.GetCurrentTerritorialAdvantage();

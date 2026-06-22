@@ -1,10 +1,10 @@
-﻿using UnityEngine;
-using UnityEngine.InputSystem;
+using UnityEngine;
 using Fusion;
 
 /// <summary>
-/// FIXED VERSION - Removed IsGrounded() call that doesn't exist
-/// Uses direct ground check instead
+/// Tick-based, networked combat. Driven by PlayerController.FixedUpdateNetwork.
+/// Melee detection/damage and projectile spawning run under StateAuthority only.
+/// Cooldowns are TickTimers so they predict and reconcile correctly.
 /// </summary>
 public class PlayerCombat : NetworkBehaviour
 {
@@ -56,11 +56,10 @@ public class PlayerCombat : NetworkBehaviour
     private PlayerStatsHandler statsHandler;
     private Rigidbody2D rb;
     private PlayerMovement playerMovement;
-    private float timeSinceAttack;
-    private float timeSinceProjectile;
-    private float yAxis;
-    private bool isGroundPounding = false;
-    private Camera mainCamera;
+    private int verticalAim;
+
+    [Networked] private TickTimer AttackCooldownTimer { get; set; }
+    [Networked] private TickTimer ShootCooldownTimer { get; set; }
 
     void Awake()
     {
@@ -74,102 +73,56 @@ public class PlayerCombat : NetworkBehaviour
         statsHandler = GetComponent<PlayerStatsHandler>();
         rb = GetComponent<Rigidbody2D>();
         playerMovement = GetComponent<PlayerMovement>();
-        mainCamera = Camera.main;
     }
 
-    void Update()
+    /// <summary>Called every tick by PlayerController when input is available.</summary>
+    public void Simulate(NetInput input, NetworkButtons pressed)
     {
-        if (!HasInputAuthority) return;
+        verticalAim = input.VerticalAim;
 
-        timeSinceAttack += Time.deltaTime;
-        timeSinceProjectile += Time.deltaTime;
-    }
-
-    public void HandleInput()
-    {
-        if (!HasInputAuthority) return;
-
-        var keyboard = Keyboard.current;
-        var mouse = Mouse.current;
-        var gamepad = Gamepad.current;
-
-        // VERTICAL AXIS
-        yAxis = 0;
-        if (keyboard != null)
+        if (pressed.IsSet((int)PlayerButton.Melee) && AttackCooldownTimer.ExpiredOrNotRunning(Runner))
         {
-            if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) yAxis = 1;
-            if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) yAxis = -1;
-        }
-        if (gamepad != null)
-        {
-            float stickY = gamepad.leftStick.ReadValue().y;
-            if (Mathf.Abs(stickY) > 0.2f) yAxis = stickY;
-        }
-
-        // MELEE ATTACK
-        bool fire1Pressed = false;
-        if (mouse != null && mouse.leftButton.wasPressedThisFrame)
-            fire1Pressed = true;
-        if (keyboard != null && keyboard.leftCtrlKey.wasPressedThisFrame)
-            fire1Pressed = true;
-        if (gamepad != null && gamepad.buttonSouth.wasPressedThisFrame)
-            fire1Pressed = true;
-
-        if (fire1Pressed && timeSinceAttack >= attackCooldown)
-        {
+            AttackCooldownTimer = TickTimer.CreateFromSeconds(Runner, attackCooldown);
             Attack();
         }
 
-        // PROJECTILE ATTACK
-        bool fire2Pressed = false;
-        if (mouse != null && mouse.rightButton.wasPressedThisFrame)
-            fire2Pressed = true;
-        if (keyboard != null && keyboard.leftAltKey.wasPressedThisFrame)
-            fire2Pressed = true;
-        if (gamepad != null && gamepad.buttonWest.wasPressedThisFrame)
-            fire2Pressed = true;
-
-        if (fire2Pressed && timeSinceProjectile >= projectileCooldown)
+        if (pressed.IsSet((int)PlayerButton.Shoot))
         {
-            ShootProjectile();
+            Debug.Log($"[SHOOT-DIAG] Shoot pressed | StateAuth={HasStateAuthority} InputAuth={HasInputAuthority} cooldownReady={ShootCooldownTimer.ExpiredOrNotRunning(Runner)} aim={input.AimWorldPoint}");
+            if (ShootCooldownTimer.ExpiredOrNotRunning(Runner))
+            {
+                ShootCooldownTimer = TickTimer.CreateFromSeconds(Runner, projectileCooldown);
+                ShootProjectile(input.AimWorldPoint);
+            }
         }
     }
 
     private void Attack()
     {
-        timeSinceAttack = 0;
-
         Transform attackTransform = null;
         Vector2 attackArea = Vector2.zero;
         string attackDirection = "side";
 
-        if (yAxis > 0.5f && upAttackPoint != null)
+        if (verticalAim > 0 && upAttackPoint != null)
         {
             attackTransform = upAttackPoint;
             attackArea = upAttackArea;
             attackDirection = "up";
         }
-        else if (yAxis < -0.5f && downAttackPoint != null)
+        else if (verticalAim < 0 && downAttackPoint != null)
         {
-            // ⭐ FIXED: Check if player is grounded directly instead of calling IsGrounded()
             bool isGrounded = groundCheck != null &&
-                             Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-
-            if (!isGrounded) // Only allow down attack in air
+                              Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+            if (!isGrounded)
             {
                 attackTransform = downAttackPoint;
                 attackArea = downAttackArea;
                 attackDirection = "down";
-
                 if (useGroundPound)
-                {
-                    isGroundPounding = true;
                     rb.linearVelocity = new Vector2(rb.linearVelocity.x, -groundPoundForce);
-                }
             }
             else
             {
-                // If grounded, do side attack instead
                 attackTransform = sideAttackPoint;
                 attackArea = sideAttackArea;
             }
@@ -189,12 +142,11 @@ public class PlayerCombat : NetworkBehaviour
             anim.SetBool("AttackingDown", attackDirection == "down");
         }
 
+        // Damage + hit detection only on the server (avoids double-apply across clients).
+        if (!HasStateAuthority) return;
+
         Collider2D[] objectsHit = Physics2D.OverlapBoxAll(
-            attackTransform.position,
-            attackArea,
-            0f,
-            attackableLayer
-        );
+            attackTransform.position, attackArea, 0f, attackableLayer);
 
         foreach (Collider2D hit in objectsHit)
         {
@@ -216,58 +168,36 @@ public class PlayerCombat : NetworkBehaviour
         }
     }
 
-    private void ShootProjectile()
+    private void ShootProjectile(Vector2 aimWorldPoint)
     {
-        if (projectilePrefab == null)
+        if (anim != null) anim.SetTrigger("Shoot");
+        if (projectilePrefab == null || projectileSpawnPoint == null)
         {
-            Debug.LogWarning("PlayerCombat: No projectile prefab assigned!");
+            Debug.LogWarning($"[SHOOT-DIAG] missing ref: prefab={(projectilePrefab == null ? "NULL" : "ok")} spawnPoint={(projectileSpawnPoint == null ? "NULL" : "ok")}");
             return;
         }
-
-        if (projectileSpawnPoint == null)
+        if (!HasStateAuthority)
         {
-            Debug.LogWarning("PlayerCombat: No projectile spawn point assigned!");
-            return;
+            Debug.Log("[SHOOT-DIAG] not StateAuthority -> host will spawn this for us");
+            return; // only the server spawns networked objects
         }
 
-        timeSinceProjectile = 0;
+        Vector2 aimDirection = (aimWorldPoint - (Vector2)projectileSpawnPoint.position).normalized;
+        Team shooterTeam = teamComponent != null ? teamComponent.Team : Team.None;
+        Debug.Log($"[SHOOT-DIAG] SERVER spawning | dir={aimDirection} from={projectileSpawnPoint.position} team={shooterTeam}");
 
-        Vector2 aimDirection;
-
-        if (Mouse.current != null && mainCamera != null)
-        {
-            Vector2 mousePos = mainCamera.ScreenToWorldPoint(Mouse.current.position.ReadValue());
-            aimDirection = (mousePos - (Vector2)projectileSpawnPoint.position).normalized;
-        }
-        else
-        {
-            float facingDirection = Mathf.Sign(transform.localScale.x);
-            aimDirection = new Vector2(facingDirection, 0);
-        }
-
-        NetworkObject projectile = Runner.Spawn(
+        NetworkObject spawned = Runner.Spawn(
             projectilePrefab,
             projectileSpawnPoint.position,
             Quaternion.identity,
             Object.InputAuthority,
-            (runner, obj) => {
+            (runner, obj) =>
+            {
                 obj.transform.localScale = Vector3.one * projectileScale;
-
-                Projectile projectileScript = obj.GetComponent<Projectile>();
-                if (projectileScript != null)
-                {
-                    string shooterTeam = teamComponent != null ? teamComponent.teamID : "";
-                    projectileScript.Initialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam);
-                }
-            }
-        );
-
-        if (anim != null)
-        {
-            anim.SetTrigger("Shoot");
-        }
-
-        Debug.Log($"[{(Runner.IsServer ? "SERVER" : "CLIENT")}] Projectile spawned");
+                Projectile p = obj.GetComponent<Projectile>();
+                if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam);
+            });
+        Debug.Log($"[SHOOT-DIAG] Runner.Spawn returned {(spawned == null ? "NULL" : spawned.name)}");
     }
 
     void OnDrawGizmosSelected()
@@ -290,7 +220,6 @@ public class PlayerCombat : NetworkBehaviour
             Gizmos.DrawWireCube(downAttackPoint.position, downAttackArea);
         }
 
-        // Draw ground check
         if (groundCheck != null)
         {
             Gizmos.color = Color.yellow;

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using Fusion;
 
 /// <summary>
@@ -18,7 +19,7 @@ public class NetworkedHomeBase : NetworkBehaviour
     [SerializeField] private bool autoDeposit = true;
 
     [Tooltip("If not auto-deposit, which key to press (default: E)")]
-    [SerializeField] private KeyCode depositKey = KeyCode.E;
+    [SerializeField] private Key depositKey = Key.E;
 
     [Header("Audio (Optional)")]
     [Tooltip("Sound to play when coins are deposited")]
@@ -99,7 +100,11 @@ public class NetworkedHomeBase : NetworkBehaviour
     /// </summary>
     private void Update()
     {
-        if (!autoDeposit && playerInZone != null && Input.GetKeyDown(depositKey))
+        // Local, non-networked convenience read: playerInZone is only ever set for the
+        // input-authority (local) player, and this only fires an RPC — it never feeds the
+        // Fusion simulation, so reading the device directly here is safe.
+        if (!autoDeposit && playerInZone != null &&
+            Keyboard.current != null && Keyboard.current[depositKey].wasPressedThisFrame)
         {
             RequestDeposit(playerInZone);
         }
@@ -221,32 +226,9 @@ public class NetworkedHomeBase : NetworkBehaviour
     /// </summary>
     private bool IsPlayerOnCorrectTeam(NetworkedPlayerInventory player)
     {
-        string playerTeamName = player.PlayerTeam.ToLower().Trim();
-        string baseTeamName = baseTeam.ToLower().Trim();
-
-        Debug.Log($"[TEAM CHECK] Player team: '{playerTeamName}' vs Base team: '{baseTeamName}'");
-
-        // Direct match
-        if (playerTeamName == baseTeamName)
-        {
-            return true;
-        }
-
-        // Check alternate names
-        // Team1 = Blue
-        if ((playerTeamName == "team1" || playerTeamName == "blue") &&
-            (baseTeamName == "team1" || baseTeamName == "blue"))
-        {
-            return true;
-        }
-
-        // Team2 = Red
-        if ((playerTeamName == "team2" || playerTeamName == "red") &&
-            (baseTeamName == "team2" || baseTeamName == "red"))
-        {
-            return true;
-        }
-
-        return false;
+        Team playerTeam = player.PlayerTeam;
+        Team baseTeamEnum = TeamUtil.Normalize(baseTeam);
+        Debug.Log($"[TEAM CHECK] Player team: {playerTeam} vs Base team: {baseTeamEnum}");
+        return playerTeam != Team.None && playerTeam == baseTeamEnum;
     }
 }

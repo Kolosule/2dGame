@@ -37,7 +37,8 @@ public class CameraFollow : MonoBehaviour
     private Vector3 targetLookAhead = Vector3.zero;
     private Vector3 originalPos;
     private Coroutine searchCoroutine;
-    private NetworkPlayerWrapper lockedPlayer; // ⭐ NEW: Remember which player we're following
+    private PlayerController lockedPlayer; // local player we follow
+    private Rigidbody2D targetRigidbody; // followed player's body (drives look-ahead)
 
     void Awake()
     {
@@ -96,16 +97,16 @@ public class CameraFollow : MonoBehaviour
             }
 
             // Search for the LOCAL player only
-            NetworkPlayerWrapper[] players = FindObjectsByType<NetworkPlayerWrapper>(FindObjectsSortMode.None);
+            PlayerController[] players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
 
-            foreach (var playerWrapper in players)
+            foreach (var player in players)
             {
                 // ⭐ CRITICAL CHECK: Only follow players with InputAuthority
-                if (playerWrapper.HasInputAuthority)
+                if (player.HasInputAuthority)
                 {
-                    SetTarget(playerWrapper.transform);
-                    lockedPlayer = playerWrapper;
-                    Debug.Log($"✓ CameraFollow: Found and locked to LOCAL player: {playerWrapper.name}");
+                    SetTarget(player.transform);
+                    lockedPlayer = player;
+                    Debug.Log($"✓ CameraFollow: Found and locked to LOCAL player: {player.name}");
                     yield break; // Stop searching
                 }
             }
@@ -143,7 +144,11 @@ public class CameraFollow : MonoBehaviour
         Vector3 baseTarget = Target.position + offset;
         baseTarget.z = -10f;
 
-        float horizontalInput = Input.GetAxisRaw("Horizontal");
+        // Look-ahead follows the player's actual motion, not a raw global input axis.
+        // This keeps the camera tied to the LOCAL player only (no ghost input from the
+        // shared Input devices) and works for any input source feeding the sim.
+        float vx = targetRigidbody != null ? targetRigidbody.linearVelocity.x : 0f;
+        float horizontalInput = Mathf.Abs(vx) > 0.1f ? Mathf.Sign(vx) : 0f;
         targetLookAhead = new Vector3(horizontalInput * lookAheadDistance, 0, 0);
         currentLookAhead = Vector3.Lerp(currentLookAhead, targetLookAhead, lookAheadSpeed * Time.deltaTime);
 
@@ -192,15 +197,16 @@ public class CameraFollow : MonoBehaviour
         }
 
         // ⭐ VALIDATION: Ensure this is the local player
-        NetworkPlayerWrapper playerWrapper = newTarget.GetComponent<NetworkPlayerWrapper>();
-        if (playerWrapper != null && !playerWrapper.HasInputAuthority)
+        PlayerController playerController = newTarget.GetComponent<PlayerController>();
+        if (playerController != null && !playerController.HasInputAuthority)
         {
             Debug.LogWarning($"⚠️ CameraFollow: Attempted to set target to NON-LOCAL player {newTarget.name}! Ignoring.");
             return;
         }
 
         Target = newTarget;
-        lockedPlayer = playerWrapper;
+        lockedPlayer = playerController;
+        targetRigidbody = newTarget.GetComponent<Rigidbody2D>();
 
         Vector3 snapPosition = Target.position + offset;
         snapPosition.z = -10f;

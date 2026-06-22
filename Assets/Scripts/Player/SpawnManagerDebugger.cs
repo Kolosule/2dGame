@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.InputSystem;
 using Fusion;
 
 /// <summary>
@@ -10,7 +11,7 @@ public class SpawnManagerDebugger : MonoBehaviour
     private void Update()
     {
         // Press F1 to dump current state
-        if (Input.GetKeyDown(KeyCode.F1))
+        if (Keyboard.current != null && Keyboard.current.f1Key.wasPressedThisFrame)
         {
             DumpState();
         }

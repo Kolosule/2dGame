@@ -154,68 +154,24 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
     /// </summary>
     private Vector3 GetRespawnPosition()
     {
-        // Try to get respawn position from NetworkedSpawnManager
         if (NetworkedSpawnManager.Instance != null)
         {
-            // PRIORITY 1: Try to get team from PlayerTeamData (preferred, uses int)
             PlayerTeamData teamData = GetComponent<PlayerTeamData>();
-            if (teamData != null)
+            if (teamData != null && teamData.Team != Team.None)
             {
-                int teamNumber = teamData.Team; // This is an int: 1 or 2
-
-                if (teamNumber != 0) // 0 means no team assigned yet
+                Vector3 spawnPos = NetworkedSpawnManager.Instance.GetSpawnPosition(TeamUtil.ToNumber(teamData.Team));
+                if (showDebugMessages)
                 {
-                    Vector3 spawnPos = NetworkedSpawnManager.Instance.GetSpawnPosition(teamNumber);
-
-                    if (showDebugMessages)
-                    {
-                        Debug.Log($"✓ Got respawn position from PlayerTeamData (Team {teamNumber}): {spawnPos}");
-                    }
-
-                    return spawnPos;
+                    Debug.Log($"✓ Got respawn position for {teamData.Team}: {spawnPos}");
                 }
-                else
-                {
-                    Debug.LogWarning("⚠️ PlayerTeamData exists but team is 0 (not assigned yet)");
-                }
+                return spawnPos;
             }
-
-            // PRIORITY 2: Fallback to PlayerTeamComponent (legacy, uses string)
-            PlayerTeamComponent teamComponent = GetComponent<PlayerTeamComponent>();
-            if (teamComponent != null)
-            {
-                string teamId = teamComponent.teamID;
-
-                // CRITICAL FIX (LINE 160): Convert string team ID to int
-                // "Team1" → 1, "Team2" → 2
-                int teamNumber = ConvertTeamIdToNumber(teamId);
-
-                if (teamNumber != 0)
-                {
-                    Vector3 spawnPos = NetworkedSpawnManager.Instance.GetSpawnPosition(teamNumber);
-
-                    if (showDebugMessages)
-                    {
-                        Debug.Log($"✓ Got respawn position from PlayerTeamComponent (Team {teamNumber}): {spawnPos}");
-                    }
-
-                    return spawnPos;
-                }
-                else
-                {
-                    Debug.LogWarning($"⚠️ PlayerTeamComponent has invalid teamID: {teamId}");
-                }
-            }
-
-            Debug.LogWarning("⚠️ Player has no team component (PlayerTeamData or PlayerTeamComponent)");
         }
-        else
+
+        if (showDebugMessages)
         {
-            Debug.LogWarning("⚠️ NetworkedSpawnManager.Instance is null");
+            Debug.LogWarning("⚠️ Could not resolve respawn position - using current position");
         }
-
-        // Fallback: return current position if we can't get spawn point
-        Debug.LogWarning("⚠️ Could not get respawn position from NetworkedSpawnManager, using current position");
         return transform.position;
     }
 
@@ -252,16 +208,4 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
         return playerCamera;
     }
 
-    /// <summary>
-    /// HELPER METHOD: Converts string team ID to int team number
-    /// "Team1" → 1, "Team2" → 2
-    /// </summary>
-    private int ConvertTeamIdToNumber(string teamId)
-    {
-        if (teamId == "Team1") return 1;
-        if (teamId == "Team2") return 2;
-
-        Debug.LogWarning($"⚠️ Unknown team ID: {teamId}. Defaulting to Team 1.");
-        return 1; // Default fallback
-    }
 }

@@ -88,19 +88,18 @@ public class TeamScoreManager : NetworkBehaviour
         Debug.Log("[TeamScoreManager] Running on SERVER - processing points...");
 
         // Normalize team name
-        bool isTeam1 = IsTeam1(team);
-        bool isTeam2 = IsTeam2(team);
+        Team scoring = TeamUtil.Normalize(team);
 
-        Debug.Log($"[TeamScoreManager] IsTeam1: {isTeam1}, IsTeam2: {isTeam2}");
+        Debug.Log($"[TeamScoreManager] Scoring team: {scoring}");
 
-        if (isTeam1)
+        if (scoring == Team.Team1)
         {
             int oldScore = Team1Score;
             Team1Score += points;
             Debug.Log($"[SERVER] ✓ Team1 score updated: {oldScore} → {Team1Score} (+{points})");
             CheckMilestones("Team1");
         }
-        else if (isTeam2)
+        else if (scoring == Team.Team2)
         {
             int oldScore = Team2Score;
             Team2Score += points;
@@ -126,26 +125,6 @@ public class TeamScoreManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Checks if a team name refers to Team 1 (Blue)
-    /// </summary>
-    private bool IsTeam1(string team)
-    {
-        if (string.IsNullOrEmpty(team)) return false;
-        string normalized = team.ToLower().Trim();
-        return normalized == "team1" || normalized == "blue";
-    }
-
-    /// <summary>
-    /// Checks if a team name refers to Team 2 (Red)
-    /// </summary>
-    private bool IsTeam2(string team)
-    {
-        if (string.IsNullOrEmpty(team)) return false;
-        string normalized = team.ToLower().Trim();
-        return normalized == "team2" || normalized == "red";
-    }
-
-    /// <summary>
     /// Checks if team has reached any milestones and unlocks buffs
     /// Only runs on server/state authority
     /// </summary>
@@ -153,7 +132,7 @@ public class TeamScoreManager : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
 
-        bool isTeam1 = team == "Team1";
+        bool isTeam1 = TeamUtil.Normalize(team) == Team.Team1;
         int teamScore = isTeam1 ? Team1Score : Team2Score;
 
         Debug.Log($"[SERVER] Checking milestones for {team}: Score={teamScore}");
@@ -209,7 +188,7 @@ public class TeamScoreManager : NetworkBehaviour
     /// </summary>
     public float GetTerritoryDamageMultiplier(string team)
     {
-        bool isTeam1 = IsTeam1(team);
+        bool isTeam1 = TeamUtil.Normalize(team) == Team.Team1;
 
         if (isTeam1)
         {
@@ -226,7 +205,7 @@ public class TeamScoreManager : NetworkBehaviour
     /// </summary>
     public float GetTerritoryDefenseMultiplier(string team)
     {
-        bool isTeam1 = IsTeam1(team);
+        bool isTeam1 = TeamUtil.Normalize(team) == Team.Team1;
 
         if (isTeam1)
         {
