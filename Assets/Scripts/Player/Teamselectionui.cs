@@ -3,10 +3,10 @@ using UnityEngine.UI;
 using Fusion;
 
 /// <summary>
-/// UPDATED VERSION - Sends team choice to server via RPC
-/// Key changes:
-/// - Calls NetworkedSpawnManager.SetLocalPlayerTeamChoice() instead of only using TeamSelectionData
-/// - This ensures all players' team choices are sent to the server
+/// MainMenu team-selection panel. On a button click it submits the local player's choice to the
+/// host via GameNetworkManager.SubmitLocalTeamChoice and then locks the buttons ("waiting for
+/// other players"). It does NOT load the Gameplay scene - the host loads it once every connected
+/// player has chosen, so no player is ever dragged into gameplay before picking a team.
 /// </summary>
 public class TeamSelectionUI : MonoBehaviour
 {
@@ -23,7 +23,11 @@ public class TeamSelectionUI : MonoBehaviour
 
     [Header("🎮 Network Settings")]
     [SerializeField] private GameNetworkManager networkManager;
-    [SerializeField] private int gameplaySceneIndex = 1;
+
+    [Header("⏳ Status Message")]
+    [Tooltip("Optional. Shows prompts like \"Waiting for other players...\". " +
+             "If left empty, a basic label is created at runtime under the panel.")]
+    [SerializeField] private Text statusText;
 
     [Header("🎨 Visual Settings")]
     [SerializeField] private Color team1Color = new Color(0.2f, 0.4f, 1f);
@@ -75,6 +79,10 @@ public class TeamSelectionUI : MonoBehaviour
         teamSelectionPanel.SetActive(true);
         UpdateTeamCounts();
 
+        // Reset to the initial "pick a team" state in case the panel is shown again.
+        SetButtonsInteractable(true);
+        SetStatus("Choose your team!");
+
         Debug.Log("📱 TEAM SELECTION UI SHOWN");
     }
 
@@ -86,9 +94,6 @@ public class TeamSelectionUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// ⭐ UPDATED: Sends team choice to server via RPC
-    /// </summary>
     private void OnTeamButtonClicked(int teamNumber)
     {
         Debug.Log($"🎯 TEAM {teamNumber} SELECTED");
@@ -99,36 +104,57 @@ public class TeamSelectionUI : MonoBehaviour
             return;
         }
 
-        // ⭐ NEW: Send team choice to server via NetworkedSpawnManager
-        if (NetworkedSpawnManager.Instance != null)
+        if (networkManager == null)
         {
-            NetworkedSpawnManager.Instance.SetLocalPlayerTeamChoice(teamNumber);
-            Debug.Log($"✅ Team choice sent to server");
-        }
-        else
-        {
-            Debug.LogWarning("⚠️ NetworkedSpawnManager not found! Using fallback local storage.");
-            // Fallback for host player (who might spawn before reaching Gameplay scene)
-            TeamSelectionData.SetLocalPlayerTeam(teamNumber);
-        }
-
-        SetButtonsInteractable(false);
-        LoadGameplayScene();
-    }
-
-    private async void LoadGameplayScene()
-    {
-        if (runner == null)
-        {
-            Debug.LogError("❌ NetworkRunner is null!");
+            Debug.LogError("❌ NetworkManager not assigned - cannot submit team choice!");
             return;
         }
 
-        Debug.Log("🎬 Loading Gameplay Scene...");
-        HideTeamSelection();
+        // Submit the choice to the host. The host loads the Gameplay scene only once every
+        // connected player has chosen, so we do NOT load the scene here. Lock the buttons so the
+        // player sees they are now waiting for the others.
+        networkManager.SubmitLocalTeamChoice(teamNumber);
+        SetButtonsInteractable(false);
+        SetStatus($"Joined Team {teamNumber}.\nWaiting for other players...");
 
-        await runner.LoadScene(SceneRef.FromIndex(gameplaySceneIndex));
-        Debug.Log("✅ Gameplay scene load initiated");
+        Debug.Log("⏳ Waiting for all players to choose...");
+    }
+
+    /// <summary>Sets the status message, creating a fallback label if none was assigned.</summary>
+    private void SetStatus(string message)
+    {
+        EnsureStatusText();
+        if (statusText != null)
+            statusText.text = message;
+    }
+
+    /// <summary>
+    /// Creates a simple status label under the panel if the inspector field is empty, so the
+    /// "waiting" message works without any extra scene setup. Assign your own Text to style/place it.
+    /// </summary>
+    private void EnsureStatusText()
+    {
+        if (statusText != null || teamSelectionPanel == null)
+            return;
+
+        GameObject go = new GameObject("StatusText (auto)", typeof(RectTransform));
+        go.transform.SetParent(teamSelectionPanel.transform, false);
+
+        statusText = go.AddComponent<Text>();
+        statusText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        statusText.fontSize = 28;
+        statusText.alignment = TextAnchor.MiddleCenter;
+        statusText.color = Color.white;
+        statusText.raycastTarget = false;
+        statusText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        statusText.verticalOverflow = VerticalWrapMode.Overflow;
+
+        RectTransform rt = statusText.rectTransform;
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 30f);
+        rt.sizeDelta = new Vector2(700f, 80f);
     }
 
     private void UpdateTeamCounts()
