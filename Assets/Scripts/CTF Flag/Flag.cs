@@ -156,14 +156,6 @@ public class Flag : NetworkBehaviour
         CarrierPlayerRef = playerRef;
         carrierGameObject = player;
 
-        // Disable player's dash (if you have this component)
-        PlayerMovement movement = player.GetComponent<PlayerMovement>();
-        if (movement != null)
-        {
-            movement.enabled = false; // Will re-enable when flag is dropped
-            movement.enabled = true;
-        }
-
         // Set flag carrier marker (if you have this component)
         FlagCarrierMarker marker = player.GetComponent<FlagCarrierMarker>();
         if (marker != null)

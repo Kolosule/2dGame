@@ -1,4 +1,5 @@
 using UnityEngine;
+using Fusion;
 
 /// <summary>
 /// ScriptableObject that holds coin value data for different teams.
@@ -19,7 +20,10 @@ public class CoinData : ScriptableObject
     [Tooltip("Points awarded to Team2/Red team when they collect this coin")]
     [SerializeField] private int team2Value = 1;
 
-    
+    [Header("Drop On Death")]
+    [Tooltip("Networked coin prefab to spawn in the world when a player carrying this coin dies. " +
+             "Must have a NetworkObject + NetworkedCoinPickup configured with this same CoinData.")]
+    public NetworkObject coinPrefab;
 
     /// <summary>
     /// Gets the point value for a specific team

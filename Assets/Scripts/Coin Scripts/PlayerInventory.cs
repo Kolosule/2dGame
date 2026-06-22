@@ -19,6 +19,10 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     [Tooltip("Sound to play when depositing coins")]
     [SerializeField] private AudioClip depositSound;
 
+    [Header("Death Drop Settings")]
+    [Tooltip("Radius around the death position to scatter dropped coins")]
+    [SerializeField] private float dropScatterRadius = 1f;
+
     // Network property to sync coin count across all clients
     [Networked]
     public int CoinCount { get; private set; }
@@ -168,7 +172,9 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     }
 
     /// <summary>
-    /// Called when player dies - drops all coins
+    /// Called when player dies - drops all carried coins back into the world.
+    /// SERVER ONLY: spawns the matching networked coin prefab for each held coin,
+    /// scattered around the death position, then clears the inventory.
     /// </summary>
     public void OnPlayerDeath(Vector3 deathPosition)
     {
@@ -177,9 +183,20 @@ public class NetworkedPlayerInventory : NetworkBehaviour
 
         if (heldCoins.Count == 0) return;
 
+        // Re-spawn each carried coin so other players can pick it up again.
+        // Each coin's prefab already carries its own CoinData, so point values are preserved.
+        foreach (CoinData coin in heldCoins)
+        {
+            if (coin == null || coin.coinPrefab == null)
+            {
+                Debug.LogWarning($"NetworkedPlayerInventory: held coin '{(coin != null ? coin.name : "null")}' has no coinPrefab assigned - cannot drop it.");
+                continue;
+            }
 
-        // TODO: If you want coins to drop on death, spawn them here
-        // For now, we'll just clear the inventory
+            Vector2 offset = Random.insideUnitCircle * dropScatterRadius;
+            Vector3 spawnPosition = deathPosition + new Vector3(offset.x, offset.y, 0f);
+            Runner.Spawn(coin.coinPrefab, spawnPosition, Quaternion.identity);
+        }
 
         heldCoins.Clear();
         CoinCount = 0;
