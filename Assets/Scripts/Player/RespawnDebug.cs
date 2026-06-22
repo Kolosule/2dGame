@@ -52,10 +52,10 @@ public class PlayerSpawnDebugger : NetworkBehaviour
         PlayerTeamComponent teamComp = GetComponent<PlayerTeamComponent>();
         if (teamComp != null)
         {
-            Debug.Log($"PlayerTeamComponent.teamID: '{teamComp.teamID}'");
-            if (string.IsNullOrEmpty(teamComp.teamID))
+            Debug.Log($"PlayerTeamComponent.Team: {teamComp.Team}");
+            if (teamComp.Team == Team.None)
             {
-                Debug.LogError("⚠️ TeamID is empty!");
+                Debug.LogError("⚠️ Team is None!");
             }
         }
         else
