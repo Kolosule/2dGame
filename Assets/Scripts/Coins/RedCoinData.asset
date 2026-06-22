@@ -15,3 +15,4 @@ MonoBehaviour:
   coinTeam: Team3
   team1Value: 7
   team2Value: 1
+  coinPrefab: {fileID: 8087019548463442517, guid: 4689e5bf175eac940bf3b4e400951a0e, type: 3}

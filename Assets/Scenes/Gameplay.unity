@@ -759,7 +759,6 @@ GameObject:
   - component: {fileID: 61311184}
   - component: {fileID: 61311185}
   - component: {fileID: 61311186}
-  - component: {fileID: 61311187}
   m_Layer: 0
   m_Name: EnemySpawnerRed
   m_TagString: Untagged
@@ -823,21 +822,7 @@ MonoBehaviour:
   NestedObjects: []
   NetworkedBehaviours:
   - {fileID: 61311185}
-  - {fileID: 61311187}
   ForceRemoteRenderTimeframe: 0
---- !u!114 &61311187
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 61311182}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7252ff825f330a24ab21a7488ece00e7, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: '::'
-  enableVerboseLogging: 1
 --- !u!1 &64518173
 GameObject:
   m_ObjectHideFlags: 0
@@ -1675,7 +1660,6 @@ GameObject:
   - component: {fileID: 141480359}
   - component: {fileID: 141480358}
   - component: {fileID: 141480357}
-  - component: {fileID: 141480360}
   m_Layer: 0
   m_Name: NetworkedSpawnManager
   m_TagString: Untagged
@@ -1735,18 +1719,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &141480360
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 141480356}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 309102194bf2d3349a163a8c6e85208b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: '::'
 --- !u!1 &154701844
 GameObject:
   m_ObjectHideFlags: 0

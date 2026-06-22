@@ -138,14 +138,14 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             Transform pointA = patrolPointA != null ? patrolPointA : autoPatrolPointA;
             Transform pointB = patrolPointB != null ? patrolPointB : autoPatrolPointB;
 
-            //if (pointA != null && pointB != null)
-            //{
-               // enemyAI.SetPatrolPoints(pointA, pointB);
-          //  }
-           // else
-           // {
-           //     Debug.LogWarning($"[SERVER] No patrol points available for {enemyObj.name}");
-           // }
+            if (pointA != null && pointB != null)
+            {
+                enemyAI.SetPatrolPoints(pointA, pointB);
+            }
+            else
+            {
+                Debug.LogWarning($"[SERVER] No patrol points available for {enemyObj.name}");
+            }
         }
         else
         {

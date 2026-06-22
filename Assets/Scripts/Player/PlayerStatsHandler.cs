@@ -145,6 +145,13 @@ public class PlayerStatsHandler : NetworkBehaviour
         // Drop flag if carrying one
         DropFlagOnDeath();
 
+        // Drop any carried coins back into the world
+        NetworkedPlayerInventory inventory = GetComponent<NetworkedPlayerInventory>();
+        if (inventory != null)
+        {
+            inventory.OnPlayerDeath(transform.position);
+        }
+
         // Disable camera handler
         PlayerCameraRespawnHandler cameraHandler = GetComponent<PlayerCameraRespawnHandler>();
         if (cameraHandler != null)
