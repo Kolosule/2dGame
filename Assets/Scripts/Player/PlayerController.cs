@@ -53,12 +53,12 @@ public class PlayerController : NetworkBehaviour
         if (myTeam == null || myCol == null) yield break;
 
         float timeout = 5f;
-        while (myTeam.Team == 0 && timeout > 0f)
+        while (myTeam.Team == Team.None && timeout > 0f)
         {
             timeout -= Time.deltaTime;
             yield return null;
         }
-        if (myTeam.Team == 0) yield break;
+        if (myTeam.Team == Team.None) yield break;
 
         var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
         foreach (var other in players)

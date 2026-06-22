@@ -201,7 +201,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         if (teamData != null)
         {
-            teamData.SetTeam(team);
+            teamData.SetTeam(TeamUtil.FromNumber(team));
             Debug.Log($"✅ Team {team} assigned");
         }
         // Position is set by Runner.Spawn and synced by NetworkRigidbody2D.

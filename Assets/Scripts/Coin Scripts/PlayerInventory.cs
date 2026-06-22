@@ -58,8 +58,7 @@ public class NetworkedPlayerInventory : NetworkBehaviour
             PlayerTeamData teamData = GetComponent<PlayerTeamData>();
             if (teamData != null)
             {
-                // Convert team number to team name
-                return teamData.Team == 1 ? "Team1" : "Team2";
+                return TeamUtil.ToId(teamData.Team);
             }
 
             return "";
