@@ -30,58 +30,31 @@ public class CoinData : ScriptableObject
     /// </summary>
     /// <param name="collectingTeam">The team collecting the coin</param>
     /// <returns>The point value for that team</returns>
-    public int GetValueForTeam(string collectingTeam)
+    public int GetValueForTeam(Team collectingTeam)
     {
-        if (string.IsNullOrEmpty(collectingTeam))
+        switch (collectingTeam)
         {
-            Debug.LogWarning($"CoinData.GetValueForTeam called with empty team name!");
-            return 0;
+            case Team.Team1: return team1Value;
+            case Team.Team2: return team2Value;
+            case Team.Team3AI:
+                Debug.LogWarning("Team3 (AI) tried to collect a coin - AI should not collect coins!");
+                return 0;
+            default:
+                Debug.LogWarning("CoinData.GetValueForTeam called with no team!");
+                return 0;
         }
-
-        // Normalize the team name to handle different conventions
-        string normalizedTeam = collectingTeam.ToLower().Trim();
-
-        // Team 1 variants: "Team1", "team1", "Blue", "blue"
-        if (normalizedTeam == "team1" || normalizedTeam == "blue")
-        {
-            return team1Value;
-        }
-        // Team 2 variants: "Team2", "team2", "Red", "red"
-        else if (normalizedTeam == "team2" || normalizedTeam == "red")
-        {
-            return team2Value;
-        }
-        // Team 3 (AI) - should not collect coins, but return 0 if they somehow do
-        else if (normalizedTeam == "team3")
-        {
-            Debug.LogWarning($"Team3 (AI) is trying to collect a coin - AI should not collect coins!");
-            return 0;
-        }
-
-        // If no match found, log warning and return 0
-        Debug.LogWarning($"Unrecognized team: '{collectingTeam}' (normalized: '{normalizedTeam}'). Expected Team1, Team2, Team3, Blue, or Red.");
-        return 0;
     }
 
     /// <summary>
-    /// Helper method to get the opposite team's value
-    /// Useful for cross-team coin mechanics
+    /// The opposing player team's value (for cross-team coin mechanics).
     /// </summary>
-    public int GetOppositeTeamValue(string collectingTeam)
+    public int GetOppositeTeamValue(Team collectingTeam)
     {
-        string normalizedTeam = collectingTeam.ToLower().Trim();
-
-        // If Team1/Blue is collecting, return Team2 value
-        if (normalizedTeam == "team1" || normalizedTeam == "blue")
+        switch (collectingTeam)
         {
-            return team2Value;
+            case Team.Team1: return team2Value;
+            case Team.Team2: return team1Value;
+            default: return 0;
         }
-        // If Team2/Red is collecting, return Team1 value
-        else if (normalizedTeam == "team2" || normalizedTeam == "red")
-        {
-            return team1Value;
-        }
-
-        return 0;
     }
 }

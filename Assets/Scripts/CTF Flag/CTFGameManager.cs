@@ -174,8 +174,8 @@ public class CTFGameManager : NetworkBehaviour
             return;
         }
 
-        TeamData team1Data = TeamManager.Instance.GetTeamData("Team1");
-        TeamData team2Data = TeamManager.Instance.GetTeamData("Team2");
+        TeamData team1Data = TeamManager.Instance.GetTeamData(Team.Team1);
+        TeamData team2Data = TeamManager.Instance.GetTeamData(Team.Team2);
 
         if (team1Data == null || team2Data == null)
         {

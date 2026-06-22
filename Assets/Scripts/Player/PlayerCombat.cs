@@ -86,10 +86,14 @@ public class PlayerCombat : NetworkBehaviour
             Attack();
         }
 
-        if (pressed.IsSet((int)PlayerButton.Shoot) && ShootCooldownTimer.ExpiredOrNotRunning(Runner))
+        if (pressed.IsSet((int)PlayerButton.Shoot))
         {
-            ShootCooldownTimer = TickTimer.CreateFromSeconds(Runner, projectileCooldown);
-            ShootProjectile(input.AimWorldPoint);
+            Debug.Log($"[SHOOT-DIAG] Shoot pressed | StateAuth={HasStateAuthority} InputAuth={HasInputAuthority} cooldownReady={ShootCooldownTimer.ExpiredOrNotRunning(Runner)} aim={input.AimWorldPoint}");
+            if (ShootCooldownTimer.ExpiredOrNotRunning(Runner))
+            {
+                ShootCooldownTimer = TickTimer.CreateFromSeconds(Runner, projectileCooldown);
+                ShootProjectile(input.AimWorldPoint);
+            }
         }
     }
 
@@ -167,13 +171,22 @@ public class PlayerCombat : NetworkBehaviour
     private void ShootProjectile(Vector2 aimWorldPoint)
     {
         if (anim != null) anim.SetTrigger("Shoot");
-        if (projectilePrefab == null || projectileSpawnPoint == null) return;
-        if (!HasStateAuthority) return; // only the server spawns networked objects
+        if (projectilePrefab == null || projectileSpawnPoint == null)
+        {
+            Debug.LogWarning($"[SHOOT-DIAG] missing ref: prefab={(projectilePrefab == null ? "NULL" : "ok")} spawnPoint={(projectileSpawnPoint == null ? "NULL" : "ok")}");
+            return;
+        }
+        if (!HasStateAuthority)
+        {
+            Debug.Log("[SHOOT-DIAG] not StateAuthority -> host will spawn this for us");
+            return; // only the server spawns networked objects
+        }
 
         Vector2 aimDirection = (aimWorldPoint - (Vector2)projectileSpawnPoint.position).normalized;
-        string shooterTeam = teamComponent != null ? teamComponent.teamID : "";
+        Team shooterTeam = teamComponent != null ? teamComponent.Team : Team.None;
+        Debug.Log($"[SHOOT-DIAG] SERVER spawning | dir={aimDirection} from={projectileSpawnPoint.position} team={shooterTeam}");
 
-        Runner.Spawn(
+        NetworkObject spawned = Runner.Spawn(
             projectilePrefab,
             projectileSpawnPoint.position,
             Quaternion.identity,
@@ -182,8 +195,9 @@ public class PlayerCombat : NetworkBehaviour
             {
                 obj.transform.localScale = Vector3.one * projectileScale;
                 Projectile p = obj.GetComponent<Projectile>();
-                if (p != null) p.Initialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam);
+                if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam);
             });
+        Debug.Log($"[SHOOT-DIAG] Runner.Spawn returned {(spawned == null ? "NULL" : spawned.name)}");
     }
 
     void OnDrawGizmosSelected()

@@ -107,8 +107,7 @@ public class GameSettingsManager : MonoBehaviour
 
     private bool IsAITeam(string teamID)
     {
-        if (TeamManager.Instance == null) return false;
-        return TeamManager.Instance.IsAITeam(teamID);
+        return TeamUtil.Normalize(teamID) == Team.Team3AI;
     }
 
     /// <summary>

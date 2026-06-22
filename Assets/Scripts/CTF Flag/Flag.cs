@@ -120,7 +120,7 @@ public class Flag : NetworkBehaviour
         {
             case FlagState.AtHome:
                 // Enemy team can pick up flag from home
-                if (playerTeam.teamID != owningTeam)
+                if (playerTeam.Team != TeamUtil.Normalize(owningTeam))
                 {
                     PickupFlag(player, playerNetworkObject.InputAuthority);
                 }
@@ -178,9 +178,10 @@ public class Flag : NetworkBehaviour
 
         // Notify clients
         PlayerTeamComponent playerTeam = player.GetComponent<PlayerTeamComponent>();
-        string notification = playerTeam.teamID != owningTeam
-            ? $"{GetTeamDisplayName(playerTeam.teamID)} team has captured {GetTeamDisplayName(owningTeam)}'s flag!"
-            : $"{GetTeamDisplayName(owningTeam)} team is returning their flag!";
+        Team owner = TeamUtil.Normalize(owningTeam);
+        string notification = playerTeam.Team != owner
+            ? $"{TeamUtil.DisplayName(playerTeam.Team)} team has captured {TeamUtil.DisplayName(owner)}'s flag!"
+            : $"{TeamUtil.DisplayName(owner)} team is returning their flag!";
 
         // Notify clients via CTFGameManager
         if (CTFGameManager.Instance != null && HasStateAuthority)
@@ -228,7 +229,7 @@ public class Flag : NetworkBehaviour
         // Notify clients
         if (CTFGameManager.Instance != null && HasStateAuthority)
         {
-            CTFGameManager.Instance.RPC_ShowNotification($"{GetTeamDisplayName(owningTeam)} flag has been dropped!");
+            CTFGameManager.Instance.RPC_ShowNotification($"{TeamUtil.DisplayName(TeamUtil.Normalize(owningTeam))} flag has been dropped!");
         }
 
         Debug.Log($"✓ {owningTeam} flag dropped at {dropPosition}");
@@ -267,7 +268,7 @@ public class Flag : NetworkBehaviour
         // Notify clients
         if (CTFGameManager.Instance != null && HasStateAuthority)
         {
-            CTFGameManager.Instance.RPC_ShowNotification($"{GetTeamDisplayName(owningTeam)} flag has been returned!");
+            CTFGameManager.Instance.RPC_ShowNotification($"{TeamUtil.DisplayName(TeamUtil.Normalize(owningTeam))} flag has been returned!");
         }
 
         Debug.Log($"✓ {owningTeam} flag returned to home");
@@ -366,24 +367,6 @@ public class Flag : NetworkBehaviour
     public void ReturnFlagRpc()
     {
         ReturnFlag();
-    }
-
-    /// <summary>
-    /// Get display name for a team
-    /// </summary>
-    private string GetTeamDisplayName(string teamId)
-    {
-        switch (teamId)
-        {
-            case "Team1":
-            case "Blue":
-                return "Blue";
-            case "Team2":
-            case "Red":
-                return "Red";
-            default:
-                return teamId;
-        }
     }
 
     /// <summary>

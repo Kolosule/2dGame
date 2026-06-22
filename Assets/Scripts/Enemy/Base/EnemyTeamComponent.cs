@@ -17,12 +17,15 @@ public class EnemyTeamComponent : MonoBehaviour
     [Header("Visual Feedback (Optional)")]
     [SerializeField] private SpriteRenderer spriteRenderer;
 
+    /// <summary>The team this enemy belongs to, derived from the authored teamID string.</summary>
+    public Team Team => TeamUtil.Normalize(teamID);
+
     private void Start()
     {
         // Optional: Color the enemy based on team
         if (spriteRenderer != null && TeamManager.Instance != null)
         {
-            TeamData teamData = TeamManager.Instance.GetTeamData(teamID);
+            TeamData teamData = TeamManager.Instance.GetTeamData(Team);
             if (teamData != null)
             {
                 spriteRenderer.color = teamData.teamColor;
@@ -41,7 +44,7 @@ public class EnemyTeamComponent : MonoBehaviour
             return 1f;
         }
 
-        return TeamManager.Instance.GetDamageDealtModifier(teamID, territorialAdvantage);
+        return TeamManager.Instance.GetDamageDealtModifier(Team, territorialAdvantage);
     }
 
     /// <summary>
@@ -55,6 +58,6 @@ public class EnemyTeamComponent : MonoBehaviour
             return 1f;
         }
 
-        return TeamManager.Instance.GetDamageReceivedModifier(teamID, territorialAdvantage);
+        return TeamManager.Instance.GetDamageReceivedModifier(Team, territorialAdvantage);
     }
 }

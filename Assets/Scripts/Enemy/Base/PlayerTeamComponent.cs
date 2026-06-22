@@ -16,9 +16,6 @@ public class PlayerTeamComponent : MonoBehaviour
     /// <summary>The player's team, read from the networked source of truth.</summary>
     public Team Team => teamData != null ? teamData.Team : Team.None;
 
-    /// <summary>Temporary compatibility shim removed in Task 4. Canonical id string.</summary>
-    public string teamID => TeamUtil.ToId(Team);
-
     private void Awake()
     {
         teamData = GetComponent<PlayerTeamData>();

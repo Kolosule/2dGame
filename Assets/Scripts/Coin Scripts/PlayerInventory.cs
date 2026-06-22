@@ -38,11 +38,10 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     /// <summary>
     /// Public property to get the player's team
     /// </summary>
-    public string PlayerTeam
+    public Team PlayerTeam
     {
         get
         {
-            // Try to get from PlayerTeamComponent
             if (!teamComponentChecked)
             {
                 teamComponent = GetComponent<PlayerTeamComponent>();
@@ -51,17 +50,11 @@ public class NetworkedPlayerInventory : NetworkBehaviour
 
             if (teamComponent != null)
             {
-                return teamComponent.teamID;
+                return teamComponent.Team;
             }
 
-            // Fallback: try PlayerTeamData (networked version)
             PlayerTeamData teamData = GetComponent<PlayerTeamData>();
-            if (teamData != null)
-            {
-                return TeamUtil.ToId(teamData.Team);
-            }
-
-            return "";
+            return teamData != null ? teamData.Team : Team.None;
         }
     }
 
@@ -168,7 +161,7 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     private int CalculateTotalValue()
     {
         int totalValue = 0;
-        string team = PlayerTeam;
+        Team team = PlayerTeam;
 
         foreach (CoinData coin in heldCoins)
         {
@@ -214,9 +207,9 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     {
         yield return new WaitForSeconds(0.2f);
 
-        string team = PlayerTeam;
+        Team team = PlayerTeam;
 
-        if (string.IsNullOrEmpty(team))
+        if (team == Team.None)
         {
             Debug.LogWarning($"NetworkedPlayerInventory on {gameObject.name} has no team assigned!");
         }

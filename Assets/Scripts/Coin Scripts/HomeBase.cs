@@ -226,32 +226,9 @@ public class NetworkedHomeBase : NetworkBehaviour
     /// </summary>
     private bool IsPlayerOnCorrectTeam(NetworkedPlayerInventory player)
     {
-        string playerTeamName = player.PlayerTeam.ToLower().Trim();
-        string baseTeamName = baseTeam.ToLower().Trim();
-
-        Debug.Log($"[TEAM CHECK] Player team: '{playerTeamName}' vs Base team: '{baseTeamName}'");
-
-        // Direct match
-        if (playerTeamName == baseTeamName)
-        {
-            return true;
-        }
-
-        // Check alternate names
-        // Team1 = Blue
-        if ((playerTeamName == "team1" || playerTeamName == "blue") &&
-            (baseTeamName == "team1" || baseTeamName == "blue"))
-        {
-            return true;
-        }
-
-        // Team2 = Red
-        if ((playerTeamName == "team2" || playerTeamName == "red") &&
-            (baseTeamName == "team2" || baseTeamName == "red"))
-        {
-            return true;
-        }
-
-        return false;
+        Team playerTeam = player.PlayerTeam;
+        Team baseTeamEnum = TeamUtil.Normalize(baseTeam);
+        Debug.Log($"[TEAM CHECK] Player team: {playerTeam} vs Base team: {baseTeamEnum}");
+        return playerTeam != Team.None && playerTeam == baseTeamEnum;
     }
 }
