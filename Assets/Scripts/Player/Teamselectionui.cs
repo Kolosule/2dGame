@@ -24,6 +24,11 @@ public class TeamSelectionUI : MonoBehaviour
     [Header("🎮 Network Settings")]
     [SerializeField] private GameNetworkManager networkManager;
 
+    [Header("⏳ Status Message")]
+    [Tooltip("Optional. Shows prompts like \"Waiting for other players...\". " +
+             "If left empty, a basic label is created at runtime under the panel.")]
+    [SerializeField] private Text statusText;
+
     [Header("🎨 Visual Settings")]
     [SerializeField] private Color team1Color = new Color(0.2f, 0.4f, 1f);
     [SerializeField] private Color team2Color = new Color(1f, 0.2f, 0.2f);
@@ -74,6 +79,10 @@ public class TeamSelectionUI : MonoBehaviour
         teamSelectionPanel.SetActive(true);
         UpdateTeamCounts();
 
+        // Reset to the initial "pick a team" state in case the panel is shown again.
+        SetButtonsInteractable(true);
+        SetStatus("Choose your team!");
+
         Debug.Log("📱 TEAM SELECTION UI SHOWN");
     }
 
@@ -106,8 +115,46 @@ public class TeamSelectionUI : MonoBehaviour
         // player sees they are now waiting for the others.
         networkManager.SubmitLocalTeamChoice(teamNumber);
         SetButtonsInteractable(false);
+        SetStatus($"Joined Team {teamNumber}.\nWaiting for other players...");
 
         Debug.Log("⏳ Waiting for all players to choose...");
+    }
+
+    /// <summary>Sets the status message, creating a fallback label if none was assigned.</summary>
+    private void SetStatus(string message)
+    {
+        EnsureStatusText();
+        if (statusText != null)
+            statusText.text = message;
+    }
+
+    /// <summary>
+    /// Creates a simple status label under the panel if the inspector field is empty, so the
+    /// "waiting" message works without any extra scene setup. Assign your own Text to style/place it.
+    /// </summary>
+    private void EnsureStatusText()
+    {
+        if (statusText != null || teamSelectionPanel == null)
+            return;
+
+        GameObject go = new GameObject("StatusText (auto)", typeof(RectTransform));
+        go.transform.SetParent(teamSelectionPanel.transform, false);
+
+        statusText = go.AddComponent<Text>();
+        statusText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        statusText.fontSize = 28;
+        statusText.alignment = TextAnchor.MiddleCenter;
+        statusText.color = Color.white;
+        statusText.raycastTarget = false;
+        statusText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        statusText.verticalOverflow = VerticalWrapMode.Overflow;
+
+        RectTransform rt = statusText.rectTransform;
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 30f);
+        rt.sizeDelta = new Vector2(700f, 80f);
     }
 
     private void UpdateTeamCounts()
