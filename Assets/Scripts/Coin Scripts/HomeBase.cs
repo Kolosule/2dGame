@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using Fusion;
 
 /// <summary>
@@ -18,7 +19,7 @@ public class NetworkedHomeBase : NetworkBehaviour
     [SerializeField] private bool autoDeposit = true;
 
     [Tooltip("If not auto-deposit, which key to press (default: E)")]
-    [SerializeField] private KeyCode depositKey = KeyCode.E;
+    [SerializeField] private Key depositKey = Key.E;
 
     [Header("Audio (Optional)")]
     [Tooltip("Sound to play when coins are deposited")]
@@ -99,7 +100,11 @@ public class NetworkedHomeBase : NetworkBehaviour
     /// </summary>
     private void Update()
     {
-        if (!autoDeposit && playerInZone != null && Input.GetKeyDown(depositKey))
+        // Local, non-networked convenience read: playerInZone is only ever set for the
+        // input-authority (local) player, and this only fires an RPC — it never feeds the
+        // Fusion simulation, so reading the device directly here is safe.
+        if (!autoDeposit && playerInZone != null &&
+            Keyboard.current != null && Keyboard.current[depositKey].wasPressedThisFrame)
         {
             RequestDeposit(playerInZone);
         }
