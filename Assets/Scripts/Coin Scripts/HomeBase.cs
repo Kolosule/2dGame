@@ -69,14 +69,6 @@ public class NetworkedHomeBase : NetworkBehaviour
                     {
                         RequestDeposit(player);
                     }
-                    else
-                    {
-                        Debug.Log($"Press {depositKey} to deposit coins!");
-                    }
-                }
-                else
-                {
-                    Debug.Log($"Wrong team! This is {baseTeam}'s base.");
                 }
             }
         }
@@ -117,14 +109,9 @@ public class NetworkedHomeBase : NetworkBehaviour
     {
         if (player.CoinCount == 0)
         {
-            if (player.HasInputAuthority)
-            {
-                Debug.Log("No coins to deposit!");
-            }
             return;
         }
 
-        Debug.Log($"[CLIENT] Requesting deposit for {player.CoinCount} coins");
 
         // FIXED: Send the NetworkObject directly instead of PlayerRef
         RPC_RequestDeposit(player.Object);
@@ -137,7 +124,6 @@ public class NetworkedHomeBase : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_RequestDeposit(NetworkObject playerNetObj)
     {
-        Debug.Log("[SERVER] RPC_RequestDeposit called");
 
         // Validate the player NetworkObject
         if (playerNetObj == null || !playerNetObj.IsValid)
@@ -146,14 +132,12 @@ public class NetworkedHomeBase : NetworkBehaviour
             return;
         }
 
-        Debug.Log($"[SERVER] Processing deposit for {playerNetObj.name}");
 
         // Get the inventory component
         NetworkedPlayerInventory inventory = playerNetObj.GetComponent<NetworkedPlayerInventory>();
 
         if (inventory != null)
         {
-            Debug.Log("[SERVER] Found NetworkedPlayerInventory component");
 
             // Verify player is on correct team (server-side check)
             if (!IsPlayerOnCorrectTeam(inventory))
@@ -167,7 +151,6 @@ public class NetworkedHomeBase : NetworkBehaviour
 
             if (points > 0)
             {
-                Debug.Log($"[SERVER] Player deposited {points} points");
 
                 // Add points to team score through the TeamScoreManager
                 TeamScoreManager scoreManager = TeamScoreManager.Instance;
@@ -175,7 +158,6 @@ public class NetworkedHomeBase : NetworkBehaviour
                 {
                     scoreManager.RPC_AddPoints(baseTeam, points);
 
-                    Debug.Log($"[SERVER] {playerNetObj.name} deposited coins at {baseTeam} base for {points} points!");
 
                     // Notify all clients to play effects
                     RPC_OnDeposit(playerNetObj.transform.position, points);
@@ -184,10 +166,6 @@ public class NetworkedHomeBase : NetworkBehaviour
                 {
                     Debug.LogError("[SERVER] TeamScoreManager not found in scene!");
                 }
-            }
-            else
-            {
-                Debug.Log("[SERVER] No points to deposit (inventory empty or returned 0)");
             }
         }
         else
@@ -202,7 +180,6 @@ public class NetworkedHomeBase : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnDeposit(Vector3 playerPosition, int points)
     {
-        Debug.Log($"[CLIENT] Deposit effect triggered - {points} points for {baseTeam}");
 
         // Play deposit sound if assigned
         if (depositSound != null)
@@ -217,7 +194,6 @@ public class NetworkedHomeBase : NetworkBehaviour
             Destroy(effect, 2f);
         }
 
-        Debug.Log($"Coins deposited! +{points} points for {baseTeam}");
     }
 
     /// <summary>
@@ -228,7 +204,6 @@ public class NetworkedHomeBase : NetworkBehaviour
     {
         Team playerTeam = player.PlayerTeam;
         Team baseTeamEnum = TeamUtil.Normalize(baseTeam);
-        Debug.Log($"[TEAM CHECK] Player team: {playerTeam} vs Base team: {baseTeamEnum}");
         return playerTeam != Team.None && playerTeam == baseTeamEnum;
     }
 }

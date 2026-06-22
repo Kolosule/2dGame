@@ -53,7 +53,6 @@ public class FlagCarrierMarker : MonoBehaviour
             flagIcon = null;
         }
 
-        Debug.Log($"Player {gameObject.name} carrying flag: {carrying}");
     }
 
     /// <summary>

@@ -32,10 +32,6 @@ public class PlayerCameraShakeHandler : MonoBehaviour
     [Tooltip("Should shake get longer with more damage?")]
     [SerializeField] private bool scaleDurationWithDamage = false;
 
-    [Header("🔧 Debug")]
-    [Tooltip("Show debug messages in console")]
-    [SerializeField] private bool showDebugMessages = false;
-
     // Internal variables
     private PlayerStatsHandler statsHandler;
     private PlayerCamera playerCamera;
@@ -60,10 +56,6 @@ public class PlayerCameraShakeHandler : MonoBehaviour
         // Store initial health
         previousHealth = statsHandler.GetCurrentHealth();
 
-        if (showDebugMessages)
-        {
-            Debug.Log("✓ PlayerCameraShakeHandler initialized");
-        }
     }
 
     /// <summary>
@@ -113,10 +105,6 @@ public class PlayerCameraShakeHandler : MonoBehaviour
         // Find the PlayerCamera component in the scene
         playerCamera = FindFirstObjectByType<PlayerCamera>();
 
-        if (playerCamera != null && showDebugMessages)
-        {
-            Debug.Log("✓ Found PlayerCamera");
-        }
     }
 
     /// <summary>
@@ -142,10 +130,6 @@ public class PlayerCameraShakeHandler : MonoBehaviour
         // Trigger the shake
         playerCamera.TriggerShake(intensity, duration);
 
-        if (showDebugMessages)
-        {
-            Debug.Log($"📳 Camera shake triggered! Damage: {damageAmount}, Intensity: {intensity}, Duration: {duration}");
-        }
     }
 
     /// <summary>

@@ -47,7 +47,6 @@ public class TerritoryZone : MonoBehaviour
         float multiplier = scoreManager.GetTerritoryDamageMultiplier(attackerTeam);
         float modifiedDamage = baseDamage * multiplier;
         
-        Debug.Log($"Territory damage: {baseDamage} x {multiplier} = {modifiedDamage}");
         
         return modifiedDamage;
     }
@@ -81,7 +80,6 @@ public class TerritoryZone : MonoBehaviour
         float multiplier = scoreManager.GetTerritoryDefenseMultiplier(defenderTeam);
         float modifiedDamage = incomingDamage * multiplier;
         
-        Debug.Log($"Territory defense: {incomingDamage} x {multiplier} = {modifiedDamage}");
         
         return modifiedDamage;
     }

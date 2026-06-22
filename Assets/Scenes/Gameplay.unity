@@ -8375,7 +8375,6 @@ MonoBehaviour:
   shakeDecay: 2
   respawnTransitionTime: 2
   arriveBeforeRespawn: 1
-  showDebugMessages: 0
 --- !u!114 &955214613
 MonoBehaviour:
   m_ObjectHideFlags: 0

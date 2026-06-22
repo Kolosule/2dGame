@@ -58,7 +58,6 @@ public class MenuCamera : MonoBehaviour
         pos.z = cameraZPosition;
         transform.position = pos;
 
-        Debug.Log("✓ MenuCamera initialized");
     }
 
     /// <summary>

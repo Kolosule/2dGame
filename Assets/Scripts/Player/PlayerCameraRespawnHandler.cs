@@ -55,10 +55,6 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
             return;
         }
 
-        if (showDebugMessages)
-        {
-            Debug.Log("✓ PlayerCameraRespawnHandler initialized");
-        }
     }
 
     /// <summary>
@@ -81,10 +77,6 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
             isDead = true;
             hasTriggeredRespawnTransition = false;
 
-            if (showDebugMessages)
-            {
-                Debug.Log("💀 Player died - preparing camera transition");
-            }
 
             // Start the death sequence
             StartCoroutine(HandleDeathCameraSequence());
@@ -96,10 +88,6 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
             // Player respawned
             isDead = false;
 
-            if (showDebugMessages)
-            {
-                Debug.Log("✨ Player respawned - camera transition complete");
-            }
         }
     }
 
@@ -110,10 +98,6 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
     {
         playerCamera = FindFirstObjectByType<PlayerCamera>();
 
-        if (playerCamera != null && showDebugMessages)
-        {
-            Debug.Log("✓ Found PlayerCamera");
-        }
     }
 
     /// <summary>
@@ -136,10 +120,6 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
         // Get respawn position from NetworkedSpawnManager
         Vector3 respawnPosition = GetRespawnPosition();
 
-        if (showDebugMessages)
-        {
-            Debug.Log($"🎬 Starting camera transition to respawn point: {respawnPosition}");
-        }
 
         // Trigger camera transition
         if (playerCamera != null)
@@ -160,10 +140,6 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
             if (teamData != null && teamData.Team != Team.None)
             {
                 Vector3 spawnPos = NetworkedSpawnManager.Instance.GetSpawnPosition(TeamUtil.ToNumber(teamData.Team));
-                if (showDebugMessages)
-                {
-                    Debug.Log($"✓ Got respawn position for {teamData.Team}: {spawnPos}");
-                }
                 return spawnPos;
             }
         }
@@ -189,10 +165,6 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
         {
             playerCamera.StartRespawnTransition(respawnPosition);
 
-            if (showDebugMessages)
-            {
-                Debug.Log($"🎬 Manual respawn transition triggered to {respawnPosition}");
-            }
         }
     }
 

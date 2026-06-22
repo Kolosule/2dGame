@@ -78,12 +78,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         TeamSelectionData.Reset();
         LobbyTeamChoices.Clear();
         gameStarting = false;
-        Debug.Log("✅ GameNetworkManager initialized");
     }
 
     async void StartHost()
     {
-        Debug.Log("🏠 Starting game...");
         SetButtonsInteractable(false);
 
         // CRITICAL FIX: Always use Host mode for multiplayer
@@ -97,12 +95,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
         };
 
-        Debug.Log($"🏠 Starting in {mode} mode");
         var result = await runner.StartGame(args);
 
         if (result.Ok)
         {
-            Debug.Log("✅ Game started successfully!");
             isConnected = true;
             HideMenu();
             ShowTeamSelection();
@@ -119,12 +115,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // In single player mode, client button does the same as host
         if (singlePlayerMode)
         {
-            Debug.Log("🔌 Single player mode - starting game...");
             StartHost();
             return;
         }
 
-        Debug.Log("🔌 Starting as Client...");
         SetButtonsInteractable(false);
 
         var args = new StartGameArgs()
@@ -138,7 +132,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (result.Ok)
         {
-            Debug.Log("✅ Connected!");
             isConnected = true;
             HideMenu();
             ShowTeamSelection();
@@ -155,7 +148,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (menuPanel != null)
         {
             menuPanel.SetActive(false);
-            Debug.Log("✅ Menu hidden");
         }
     }
 
@@ -164,7 +156,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (teamSelectionUI != null && runner != null)
         {
             teamSelectionUI.ShowTeamSelection(runner);
-            Debug.Log("✅ Team selection shown");
         }
         else
         {
@@ -200,12 +191,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (runner.IsServer)
         {
-            Debug.Log($"📥 [HOST] Recording own team choice: Team {teamNumber}");
             RecordChoice(runner.LocalPlayer, teamNumber);
         }
         else
         {
-            Debug.Log($"📤 [CLIENT] Sending team choice to host: Team {teamNumber}");
             runner.SendReliableDataToServer(TeamChoiceKey, new byte[] { (byte)teamNumber });
         }
     }
@@ -223,8 +212,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         LobbyTeamChoices.Set(player, teamNumber);
-        Debug.Log($"✅ [HOST] Player {player.PlayerId} chose Team {teamNumber} " +
-                  $"({LobbyTeamChoices.Count} choice(s) recorded)");
 
         TryStartMatch();
     }
@@ -243,7 +230,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (active < required)
         {
-            Debug.Log($"⏳ [LOBBY] Waiting for players to connect ({active}/{required})");
             return;
         }
 
@@ -251,13 +237,11 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             if (!LobbyTeamChoices.Has(player))
             {
-                Debug.Log($"⏳ [LOBBY] Waiting for Player {player.PlayerId} to choose a team");
                 return;
             }
         }
 
         gameStarting = true;
-        Debug.Log("✅ [LOBBY] All players ready - loading Gameplay scene");
         LoadGameplayScene();
     }
 
@@ -266,9 +250,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (teamSelectionUI != null)
             teamSelectionUI.HideTeamSelection();
 
-        Debug.Log("🎬 Loading Gameplay Scene...");
         await runner.LoadScene(SceneRef.FromIndex(gameplaySceneIndex));
-        Debug.Log("✅ Gameplay scene load initiated");
     }
 
     void OnDestroy()
@@ -298,12 +280,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     // Fusion callbacks
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
-        Debug.Log($"🌐 ========================================");
-        Debug.Log($"🌐 Player {player.PlayerId} joined in MainMenu");
-        Debug.Log($"🌐 Scene: {SceneManager.GetActiveScene().name}");
-        Debug.Log($"🌐 We will NOT spawn them here");
-        Debug.Log($"🌐 NetworkedSpawnManager will handle spawning");
-        Debug.Log($"🌐 ========================================");
 
         // CRITICAL: DO NOT SPAWN PLAYER HERE
         // Let NetworkedSpawnManager in the Gameplay scene handle it
@@ -311,7 +287,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
-        Debug.Log($"👋 Player {player.PlayerId} left");
 
         // Drop their lobby choice and re-evaluate the start gate (e.g. a leaver who hadn't chosen
         // should no longer block the others).
@@ -324,7 +299,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
     {
-        Debug.Log($"🛑 Shutdown: {shutdownReason}");
         isConnected = false;
 
         if (teamSelectionUI != null)
@@ -341,12 +315,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnConnectedToServer(NetworkRunner runner)
     {
-        Debug.Log("📡 Connected!");
     }
 
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
     {
-        Debug.Log($"📡 Disconnected: {reason}");
     }
 
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
@@ -378,17 +350,14 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         int teamNumber = data.Array[data.Offset];
-        Debug.Log($"📥 [HOST] Received team choice from Player {player.PlayerId}: Team {teamNumber}");
         RecordChoice(player, teamNumber);
     }
     public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     public void OnSceneLoadDone(NetworkRunner runner)
     {
-        Debug.Log($"🎬 Scene loaded: {SceneManager.GetActiveScene().name}");
     }
     public void OnSceneLoadStart(NetworkRunner runner)
     {
-        Debug.Log("🎬 Loading scene...");
     }
     public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }

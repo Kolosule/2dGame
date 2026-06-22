@@ -41,7 +41,6 @@ public class Projectile : NetworkBehaviour
         if (col != null) col.isTrigger = true;
         if (rb != null) rb.gravityScale = 1f;
 
-        Debug.Log($"[PROJ-DIAG] Spawned | StateAuth={HasStateAuthority} dir={Direction} speed={Speed} pos={transform.position} hasRB={(rb != null)} hasNetRB={(GetComponent<Fusion.Addons.Physics.NetworkRigidbody2D>() != null)}");
 
         if (HasStateAuthority && rb != null)
             rb.linearVelocity = Direction * Speed;
@@ -60,7 +59,6 @@ public class Projectile : NetworkBehaviour
     {
         if (!HasStateAuthority || hasHit) return;
 
-        Debug.Log($"[PROJ-DIAG] trigger with '{other.name}' layer={LayerMask.LayerToName(other.gameObject.layer)}");
 
         // Player hit (skip same team)
         PlayerStatsHandler playerStats = other.GetComponent<PlayerStatsHandler>();
@@ -100,7 +98,6 @@ public class Projectile : NetworkBehaviour
     private void Hit()
     {
         if (hasHit) return;
-        Debug.Log("[PROJ-DIAG] Hit -> Runner.Despawn");
         hasHit = true;
         if (impactEffect != null) RPC_Impact(transform.position);
         Runner.Despawn(Object);

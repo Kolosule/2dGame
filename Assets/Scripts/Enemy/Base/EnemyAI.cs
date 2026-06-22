@@ -88,7 +88,6 @@ public class EnemyAI : MonoBehaviour
             Debug.LogWarning($"{gameObject.name}: No SpriteRenderer found - telegraph effect won't work!");
         }
 
-        Debug.Log($"{stats.enemyName} AI started. State: {currentState}");
     }
 
     private void Update()
@@ -174,7 +173,6 @@ public class EnemyAI : MonoBehaviour
                 // Found a living player - start chasing
                 currentPlayer = player.transform;
                 currentState = State.Chasing;
-                Debug.Log($"{stats.enemyName} detected {player.name}!");
                 return;
             }
         }
@@ -231,7 +229,6 @@ public class EnemyAI : MonoBehaviour
             rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
         }
 
-        Debug.Log($"{stats.enemyName} is telegraphing attack!");
     }
 
     /// <summary>
@@ -270,20 +267,17 @@ public class EnemyAI : MonoBehaviour
             {
                 // Player didn't dodge - perform attack
                 currentState = State.Attacking;
-                Debug.Log($"{stats.enemyName} telegraph complete - player is still in range, attacking!");
             }
             else
             {
                 // Player successfully dodged - return to chasing
                 currentState = State.Chasing;
-                Debug.Log($"{stats.enemyName} telegraph complete - player dodged! Distance: {distance:F2}");
             }
         }
         else
         {
             // Player is gone - return to patrol
             currentState = State.Patrolling;
-            Debug.Log($"{stats.enemyName} telegraph complete - player is gone!");
         }
     }
 
@@ -327,7 +321,6 @@ public class EnemyAI : MonoBehaviour
         {
             currentPlayer = null;
             currentState = State.Patrolling;
-            Debug.Log($"{stats.enemyName} lost sight of player");
         }
     }
 
@@ -361,7 +354,6 @@ public class EnemyAI : MonoBehaviour
             currentTarget = pointA;
         }
 
-        Debug.Log($"{stats.enemyName} patrol points set: {pointA.name} and {pointB.name}");
     }
 
     // Show detection and attack ranges in editor

@@ -517,7 +517,6 @@ MonoBehaviour:
   maxShakeIntensity: 1
   baseShakeDuration: 0.2
   scaleDurationWithDamage: 0
-  showDebugMessages: 0
 --- !u!114 &6913999319050724693
 MonoBehaviour:
   m_ObjectHideFlags: 0

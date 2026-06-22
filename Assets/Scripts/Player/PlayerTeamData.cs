@@ -46,7 +46,6 @@ public class PlayerTeamData : NetworkBehaviour
         }
 
         Team = team;
-        Debug.Log($"[SERVER] Player team set to: {team}");
 
         // Apply immediately on the authority; remote clients get it via OnChangedRender.
         OnTeamChanged();
