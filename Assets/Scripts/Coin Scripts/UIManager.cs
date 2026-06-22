@@ -130,6 +130,10 @@ public class UIManager : MonoBehaviour
         if (scoreManager == null)
             return;
 
+        // Networked properties can only be read after Fusion has Spawned() the object.
+        if (scoreManager.Object == null || !scoreManager.Object.IsValid)
+            return;
+
         if (team1ScoreText != null)
             team1ScoreText.text = $"Team1: {scoreManager.Team1Score}";
 
