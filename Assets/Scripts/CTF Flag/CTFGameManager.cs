@@ -261,16 +261,20 @@ public class CTFGameManager : NetworkBehaviour
         {
             switch (state)
             {
+                // NOTE: the default LiberationSans SDF atlas has no emoji glyphs, so
+                // emoji here render as the missing-glyph box. Use plain text (state is
+                // also conveyed by color). To restore icons, add an emoji TMP font to
+                // the LiberationSans fallback list and put the emoji back.
                 case Flag.FlagState.AtHome:
-                    statusText.text = "🏴 At Base";
+                    statusText.text = "At Base";
                     statusText.color = Color.green;
                     break;
                 case Flag.FlagState.Carried:
-                    statusText.text = "⚠️ Taken!";
+                    statusText.text = "Taken!";
                     statusText.color = Color.red;
                     break;
                 default:
-                    statusText.text = "📍 Dropped";
+                    statusText.text = "Dropped";
                     statusText.color = Color.yellow;
                     break;
             }
