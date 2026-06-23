@@ -37,6 +37,11 @@ public class PlayerStatsHandler : NetworkBehaviour
     [Networked]
     public bool IsDead { get; set; }
 
+    // The spawn point chosen for the NEXT respawn, decided once at death so the camera transition
+    // and the actual respawn teleport agree on a single location (they used to pick independently).
+    [Networked]
+    public Vector3 RespawnPosition { get; private set; }
+
     // Simulation-path timers (TickTimer = deterministic, authority-driven).
     [Networked] private TickTimer SpawnImmunityTimer { get; set; }
     [Networked] private TickTimer HitCooldownTimer { get; set; }
@@ -151,6 +156,10 @@ public class PlayerStatsHandler : NetworkBehaviour
 
         IsDead = true;
 
+        // Decide where we will respawn NOW, so the camera transition and the respawn teleport
+        // target the exact same point (see RespawnPosition).
+        RespawnPosition = ResolveSpawnPosition();
+
         // Drop flag if carrying one
         DropFlagOnDeath();
 
@@ -161,14 +170,8 @@ public class PlayerStatsHandler : NetworkBehaviour
             inventory.OnPlayerDeath(transform.position);
         }
 
-        // Disable camera handler
-        PlayerCameraRespawnHandler cameraHandler = GetComponent<PlayerCameraRespawnHandler>();
-        if (cameraHandler != null)
-        {
-            cameraHandler.enabled = false;
-        }
-
-        // Disable player controls on all clients
+        // Disable player controls on all clients (control is also gated on IsDead in
+        // PlayerController; this RPC additionally handles the dimmed-sprite visual).
         RPC_DisablePlayerControls();
 
         // Start respawn timer (simulation-path TickTimer, evaluated in FixedUpdateNetwork)
@@ -199,15 +202,11 @@ public class PlayerStatsHandler : NetworkBehaviour
         return false;
     }
 
+    // Control freeze itself is gated on the networked IsDead in PlayerController; these RPCs only
+    // drive the dimmed-while-dead sprite visual on every client.
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_DisablePlayerControls()
     {
-        PlayerCombat combat = GetComponent<PlayerCombat>();
-        if (combat != null) combat.enabled = false;
-
-        PlayerMovement movement = GetComponent<PlayerMovement>();
-        if (movement != null) movement.enabled = false;
-
         SpriteRenderer sprite = GetComponentInChildren<SpriteRenderer>();
         if (sprite != null)
         {
@@ -237,48 +236,38 @@ public class PlayerStatsHandler : NetworkBehaviour
         IsDead = false;
         SpawnImmunityTimer = TickTimer.CreateFromSeconds(Runner, spawnImmunityDuration); // Reset spawn immunity
 
-        // Resolve the respawn position from the single networked team source.
-        PlayerTeamData teamData = GetComponent<PlayerTeamData>();
-        if (teamData != null && teamData.Team != Team.None && NetworkedSpawnManager.Instance != null)
-        {
-            int teamNumber = TeamUtil.ToNumber(teamData.Team);
-            Vector3 spawnPosition = NetworkedSpawnManager.Instance.GetSpawnPosition(teamNumber);
-            transform.position = spawnPosition;
+        // Teleport to the position chosen at death (RespawnPosition), so it matches where the
+        // camera already transitioned to.
+        transform.position = RespawnPosition;
 
-            Rigidbody2D rb = GetComponent<Rigidbody2D>();
-            if (rb != null)
-            {
-                rb.linearVelocity = Vector2.zero;
-                rb.angularVelocity = 0f;
-            }
-
-        }
-        else
+        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
         {
-            Debug.LogWarning("⚠️ Could not resolve team spawn position - respawning at current location");
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
         }
 
         // Re-enable player controls on all clients
         RPC_EnablePlayerControls();
+    }
 
-        // Re-enable camera handler
-        PlayerCameraRespawnHandler cameraHandler = GetComponent<PlayerCameraRespawnHandler>();
-        if (cameraHandler != null)
+    /// <summary>SERVER: resolve this player's team spawn point, or current position as a fallback.</summary>
+    private Vector3 ResolveSpawnPosition()
+    {
+        PlayerTeamData teamData = GetComponent<PlayerTeamData>();
+        if (teamData != null && teamData.Team != Team.None && NetworkedSpawnManager.Instance != null)
         {
-            cameraHandler.enabled = true;
+            int teamNumber = TeamUtil.ToNumber(teamData.Team);
+            return NetworkedSpawnManager.Instance.GetSpawnPosition(teamNumber);
         }
 
+        Debug.LogWarning("⚠️ Could not resolve team spawn position - respawning at current location");
+        return transform.position;
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_EnablePlayerControls()
     {
-        PlayerCombat combat = GetComponent<PlayerCombat>();
-        if (combat != null) combat.enabled = true;
-
-        PlayerMovement movement = GetComponent<PlayerMovement>();
-        if (movement != null) movement.enabled = true;
-
         SpriteRenderer sprite = GetComponentInChildren<SpriteRenderer>();
         if (sprite != null)
         {

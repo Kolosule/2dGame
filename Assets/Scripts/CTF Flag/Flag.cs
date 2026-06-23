@@ -43,12 +43,17 @@ public class Flag : NetworkBehaviour
     [Networked]
     public Vector3 HomePosition { get; set; }
 
+    // Networked drop location so a dropped flag appears in the same place on every peer.
+    // A bare NetworkObject does not replicate its transform (this project uses no
+    // NetworkTransform), so without this the dropped/returned flag desyncs on clients.
+    [Networked] private Vector3 DropPosition { get; set; }
+
     // Server-evaluated auto-return countdown (simulation-path TickTimer, deterministic).
     [Networked] private TickTimer AutoReturnTimer { get; set; }
 
     // Local references
     private GameObject carrierGameObject; // RENAMED from 'carrier' to avoid conflict
-    private Vector3 dropPosition;
+    private GameObject markedCarrier;      // who currently shows the flag icon on THIS peer
 
     // Flag states
     public enum FlagState
@@ -95,10 +100,41 @@ public class Flag : NetworkBehaviour
         if (Object == null || !Object.IsValid)
             return;
 
-        // If flag is being carried, follow the carrier
-        if (CurrentState == FlagState.Carried && carrierGameObject != null)
+        // Resolve the carrier locally if needed. Doing this here (rather than relying only on
+        // the OnChangedRender callback) makes it robust on every peer, including the client.
+        if (CurrentState == FlagState.Carried && carrierGameObject == null &&
+            CarrierPlayerRef != PlayerRef.None &&
+            Runner.TryGetPlayerObject(CarrierPlayerRef, out NetworkObject carrierObj))
         {
-            transform.position = carrierGameObject.transform.position + Vector3.up * carrierOffset;
+            carrierGameObject = carrierObj.gameObject;
+        }
+
+        // Position the flag from networked state so every peer agrees on where it is
+        // (this project has no NetworkTransform; the transform is driven locally here).
+        switch (CurrentState)
+        {
+            case FlagState.Carried:
+                if (carrierGameObject != null)
+                    transform.position = carrierGameObject.transform.position + Vector3.up * carrierOffset;
+                break;
+            case FlagState.Dropped:
+                if (DropPosition != Vector3.zero) transform.position = DropPosition;
+                break;
+            case FlagState.AtHome:
+                // Guard against the brief window before HomePosition has replicated on a
+                // freshly-joined client (scene flags already sit at home, so this is safe).
+                if (HomePosition != Vector3.zero) transform.position = HomePosition;
+                break;
+        }
+
+        // Reconcile the carrier marker on EVERY peer from the networked state, so all players
+        // (not just the holder) see the flag icon above whoever is carrying it.
+        GameObject desiredCarrier = CurrentState == FlagState.Carried ? carrierGameObject : null;
+        if (desiredCarrier != markedCarrier)
+        {
+            if (markedCarrier != null) SetCarrierMarker(markedCarrier, false);
+            if (desiredCarrier != null) SetCarrierMarker(desiredCarrier, true);
+            markedCarrier = desiredCarrier;
         }
     }
 
@@ -139,8 +175,11 @@ public class Flag : NetworkBehaviour
                 break;
 
             case FlagState.Dropped:
-                // Anyone can pick up dropped flag
-                PickupFlag(player, playerNetworkObject.InputAuthority);
+                // Own team returns a dropped flag straight home; the enemy steals it (carries it).
+                if (playerTeam.Team == TeamUtil.Normalize(owningTeam))
+                    ReturnFlag();
+                else
+                    PickupFlag(player, playerNetworkObject.InputAuthority);
                 break;
 
             case FlagState.Carried:
@@ -199,8 +238,8 @@ public class Flag : NetworkBehaviour
         if (!HasStateAuthority) return;
         if (CurrentState != FlagState.Carried) return;
 
-        // Save drop position
-        dropPosition = transform.position;
+        // Save drop position (networked so clients see the dropped flag in the right place)
+        DropPosition = transform.position;
 
         // Clear carrier
         if (carrierGameObject != null)
@@ -286,27 +325,25 @@ public class Flag : NetworkBehaviour
     /// </summary>
     private void OnCarrierPlayerRefChanged()
     {
-        // Find carrier GameObject on client
+        // Resolve (or clear) the carrier GameObject on this peer. The marker visual itself is
+        // reconciled every frame in Update() from the networked state, so it shows on every
+        // peer regardless of exactly when this callback fires.
         if (CarrierPlayerRef != PlayerRef.None)
         {
-            // Try to find the player with this PlayerRef
-            foreach (PlayerRef player in Runner.ActivePlayers)
-            {
-                if (player == CarrierPlayerRef)
-                {
-                    // Get the network object for this player
-                    if (Runner.TryGetPlayerObject(player, out NetworkObject networkObject))
-                    {
-                        carrierGameObject = networkObject.gameObject;
-                        break;
-                    }
-                }
-            }
+            if (Runner.TryGetPlayerObject(CarrierPlayerRef, out NetworkObject networkObject))
+                carrierGameObject = networkObject.gameObject;
         }
         else
         {
             carrierGameObject = null;
         }
+    }
+
+    private static void SetCarrierMarker(GameObject carrier, bool carrying)
+    {
+        if (carrier == null) return; // carrier may have despawned (player left) mid-carry
+        FlagCarrierMarker marker = carrier.GetComponent<FlagCarrierMarker>();
+        if (marker != null) marker.SetCarryingFlag(carrying);
     }
 
     /// <summary>

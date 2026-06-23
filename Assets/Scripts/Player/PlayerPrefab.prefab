@@ -222,7 +222,6 @@ GameObject:
   - component: {fileID: 2763095343719607636}
   - component: {fileID: 1629181840047361504}
   - component: {fileID: 1716746421360222117}
-  - component: {fileID: 3938946417030660628}
   - component: {fileID: -4804353808761203150}
   - component: {fileID: 7275137055155341575}
   - component: {fileID: 3141066975475156066}
@@ -381,11 +380,8 @@ MonoBehaviour:
   stats: {fileID: 11400000, guid: 210721b53ee27ce4d99595054d7e3477, type: 2}
   attackableLayer:
     serializedVersion: 2
-    m_Bits: 128
-  damageAmount: 25
-  knockbackStrength: 10
+    m_Bits: 384
   knockbackUpward: 2
-  attackCooldown: 0.1
   sideAttackPoint: {fileID: 8846297479289465317}
   upAttackPoint: {fileID: 3389257580738603586}
   downAttackPoint: {fileID: 598472603001116420}
@@ -424,23 +420,10 @@ MonoBehaviour:
   stats: {fileID: 11400000, guid: 210721b53ee27ce4d99595054d7e3477, type: 2}
   healthBar: {fileID: 0}
   spawnImmunityDuration: 1.5
+  respawnDelay: 3
+  hitCooldown: 0.1
   _CurrentHealth: 0
   _IsDead: 0
---- !u!114 &3938946417030660628
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3540110564427285031}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b6bd075e4925b0b469ea0cb123142f36, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: '::'
-  teamID: Team1
-  spriteRenderer: {fileID: 0}
-  colorizePlayer: 0
 --- !u!114 &-4804353808761203150
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -456,6 +439,7 @@ MonoBehaviour:
   maxCoins: 5
   coinPickupSound: {fileID: 0}
   depositSound: {fileID: 0}
+  dropScatterRadius: 1
   _CoinCount: 0
   _TotalCoinValue: 0
 --- !u!114 &7275137055155341575
@@ -542,6 +526,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerTeamData
   _Team: 0
+  spriteRenderer: {fileID: 0}
+  colorizePlayer: 1
 --- !u!114 &1952719817621573329
 MonoBehaviour:
   m_ObjectHideFlags: 0

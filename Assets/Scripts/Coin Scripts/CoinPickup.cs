@@ -3,9 +3,16 @@ using Fusion;
 using System.Collections;
 
 /// <summary>
-/// FIXED VERSION - Now properly handles coin pickup by passing NetworkObject directly!
 /// Networked coin pickup for Photon Fusion.
-/// Handles coin collection and syncs across all clients.
+///
+/// Pickup is HOST-AUTHORITATIVE: the state authority simulates every player, so it polls for an
+/// overlapping player each tick and collects the coin directly. The old design relied on each
+/// client's local trigger firing on a proxy coin + an RPC, which is unreliable for the joining
+/// client - that is why coins were visible but un-collectable for player 2.
+///
+/// Pop + fall also run only on the state authority (simple manual integration + a downward
+/// ground raycast); the resulting position is replicated through SyncedPosition because this
+/// project uses no NetworkTransform.
 /// </summary>
 [RequireComponent(typeof(Collider2D))]
 public class NetworkedCoinPickup : NetworkBehaviour
@@ -25,17 +32,55 @@ public class NetworkedCoinPickup : NetworkBehaviour
     [Tooltip("Rotation speed in degrees per second")]
     [SerializeField] private float rotationSpeed = 90f;
 
+    [Header("Pop + Fall (server simulated)")]
+    [Tooltip("Downward acceleration applied while the coin is falling")]
+    [SerializeField] private float gravity = 30f;
+
+    [Tooltip("Upward launch speed when the coin pops out (randomized between min/max)")]
+    [SerializeField] private float popUpSpeedMin = 4f;
+    [SerializeField] private float popUpSpeedMax = 7f;
+
+    [Tooltip("Maximum sideways launch speed when the coin pops out")]
+    [SerializeField] private float popSideSpeed = 3f;
+
+    [Header("Pickup")]
+    [Tooltip("Radius around the coin used to detect an overlapping player")]
+    [SerializeField] private float pickupRadius = 0.6f;
+
     [Header("Spawn Settings")]
     [Tooltip("How long to wait after spawning before allowing pickup (prevents instant pickup)")]
-    [SerializeField] private float spawnDelay = 0.1f;
+    [SerializeField] private float spawnDelay = 0.25f;
 
     // Network property to track if coin has been collected
     [Networked]
     private NetworkBool IsCollected { get; set; }
 
+    // Networked position. Coins are spawned by the server (Runner.Spawn) at an enemy's death /
+    // a player's drop location and then pop + fall on the server; a bare NetworkObject does not
+    // replicate its transform (this project uses no NetworkTransform), so the authority writes
+    // its position here every tick and remote peers follow it.
+    [Networked]
+    private Vector3 SyncedPosition { get; set; }
+
+    // Server-only physics state.
+    private Vector2 velocity;
+    private bool grounded;
+    private int groundMask;
+    private int playerMask;
+    private float restOffset;
+
     // Track if we're ready to be picked up
     private bool isReadyForPickup = false;
     private bool hasStartedInitialization = false;
+
+    // Pickup query reuse: TryServerPickup runs every tick per live coin on the authority. The old
+    // Physics2D.OverlapCircleAll allocated a fresh Collider2D[] each call (~1.3k allocs/s on the
+    // host at 20 coins × 64 Hz). The ContactFilter2D + reusable List overload is allocation-free
+    // after warmup; it runs authority-only, single-threaded, and consumes results immediately, so a
+    // shared static buffer is safe.
+    private static readonly System.Collections.Generic.List<Collider2D> PickupResults =
+        new System.Collections.Generic.List<Collider2D>(8);
+    private ContactFilter2D playerFilter;
 
     /// <summary>
     /// Public property to access coin data from other scripts
@@ -44,6 +89,32 @@ public class NetworkedCoinPickup : NetworkBehaviour
 
     public override void Spawned()
     {
+        groundMask = LayerMask.GetMask("Ground");
+        playerMask = LayerMask.GetMask("Player");
+
+        // Build the pickup filter once (matches the old OverlapCircleAll: player layer mask,
+        // triggers included per the default global query behavior).
+        playerFilter = new ContactFilter2D { useTriggers = true };
+        playerFilter.SetLayerMask(playerMask);
+
+        // Distance from the coin centre to its bottom, so it rests on top of the ground.
+        CircleCollider2D circle = GetComponent<CircleCollider2D>();
+        restOffset = circle != null ? circle.radius * Mathf.Abs(transform.lossyScale.y) : 0.1f;
+
+        if (HasStateAuthority)
+        {
+            // Capture the spawn position and give the coin its initial "pop".
+            SyncedPosition = transform.position;
+            velocity = new Vector2(
+                Random.Range(-popSideSpeed, popSideSpeed),
+                Random.Range(popUpSpeedMin, popUpSpeedMax));
+        }
+        else
+        {
+            // Remote peers snap to the replicated position immediately.
+            transform.position = SyncedPosition;
+        }
+
         // Start initialization when spawned on the network
         if (!hasStartedInitialization)
         {
@@ -60,7 +131,8 @@ public class NetworkedCoinPickup : NetworkBehaviour
         // Wait for spawn delay
         yield return new WaitForSeconds(spawnDelay);
 
-        // Ensure the collider is set to trigger mode
+        // Ensure the collider is set to trigger mode (the pickup query hits it either way; a
+        // trigger keeps the coin from physically shoving players that walk into it).
         Collider2D col = GetComponent<Collider2D>();
         if (col != null)
         {
@@ -78,57 +150,80 @@ public class NetworkedCoinPickup : NetworkBehaviour
     }
 
     /// <summary>
-    /// FIXED - Called when another object enters this coin's trigger collider
-    /// Now properly passes NetworkObject reference to avoid lookup issues
+    /// SERVER: run pop/fall integration and poll for a collecting player. Runs in the fixed
+    /// network tick so Physics2D queries see up-to-date positions (same path PlayerCombat melee
+    /// uses successfully).
     /// </summary>
-    private void OnTriggerEnter2D(Collider2D collision)
+    public override void FixedUpdateNetwork()
     {
+        if (!HasStateAuthority || IsCollected) return;
 
-        // IMPORTANT: Check if coin is ready for pickup
-        if (!isReadyForPickup)
+        float dt = Runner.DeltaTime;
+
+        if (!grounded)
         {
-            return;
-        }
+            velocity.y -= gravity * dt;
+            Vector3 pos = transform.position;
+            Vector2 step = velocity * dt;
 
-        // IMPORTANT: Only access networked properties if the object has been spawned
-        if (Object == null || !Object.IsValid)
-        {
-            Debug.LogWarning("[CoinPickup] NetworkObject not valid yet");
-            return;
-        }
-
-        // Only process if this coin hasn't been collected yet
-        if (IsCollected)
-        {
-            return;
-        }
-
-        // Check if the object that touched the coin is a player
-        NetworkedPlayerInventory player = collision.GetComponent<NetworkedPlayerInventory>();
-
-        if (player != null && coinData != null)
-        {
-
-            // Only the local player should request pickup
-            if (player.HasInputAuthority)
+            // While moving down, stop on the first ground collider we would pass through.
+            if (velocity.y < 0f)
             {
-
-                // FIXED: Pass the player's NetworkObject directly instead of PlayerRef
-                // This avoids the Runner.TryGetPlayerObject() lookup issue
-                RPC_RequestPickup(player.Object);
+                float castDist = Mathf.Abs(step.y) + restOffset + 0.05f;
+                RaycastHit2D hit = Physics2D.Raycast(pos, Vector2.down, castDist, groundMask);
+                if (hit.collider != null)
+                {
+                    pos.x += step.x;
+                    pos.y = hit.point.y + restOffset;
+                    transform.position = pos;
+                    velocity = Vector2.zero;
+                    grounded = true;
+                }
+                else
+                {
+                    transform.position = pos + (Vector3)step;
+                }
             }
-        }
-        else
-        {
-            if (coinData == null)
+            else
             {
-                Debug.LogError("[CoinPickup] CoinData is NULL! Assign it in the Inspector!");
+                transform.position = pos + (Vector3)step;
             }
+
+            SyncedPosition = transform.position;
+        }
+
+        if (isReadyForPickup)
+            TryServerPickup();
+    }
+
+    /// <summary>SERVER: collect the coin if a player overlaps it.</summary>
+    private void TryServerPickup()
+    {
+        if (coinData == null) return;
+
+        int count = Physics2D.OverlapCircle(transform.position, pickupRadius, playerFilter, PickupResults);
+        for (int i = 0; i < count; i++)
+        {
+            Collider2D hit = PickupResults[i];
+            NetworkedPlayerInventory inventory = hit.GetComponent<NetworkedPlayerInventory>();
+            if (inventory == null) continue;
+
+            // A dead player's frozen body should not vacuum up the coins it just dropped.
+            PlayerStatsHandler health = hit.GetComponent<PlayerStatsHandler>();
+            if (health != null && health.IsPlayerDead()) continue;
+
+            if (inventory.ServerAddCoin(coinData))
+            {
+                IsCollected = true;
+                RPC_OnCoinCollected(transform.position);
+                Runner.Despawn(Object);
+            }
+            return; // one player per tick is enough; coin is gone or inventory was full
         }
     }
 
     /// <summary>
-    /// Optional: Makes coins slowly rotate for visual appeal
+    /// Rotation visual + remote position follow.
     /// </summary>
     private void Update()
     {
@@ -136,64 +231,14 @@ public class NetworkedCoinPickup : NetworkBehaviour
         if (Object == null || !Object.IsValid)
             return;
 
+        // Keep remote coins pinned to the networked position (no NetworkTransform).
+        if (!HasStateAuthority)
+            transform.position = SyncedPosition;
+
         if (rotateVisual && !IsCollected)
         {
             // Rotate the coin around the Z axis (for 2D)
             transform.Rotate(0, 0, rotationSpeed * Time.deltaTime);
-        }
-    }
-
-    /// <summary>
-    /// FIXED - RPC to request coin pickup. Called by client, executed on server.
-    /// Now receives NetworkObject directly instead of PlayerRef to avoid lookup issues.
-    /// </summary>
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_RequestPickup(NetworkObject playerNetObj)
-    {
-
-        // Double-check coin hasn't been collected (race condition protection)
-        if (IsCollected)
-        {
-            return;
-        }
-
-        // Validate the player NetworkObject
-        if (playerNetObj == null || !playerNetObj.IsValid)
-        {
-            Debug.LogError("[SERVER] Invalid player NetworkObject passed to RPC_RequestPickup");
-            return;
-        }
-
-
-        // Get the inventory component
-        NetworkedPlayerInventory inventory = playerNetObj.GetComponent<NetworkedPlayerInventory>();
-
-        if (inventory != null)
-        {
-
-            // Try to add coin to player's inventory
-            bool pickedUp = inventory.ServerAddCoin(coinData);
-
-            if (pickedUp)
-            {
-
-                // Mark as collected
-                IsCollected = true;
-
-                // Notify all clients to play effects and destroy
-                RPC_OnCoinCollected(playerNetObj.transform.position);
-
-                // Despawn the coin (server authority)
-                Runner.Despawn(Object);
-            }
-            else
-            {
-                Debug.LogWarning("[SERVER] Failed to add coin to inventory (inventory might be full)");
-            }
-        }
-        else
-        {
-            Debug.LogError($"[SERVER] No NetworkedPlayerInventory component found on {playerNetObj.name}!");
         }
     }
 
@@ -204,7 +249,6 @@ public class NetworkedCoinPickup : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnCoinCollected(Vector3 playerPosition)
     {
-
         // Play pickup sound if assigned
         if (pickupSound != null)
         {
