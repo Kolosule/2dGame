@@ -21,6 +21,10 @@ public class TeamSelectionUI : MonoBehaviour
     [SerializeField] private Button team2Button;
     [SerializeField] private Text team2CountText;
 
+    [Header("▶️ Start Button (host only)")]
+    [Tooltip("Shown to the host only. Enabled once every connected player has chosen a team.")]
+    [SerializeField] private Button startButton;
+
     [Header("🎮 Network Settings")]
     [SerializeField] private GameNetworkManager networkManager;
 
@@ -65,6 +69,12 @@ public class TeamSelectionUI : MonoBehaviour
             colors.pressedColor = team2Color * 0.8f;
             team2Button.colors = colors;
         }
+
+        if (startButton != null)
+        {
+            startButton.onClick.AddListener(OnStartButtonClicked);
+            startButton.gameObject.SetActive(false);
+        }
     }
 
     public void ShowTeamSelection(NetworkRunner networkRunner)
@@ -83,6 +93,14 @@ public class TeamSelectionUI : MonoBehaviour
         SetButtonsInteractable(true);
         SetStatus("Choose your team!");
 
+        // The Start button is the host's alone; clients never see it. It starts disabled and is
+        // enabled by the host's GameNetworkManager once every connected player has chosen.
+        if (startButton != null)
+        {
+            bool isHost = runner != null && runner.IsServer;
+            startButton.gameObject.SetActive(isHost);
+            startButton.interactable = false;
+        }
     }
 
     public void HideTeamSelection()
@@ -115,6 +133,28 @@ public class TeamSelectionUI : MonoBehaviour
         SetButtonsInteractable(false);
         SetStatus($"Joined Team {teamNumber}.\nWaiting for other players...");
 
+    }
+
+    /// <summary>Host-only: clicking Start asks the host's GameNetworkManager to load the match.</summary>
+    private void OnStartButtonClicked()
+    {
+        if (networkManager == null)
+        {
+            Debug.LogError("❌ NetworkManager not assigned - cannot start match!");
+            return;
+        }
+
+        networkManager.RequestStartMatch();
+    }
+
+    /// <summary>
+    /// Host-only: enable or disable the Start button. Called by GameNetworkManager as lobby state
+    /// changes (a no-op for clients, which never have a Start button shown).
+    /// </summary>
+    public void SetStartAvailable(bool available)
+    {
+        if (startButton != null)
+            startButton.interactable = available;
     }
 
     /// <summary>Sets the status message, creating a fallback label if none was assigned.</summary>

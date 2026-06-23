@@ -6,15 +6,15 @@ using Fusion.Sockets;
 using UnityEngine.SceneManagement;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 /// <summary>
 /// Menu + lobby controller. Players pick a team in the MainMenu; each choice is sent to the host
 /// (the host records its own directly, clients use Fusion reliable-data since no NetworkObject
-/// exists in the menu scene). The host loads the Gameplay scene only once every connected player
-/// has submitted a choice, so the host's authoritative scene load never drags a client into
-/// gameplay before they have chosen. The collected choices live in LobbyTeamChoices, which the
-/// Gameplay-scene NetworkedSpawnManager reads on the host to spawn each player on the right team.
+/// exists in the menu scene). Only the host has a Start button, and it is enabled only once every
+/// connected player has submitted a choice; the host clicks it to load the Gameplay scene, so the
+/// host's authoritative scene load never drags a client into gameplay before they have chosen. The
+/// collected choices live in LobbyTeamChoices, which the Gameplay-scene NetworkedSpawnManager reads
+/// on the host to spawn each player on the right team.
 /// </summary>
 public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 {
@@ -33,11 +33,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     [Header("Testing Mode")]
     [Tooltip("Enable single player mode (no Photon needed)")]
     public bool singlePlayerMode = true;
-
-    [Header("Lobby")]
-    [Tooltip("How many players must connect before the host starts the match (multiplayer only). " +
-             "Single-player mode always starts with 1.")]
-    public int expectedPlayerCount = 2;
 
     // Reliable-data channel tag for a client sending its team choice to the host.
     private static readonly Fusion.Sockets.ReliableKey TeamChoiceKey =
@@ -168,8 +163,9 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     /// <summary>
     /// Called by TeamSelectionUI when the local player picks a team. Records the choice on the host
-    /// (directly if we are the host, otherwise over reliable-data) and re-evaluates the start gate.
-    /// Does NOT load the scene - the host does that once everyone has chosen (see TryStartMatch).
+    /// (directly if we are the host, otherwise over reliable-data) and refreshes the host's Start
+    /// gate. Does NOT load the scene - the host loads it explicitly via RequestStartMatch once they
+    /// click Start (which is only enabled after every connected player has chosen).
     /// </summary>
     public void SubmitLocalTeamChoice(int teamNumber)
     {
@@ -195,7 +191,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
-    /// <summary>Host-only: store a player's choice and re-check whether the match can start.</summary>
+    /// <summary>Host-only: store a player's choice and refresh the host's Start button.</summary>
     private void RecordChoice(PlayerRef player, int teamNumber)
     {
         if (!runner.IsServer)
@@ -209,33 +205,49 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         LobbyTeamChoices.Set(player, teamNumber);
 
-        TryStartMatch();
+        RefreshStartGate();
     }
 
     /// <summary>
-    /// Host-only: load the Gameplay scene once enough players have connected AND every connected
-    /// player has submitted a team choice. Idempotent - only triggers the load once.
+    /// Host-only: true once every connected player (the host included) has submitted a team choice.
+    /// There is no player-count minimum - a solo host who has chosen may start.
     /// </summary>
-    private void TryStartMatch()
+    private bool CanStartMatch()
     {
         if (runner == null || !runner.IsServer || gameStarting)
-            return;
-
-        int required = singlePlayerMode ? 1 : Mathf.Max(1, expectedPlayerCount);
-        int active = runner.ActivePlayers.Count();
-
-        if (active < required)
-        {
-            return;
-        }
+            return false;
 
         foreach (var player in runner.ActivePlayers)
         {
             if (!LobbyTeamChoices.Has(player))
-            {
-                return;
-            }
+                return false;
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Host-only: recompute whether the match may start and push that state to the host's Start
+    /// button. Called whenever lobby state changes (player joined/left, choice recorded). Never
+    /// loads the scene - the host triggers that explicitly via RequestStartMatch.
+    /// </summary>
+    private void RefreshStartGate()
+    {
+        if (runner == null || !runner.IsServer)
+            return;
+
+        if (teamSelectionUI != null)
+            teamSelectionUI.SetStartAvailable(CanStartMatch());
+    }
+
+    /// <summary>
+    /// Host-only: called when the host clicks the Start button. Loads the Gameplay scene if every
+    /// connected player has chosen a team. Idempotent - only triggers the load once.
+    /// </summary>
+    public void RequestStartMatch()
+    {
+        if (!CanStartMatch())
+            return;
 
         gameStarting = true;
         LoadGameplayScene();
@@ -276,9 +288,12 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     // Fusion callbacks
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
-
         // CRITICAL: DO NOT SPAWN PLAYER HERE
-        // Let NetworkedSpawnManager in the Gameplay scene handle it
+        // Let NetworkedSpawnManager in the Gameplay scene handle it.
+
+        // A late joiner hasn't chosen yet, so re-disable the host's Start button until they pick.
+        if (runner.IsServer && !gameStarting)
+            RefreshStartGate();
     }
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
@@ -289,7 +304,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (runner.IsServer && !gameStarting)
         {
             LobbyTeamChoices.Remove(player);
-            TryStartMatch();
+            RefreshStartGate();
         }
     }
 
