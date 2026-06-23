@@ -259,10 +259,12 @@ public class Flag : NetworkBehaviour
         CarrierPlayerRef = PlayerRef.None;
         transform.position = HomePosition;
 
-        // Notify clients
+        // Notify clients, and re-check captures for any carrier already parked in a base
+        // (this flag returning home may complete a pending capture).
         if (CTFGameManager.Instance != null && HasStateAuthority)
         {
             CTFGameManager.Instance.RPC_ShowNotification($"{TeamUtil.DisplayName(TeamUtil.Normalize(owningTeam))} flag has been returned!");
+            CTFGameManager.Instance.OnFlagReturnedHome();
         }
 
     }

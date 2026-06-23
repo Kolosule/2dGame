@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Fusion;
@@ -31,6 +32,10 @@ public class NetworkedHomeBase : NetworkBehaviour
 
     // Track which player is currently in the base zone (per client)
     private NetworkedPlayerInventory playerInZone = null;
+
+    // SERVER-only: players currently overlapping this base's trigger. Used to re-check CTF
+    // captures when the defending flag returns home while a carrier is already parked here.
+    private readonly HashSet<PlayerRef> occupants = new HashSet<PlayerRef>();
 
     private void Start()
     {
@@ -75,10 +80,14 @@ public class NetworkedHomeBase : NetworkBehaviour
             // SERVER: event-driven CTF capture check. If the entering player is carrying the
             // enemy flag into their own base, CTFGameManager scores it. Replaces the old
             // per-tick flag-to-base distance polling.
-            if (HasStateAuthority && player.Object != null && CTFGameManager.Instance != null)
+            if (HasStateAuthority && player.Object != null)
             {
-                CTFGameManager.Instance.OnCarrierEnteredBase(
-                    player.Object.InputAuthority, TeamUtil.Normalize(baseTeam));
+                PlayerRef carrier = player.Object.InputAuthority;
+                occupants.Add(carrier);
+                if (CTFGameManager.Instance != null)
+                {
+                    CTFGameManager.Instance.OnCarrierEnteredBase(carrier, TeamUtil.Normalize(baseTeam));
+                }
             }
         }
     }
@@ -93,6 +102,28 @@ public class NetworkedHomeBase : NetworkBehaviour
         if (player != null && player == playerInZone)
         {
             playerInZone = null;
+        }
+
+        // SERVER: stop tracking this player as an occupant of the base zone.
+        if (player != null && HasStateAuthority && player.Object != null)
+        {
+            occupants.Remove(player.Object.InputAuthority);
+        }
+    }
+
+    /// <summary>
+    /// SERVER: re-run the CTF capture check for every player currently parked in this base.
+    /// Called when a defending flag returns home, so a carrier already standing in their base
+    /// completes the capture without having to leave and re-enter the trigger.
+    /// </summary>
+    public void ReevaluateOccupants()
+    {
+        if (!HasStateAuthority || CTFGameManager.Instance == null) return;
+
+        Team team = TeamUtil.Normalize(baseTeam);
+        foreach (PlayerRef carrier in occupants)
+        {
+            CTFGameManager.Instance.OnCarrierEnteredBase(carrier, team);
         }
     }
 

@@ -56,6 +56,9 @@ public class CTFGameManager : NetworkBehaviour
     public Flag Team1Flag => team1Flag;
     public Flag Team2Flag => team2Flag;
 
+    // Lazily-cached base zones, used only for the rare flag-returned-home re-check.
+    private NetworkedHomeBase[] homeBases;
+
     private void Awake()
     {
         // Singleton pattern
@@ -149,6 +152,25 @@ public class CTFGameManager : NetworkBehaviour
             team1Flag.IsCarriedBy(carrier) && team2Flag.State == Flag.FlagState.AtHome)
         {
             EndGame(2);
+        }
+    }
+
+    /// <summary>
+    /// SERVER: called when a flag returns home (the defending flag of a possible capture).
+    /// Re-checks any carrier already parked in a base so they complete the capture without
+    /// having to re-enter the trigger. Rare event - not a per-tick path - so the base list is
+    /// found once and cached.
+    /// </summary>
+    public void OnFlagReturnedHome()
+    {
+        if (!HasStateAuthority || GameIsOver) return;
+
+        if (homeBases == null || homeBases.Length == 0)
+            homeBases = FindObjectsByType<NetworkedHomeBase>(FindObjectsSortMode.None);
+
+        foreach (NetworkedHomeBase baseZone in homeBases)
+        {
+            if (baseZone != null) baseZone.ReevaluateOccupants();
         }
     }
 
