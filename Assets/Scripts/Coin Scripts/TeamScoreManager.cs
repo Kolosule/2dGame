@@ -65,39 +65,25 @@ public class TeamScoreManager : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_AddPoints(string team, int points)
     {
+        // RpcTargets.StateAuthority means this body only runs on the server.
+        if (!HasStateAuthority) return;
 
-
-        // Only execute on server/state authority
-        if (!HasStateAuthority)
-        {
-            Debug.LogWarning("[TeamScoreManager] RPC_AddPoints called on CLIENT - should only run on SERVER. Returning.");
-            return;
-        }
-
-
-        // Normalize team name
         Team scoring = TeamUtil.Normalize(team);
-
 
         if (scoring == Team.Team1)
         {
-            int oldScore = Team1Score;
             Team1Score += points;
             CheckMilestones("Team1");
         }
         else if (scoring == Team.Team2)
         {
-            int oldScore = Team2Score;
             Team2Score += points;
             CheckMilestones("Team2");
         }
         else
         {
-            Debug.LogError($"[SERVER] ❌ Unrecognized team: '{team}'. Expected Team1, Team2, Blue, or Red.");
+            Debug.LogError($"[SERVER] Unrecognized team: '{team}'. Expected Team1, Team2, Blue, or Red.");
         }
-
-        // Update UI on all clients
-        UpdateUI();
     }
 
     /// <summary>
@@ -149,16 +135,6 @@ public class TeamScoreManager : NetworkBehaviour
                 onDefenseBuffUnlocked?.Invoke("Team2");
             }
         }
-    }
-
-    /// <summary>
-    /// Updates the UI - called on all clients
-    /// </summary>
-    private void UpdateUI()
-    {
-
-        // The UIManager should automatically pick up the changed values
-        // since Team1Score and Team2Score are [Networked] properties
     }
 
     /// <summary>True once the team has unlocked its coin-milestone damage buff.</summary>

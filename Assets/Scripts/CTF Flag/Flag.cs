@@ -1,6 +1,5 @@
 using Fusion;
 using UnityEngine;
-using System.Collections;
 
 /// <summary>
 /// Manages flag state and interactions for Capture the Flag mode
@@ -44,9 +43,11 @@ public class Flag : NetworkBehaviour
     [Networked]
     public Vector3 HomePosition { get; set; }
 
+    // Server-evaluated auto-return countdown (simulation-path TickTimer, deterministic).
+    [Networked] private TickTimer AutoReturnTimer { get; set; }
+
     // Local references
     private GameObject carrierGameObject; // RENAMED from 'carrier' to avoid conflict
-    private Coroutine autoReturnCoroutine;
     private Vector3 dropPosition;
 
     // Flag states
@@ -101,6 +102,18 @@ public class Flag : NetworkBehaviour
         }
     }
 
+    public override void FixedUpdateNetwork()
+    {
+        // SERVER: auto-return a dropped flag once its countdown elapses.
+        if (!HasStateAuthority) return;
+
+        if (CurrentState == FlagState.Dropped && AutoReturnTimer.Expired(Runner))
+        {
+            AutoReturnTimer = default;
+            ReturnFlag();
+        }
+    }
+
     private void OnTriggerEnter2D(Collider2D collision)
     {
         // Only process on server
@@ -145,11 +158,7 @@ public class Flag : NetworkBehaviour
         if (!HasStateAuthority) return;
 
         // Cancel auto-return if it was running
-        if (autoReturnCoroutine != null)
-        {
-            StopCoroutine(autoReturnCoroutine);
-            autoReturnCoroutine = null;
-        }
+        AutoReturnTimer = default;
 
         // Set flag state
         CurrentState = FlagState.Carried;
@@ -213,8 +222,8 @@ public class Flag : NetworkBehaviour
         if (dropEffect != null)
             dropEffect.Play();
 
-        // Start auto-return timer
-        autoReturnCoroutine = StartCoroutine(AutoReturnTimer());
+        // Start auto-return countdown (evaluated server-side in FixedUpdateNetwork)
+        AutoReturnTimer = TickTimer.CreateFromSeconds(Runner, autoReturnTime);
 
         // Notify clients
         if (CTFGameManager.Instance != null && HasStateAuthority)
@@ -232,11 +241,7 @@ public class Flag : NetworkBehaviour
         if (!HasStateAuthority) return;
 
         // Cancel auto-return if running
-        if (autoReturnCoroutine != null)
-        {
-            StopCoroutine(autoReturnCoroutine);
-            autoReturnCoroutine = null;
-        }
+        AutoReturnTimer = default;
 
         // Clear carrier
         if (carrierGameObject != null)
@@ -263,24 +268,15 @@ public class Flag : NetworkBehaviour
     }
 
     /// <summary>
-    /// Auto-return timer coroutine
-    /// </summary>
-    private IEnumerator AutoReturnTimer()
-    {
-        yield return new WaitForSeconds(autoReturnTime);
-
-        if (CurrentState == FlagState.Dropped)
-        {
-            ReturnFlag();
-        }
-    }
-
-    /// <summary>
     /// Called when flag state changes (via OnChangedRender attribute)
     /// </summary>
     private void OnStateChanged()
     {
         UpdateVisuals();
+
+        // Drive CTF HUD off this networked state change instead of a per-frame UI rebuild.
+        if (CTFGameManager.Instance != null)
+            CTFGameManager.Instance.OnFlagStateChanged(this);
     }
 
     /// <summary>

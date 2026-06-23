@@ -71,6 +71,15 @@ public class NetworkedHomeBase : NetworkBehaviour
                     }
                 }
             }
+
+            // SERVER: event-driven CTF capture check. If the entering player is carrying the
+            // enemy flag into their own base, CTFGameManager scores it. Replaces the old
+            // per-tick flag-to-base distance polling.
+            if (HasStateAuthority && player.Object != null && CTFGameManager.Instance != null)
+            {
+                CTFGameManager.Instance.OnCarrierEnteredBase(
+                    player.Object.InputAuthority, TeamUtil.Normalize(baseTeam));
+            }
         }
     }
 

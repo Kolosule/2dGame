@@ -24,6 +24,13 @@ public class PlayerStatsHandler : NetworkBehaviour
     [Tooltip("Duration of spawn immunity in seconds")]
     [SerializeField] private float spawnImmunityDuration = 1.5f;
 
+    [Header("Respawn")]
+    [Tooltip("Delay in seconds before a dead player respawns")]
+    [SerializeField] private float respawnDelay = 3f;
+
+    [Tooltip("Minimum seconds between consecutive hits (rapid-hit guard)")]
+    [SerializeField] private float hitCooldown = 0.1f;
+
     // Networked properties - FIXED: Use float for health
     [Networked, OnChangedRender(nameof(OnHealthChanged))]
     public float CurrentHealth { get; set; }
@@ -31,9 +38,10 @@ public class PlayerStatsHandler : NetworkBehaviour
     [Networked]
     public bool IsDead { get; set; }
 
-    // Local variables
-    private float lastAttackTime = 0f;
-    private float spawnTime = 0f; // Track when player spawned for immunity
+    // Simulation-path timers (TickTimer = deterministic, authority-driven).
+    [Networked] private TickTimer SpawnImmunityTimer { get; set; }
+    [Networked] private TickTimer HitCooldownTimer { get; set; }
+    [Networked] private TickTimer RespawnTimer { get; set; }
 
     public override void Spawned()
     {
@@ -41,10 +49,22 @@ public class PlayerStatsHandler : NetworkBehaviour
         {
             CurrentHealth = stats.maxHealth;
             IsDead = false;
-            spawnTime = Time.time; // Record spawn time for immunity
+            SpawnImmunityTimer = TickTimer.CreateFromSeconds(Runner, spawnImmunityDuration);
         }
 
         UpdateHealthBar();
+    }
+
+    public override void FixedUpdateNetwork()
+    {
+        if (!HasStateAuthority) return;
+
+        // Respawn once the death timer elapses.
+        if (IsDead && RespawnTimer.Expired(Runner))
+        {
+            RespawnTimer = default;
+            Respawn();
+        }
     }
 
     private void OnHealthChanged()
@@ -107,15 +127,14 @@ public class PlayerStatsHandler : NetworkBehaviour
         if (!HasStateAuthority) return;
         if (IsDead) return;
 
-        // Check for spawn immunity
-        float timeSinceSpawn = Time.time - spawnTime;
-        if (timeSinceSpawn < spawnImmunityDuration)
+        // Spawn immunity: ignore damage while the immunity timer is still running.
+        if (!SpawnImmunityTimer.ExpiredOrNotRunning(Runner))
         {
             return;
         }
 
-        // Prevent rapid consecutive damage
-        if (Time.time - lastAttackTime < 0.1f)
+        // Rapid-hit guard: ignore damage while the hit-cooldown timer is still running.
+        if (!HitCooldownTimer.ExpiredOrNotRunning(Runner))
         {
             return;
         }
@@ -130,7 +149,7 @@ public class PlayerStatsHandler : NetworkBehaviour
             Die();
         }
 
-        lastAttackTime = Time.time;
+        HitCooldownTimer = TickTimer.CreateFromSeconds(Runner, hitCooldown);
     }
 
     /// <summary>
@@ -162,29 +181,32 @@ public class PlayerStatsHandler : NetworkBehaviour
         // Disable player controls on all clients
         RPC_DisablePlayerControls();
 
-        // Start respawn timer
-        Invoke(nameof(Respawn), 3f);
+        // Start respawn timer (simulation-path TickTimer, evaluated in FixedUpdateNetwork)
+        RespawnTimer = TickTimer.CreateFromSeconds(Runner, respawnDelay);
     }
 
     /// <summary>
-    /// Drops the flag if the player is carrying one
+    /// Drops the flag if the player is carrying one. Uses the CTFGameManager's cached
+    /// flag references instead of a scene-wide Find in this death hot path.
     /// </summary>
     private void DropFlagOnDeath()
     {
         if (!HasStateAuthority) return;
+        if (CTFGameManager.Instance == null) return;
 
-        // Find all flags in the scene
-        Flag[] allFlags = FindObjectsByType<Flag>(FindObjectsSortMode.None);
+        // There are only ever two flags; a player can carry at most one.
+        if (TryDropFlag(CTFGameManager.Instance.Team1Flag)) return;
+        TryDropFlag(CTFGameManager.Instance.Team2Flag);
+    }
 
-        foreach (Flag flag in allFlags)
+    private bool TryDropFlag(Flag flag)
+    {
+        if (flag != null && flag.IsCarriedBy(Object.InputAuthority))
         {
-            // Check if this player is carrying this flag
-            if (flag.IsCarriedBy(Object.InputAuthority))
-            {
-                flag.DropFlagRpc();
-                return; // Player can only carry one flag
-            }
+            flag.DropFlagRpc();
+            return true;
         }
+        return false;
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -223,7 +245,7 @@ public class PlayerStatsHandler : NetworkBehaviour
 
         CurrentHealth = stats.maxHealth;
         IsDead = false;
-        spawnTime = Time.time; // Reset spawn immunity timer
+        SpawnImmunityTimer = TickTimer.CreateFromSeconds(Runner, spawnImmunityDuration); // Reset spawn immunity
 
         // Resolve the respawn position from the single networked team source.
         PlayerTeamData teamData = GetComponent<PlayerTeamData>();

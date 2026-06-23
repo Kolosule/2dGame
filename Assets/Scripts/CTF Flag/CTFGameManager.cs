@@ -48,14 +48,13 @@ public class CTFGameManager : NetworkBehaviour
     [SerializeField] private float notificationDuration = 3f;
 
     // Networked properties with OnChanged callbacks
-    [Networked]
+    [Networked, OnChangedRender(nameof(OnGameOverChanged))]
     public bool GameIsOver { get; set; }
 
-    [Networked]
-    public bool Team1HasBothFlags { get; set; }
-
-    [Networked]
-    public bool Team2HasBothFlags { get; set; }
+    // Cached flag references so other systems (e.g. PlayerStatsHandler death drop) don't
+    // have to do a scene-wide Find.
+    public Flag Team1Flag => team1Flag;
+    public Flag Team2Flag => team2Flag;
 
     private void Awake()
     {
@@ -82,8 +81,9 @@ public class CTFGameManager : NetworkBehaviour
             FindFlags();
         }
 
-        // Initialize UI on all clients
-        UpdateFlagStatusUI();
+        // Initialize UI on all clients from current flag state (event-driven thereafter).
+        RefreshAllFlagUI();
+        OnGameOverChanged();
     }
 
     private void OnDestroy()
@@ -97,26 +97,16 @@ public class CTFGameManager : NetworkBehaviour
 
     private void Update()
     {
-        // Update flag indicator positions (all clients)
-        UpdateFlagIndicators();
+        // Indicators follow the continuously-moving flags only while shown. Their text and
+        // visibility are event-driven (OnFlagStateChanged); this is a cheap transform follow,
+        // no string rebuilds and no distance polling.
+        if (team1FlagIndicator != null && team1FlagIndicator.activeSelf &&
+            team1Flag != null && team1Flag.Object != null && team1Flag.Object.IsValid)
+            team1FlagIndicator.transform.position = team1Flag.transform.position;
 
-        // Update flag status UI
-        UpdateFlagStatusUI();
-    }
-
-    public override void FixedUpdateNetwork()
-    {
-        // SERVER: Continuously check win condition
-        if (HasStateAuthority && !GameIsOver)
-        {
-            CheckWinCondition();
-        }
-
-        // Check for game over state change on all clients
-        if (GameIsOver && gameOverPanel != null && !gameOverPanel.activeSelf)
-        {
-            gameOverPanel.SetActive(true);
-        }
+        if (team2FlagIndicator != null && team2FlagIndicator.activeSelf &&
+            team2Flag != null && team2Flag.Object != null && team2Flag.Object.IsValid)
+            team2FlagIndicator.transform.position = team2Flag.transform.position;
     }
 
     /// <summary>
@@ -140,72 +130,23 @@ public class CTFGameManager : NetworkBehaviour
             Debug.LogError("⚠️ Team2 flag not found!");
     }
 
-    private void CheckWinCondition()
+    /// <summary>
+    /// SERVER: Event-driven capture check. Called from a base trigger when a player enters
+    /// their own base. A team scores by carrying the ENEMY flag into their base while their
+    /// own flag is at home - no per-tick distance polling required.
+    /// </summary>
+    public void OnCarrierEnteredBase(PlayerRef carrier, Team baseTeam)
     {
         if (!HasStateAuthority || GameIsOver) return;
+        if (team1Flag == null || team2Flag == null) return;
 
-        if (team1Flag == null || team2Flag == null)
-        {
-            Debug.LogWarning("Cannot check win condition - flags are null!");
-            return;
-        }
-
-        // Check if flags are spawned and valid
-        if (team1Flag.Object == null || !team1Flag.Object.IsValid)
-        {
-            Debug.LogWarning("Team1 flag not spawned yet");
-            return;
-        }
-
-        if (team2Flag.Object == null || !team2Flag.Object.IsValid)
-        {
-            Debug.LogWarning("Team2 flag not spawned yet");
-            return;
-        }
-
-        // Get base positions from TeamManager
-        if (TeamManager.Instance == null)
-        {
-            Debug.LogError("TeamManager.Instance is null!");
-            return;
-        }
-
-        TeamData team1Data = TeamManager.Instance.GetTeamData(Team.Team1);
-        TeamData team2Data = TeamManager.Instance.GetTeamData(Team.Team2);
-
-        if (team1Data == null || team2Data == null)
-        {
-            Debug.LogError("Team data is null!");
-            return;
-        }
-
-        Vector3 team1BasePos = team1Data.basePosition;
-        Vector3 team2BasePos = team2Data.basePosition;
-
-        // Increased distance threshold for more forgiving detection
-        float captureDistance = 3f; // Increased from 2f
-
-        // Check distances
-        float team1FlagToTeam1Base = Vector3.Distance(team1Flag.transform.position, team1BasePos);
-        float team2FlagToTeam1Base = Vector3.Distance(team2Flag.transform.position, team1BasePos);
-        float team1FlagToTeam2Base = Vector3.Distance(team1Flag.transform.position, team2BasePos);
-        float team2FlagToTeam2Base = Vector3.Distance(team2Flag.transform.position, team2BasePos);
-
-        // Check if team1 has both flags at their base
-        bool team1FlagAtTeam1Base = team1FlagToTeam1Base < captureDistance;
-        bool team2FlagAtTeam1Base = team2FlagToTeam1Base < captureDistance;
-        Team1HasBothFlags = team1FlagAtTeam1Base && team2FlagAtTeam1Base;
-
-        // Check if team2 has both flags at their base
-        bool team1FlagAtTeam2Base = team1FlagToTeam2Base < captureDistance;
-        bool team2FlagAtTeam2Base = team2FlagToTeam2Base < captureDistance;
-        Team2HasBothFlags = team1FlagAtTeam2Base && team2FlagAtTeam2Base;
-
-        if (Team1HasBothFlags)
+        if (baseTeam == Team.Team1 &&
+            team2Flag.IsCarriedBy(carrier) && team1Flag.State == Flag.FlagState.AtHome)
         {
             EndGame(1);
         }
-        else if (Team2HasBothFlags)
+        else if (baseTeam == Team.Team2 &&
+            team1Flag.IsCarriedBy(carrier) && team2Flag.State == Flag.FlagState.AtHome)
         {
             EndGame(2);
         }
@@ -260,79 +201,63 @@ public class CTFGameManager : NetworkBehaviour
         }
     }
 
-    private void UpdateFlagStatusUI()
+    /// <summary>
+    /// Show the game-over panel when GameIsOver flips true (driven by OnChangedRender on all
+    /// clients, plus an explicit call from Spawned for late joiners).
+    /// </summary>
+    private void OnGameOverChanged()
     {
-        // Update Team1 flag status
-        if (team1FlagStatusText != null && team1Flag != null)
-        {
-            // Check if flag is spawned before accessing its State
-            if (team1Flag.Object != null && team1Flag.Object.IsValid)
-            {
-                if (team1Flag.State == Flag.FlagState.AtHome)
-                {
-                    team1FlagStatusText.text = "🏴 At Base";
-                    team1FlagStatusText.color = Color.green;
-                }
-                else if (team1Flag.State == Flag.FlagState.Carried)
-                {
-                    team1FlagStatusText.text = "⚠️ Taken!";
-                    team1FlagStatusText.color = Color.red;
-                }
-                else
-                {
-                    team1FlagStatusText.text = "📍 Dropped";
-                    team1FlagStatusText.color = Color.yellow;
-                }
-            }
-        }
-
-        // Update Team2 flag status
-        if (team2FlagStatusText != null && team2Flag != null)
-        {
-            // Check if flag is spawned before accessing its State
-            if (team2Flag.Object != null && team2Flag.Object.IsValid)
-            {
-                if (team2Flag.State == Flag.FlagState.AtHome)
-                {
-                    team2FlagStatusText.text = "🏴 At Base";
-                    team2FlagStatusText.color = Color.green;
-                }
-                else if (team2Flag.State == Flag.FlagState.Carried)
-                {
-                    team2FlagStatusText.text = "⚠️ Taken!";
-                    team2FlagStatusText.color = Color.red;
-                }
-                else
-                {
-                    team2FlagStatusText.text = "📍 Dropped";
-                    team2FlagStatusText.color = Color.yellow;
-                }
-            }
-        }
+        if (GameIsOver && gameOverPanel != null)
+            gameOverPanel.SetActive(true);
     }
 
-    private void UpdateFlagIndicators()
+    /// <summary>
+    /// Called by a Flag when its networked state changes (via Flag.OnStateChanged). Refreshes
+    /// only that flag's HUD - no per-frame rebuild of all flag UI.
+    /// </summary>
+    public void OnFlagStateChanged(Flag flag)
     {
-        // Update Team1 flag indicator
-        if (team1FlagIndicator != null && team1Flag != null)
+        if (flag == team1Flag)
+            RefreshFlagUI(team1Flag, team1FlagStatusText, team1FlagIndicator);
+        else if (flag == team2Flag)
+            RefreshFlagUI(team2Flag, team2FlagStatusText, team2FlagIndicator);
+    }
+
+    private void RefreshAllFlagUI()
+    {
+        RefreshFlagUI(team1Flag, team1FlagStatusText, team1FlagIndicator);
+        RefreshFlagUI(team2Flag, team2FlagStatusText, team2FlagIndicator);
+    }
+
+    private void RefreshFlagUI(Flag flag, TextMeshProUGUI statusText, GameObject indicator)
+    {
+        if (flag == null || flag.Object == null || !flag.Object.IsValid) return;
+
+        Flag.FlagState state = flag.State;
+
+        if (statusText != null)
         {
-            // Check if flag is spawned before accessing its State
-            if (team1Flag.Object != null && team1Flag.Object.IsValid)
+            switch (state)
             {
-                team1FlagIndicator.transform.position = team1Flag.transform.position;
-                team1FlagIndicator.SetActive(team1Flag.State != Flag.FlagState.AtHome);
+                case Flag.FlagState.AtHome:
+                    statusText.text = "🏴 At Base";
+                    statusText.color = Color.green;
+                    break;
+                case Flag.FlagState.Carried:
+                    statusText.text = "⚠️ Taken!";
+                    statusText.color = Color.red;
+                    break;
+                default:
+                    statusText.text = "📍 Dropped";
+                    statusText.color = Color.yellow;
+                    break;
             }
         }
 
-        // Update Team2 flag indicator
-        if (team2FlagIndicator != null && team2Flag != null)
+        if (indicator != null)
         {
-            // Check if flag is spawned before accessing its State
-            if (team2Flag.Object != null && team2Flag.Object.IsValid)
-            {
-                team2FlagIndicator.transform.position = team2Flag.transform.position;
-                team2FlagIndicator.SetActive(team2Flag.State != Flag.FlagState.AtHome);
-            }
+            indicator.transform.position = flag.transform.position;
+            indicator.SetActive(state != Flag.FlagState.AtHome);
         }
     }
 
@@ -344,21 +269,6 @@ public class CTFGameManager : NetworkBehaviour
     {
         if (Runner == null) return 0;
         return Runner.ActivePlayers.Count();
-    }
-
-    #endregion
-
-    #region Public Methods (called by Flag script or other systems)
-
-    /// <summary>
-    /// SERVER: Called when a flag is captured (brought to enemy base)
-    /// </summary>
-    public void OnFlagCaptured(string flagOwner, string capturingTeam)
-    {
-        if (!HasStateAuthority) return;
-
-        // Check if capturing team now has both flags in their base
-        CheckWinCondition();
     }
 
     #endregion
