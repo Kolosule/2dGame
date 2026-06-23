@@ -200,7 +200,7 @@ public class Enemy : NetworkBehaviour
         if (config != null)
         {
             Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
-            PlayerTeamComponent playerTeam = player.GetComponent<PlayerTeamComponent>();
+            PlayerTeamData playerTeam = player.GetComponent<PlayerTeamData>();
             Team defenderTeam = playerTeam != null ? playerTeam.Team : Team.None;
             finalDamage = config.ResolveDamage(stats.attackDamage, myTeam, transform.position,
                                                defenderTeam, player.transform.position);

@@ -16,8 +16,7 @@ using System.Collections;
 /// - Camera arrives at respawn point before/as player respawns
 /// 
 /// WHAT CHANGED:
-/// - Now uses PlayerTeamData (which stores team as an int: 1 or 2)
-/// - Falls back to PlayerTeamComponent if PlayerTeamData is missing
+/// - Reads the player's team from the networked PlayerTeamData
 /// - Compatible with the fixed NetworkedSpawnManager
 /// - FIXED LINE 160: String-to-int conversion for GetSpawnPosition()
 /// </summary>

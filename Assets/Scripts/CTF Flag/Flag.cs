@@ -121,7 +121,7 @@ public class Flag : NetworkBehaviour
 
         // Get player components
         GameObject player = collision.gameObject;
-        PlayerTeamComponent playerTeam = player.GetComponent<PlayerTeamComponent>();
+        PlayerTeamData playerTeam = player.GetComponent<PlayerTeamData>();
         NetworkObject playerNetworkObject = player.GetComponent<NetworkObject>();
 
         if (playerTeam == null || playerNetworkObject == null)
@@ -177,7 +177,7 @@ public class Flag : NetworkBehaviour
             pickupEffect.Play();
 
         // Notify clients
-        PlayerTeamComponent playerTeam = player.GetComponent<PlayerTeamComponent>();
+        PlayerTeamData playerTeam = player.GetComponent<PlayerTeamData>();
         Team owner = TeamUtil.Normalize(owningTeam);
         string notification = playerTeam.Team != owner
             ? $"{TeamUtil.DisplayName(playerTeam.Team)} team has captured {TeamUtil.DisplayName(owner)}'s flag!"

@@ -2,9 +2,10 @@ using UnityEngine;
 using Fusion;
 
 /// <summary>
-/// The single networked source of truth for a player's team. The [Networked] Team replicates to
-/// all clients; an OnChanged render callback (no per-tick polling) pushes updates into the
-/// gameplay/visual component. Authoritative changes happen only under state authority.
+/// The single networked source of truth for a player's team, and the team-driven sprite
+/// colorizing that derives from it. The [Networked] Team replicates to all clients; an OnChanged
+/// render callback (no per-tick polling) refreshes the visual. Authoritative changes happen only
+/// under state authority.
 /// </summary>
 public class PlayerTeamData : NetworkBehaviour
 {
@@ -12,21 +13,14 @@ public class PlayerTeamData : NetworkBehaviour
     [Networked, OnChangedRender(nameof(OnTeamChanged))]
     public Team Team { get; set; }
 
-    private PlayerTeamComponent playerTeamComponent;
-
-    private void Awake()
-    {
-        playerTeamComponent = GetComponent<PlayerTeamComponent>();
-        if (playerTeamComponent == null)
-        {
-            Debug.LogError("PlayerTeamData requires PlayerTeamComponent on the same GameObject!");
-        }
-    }
+    [Header("Visual Feedback (Optional)")]
+    [SerializeField] private SpriteRenderer spriteRenderer;
+    [SerializeField] private bool colorizePlayer = true;
 
     public override void Spawned()
     {
         // OnChangedRender does not fire for the value a late joiner receives as initial state,
-        // so initialize gameplay/visuals once here.
+        // so initialize the visual once here.
         OnTeamChanged();
     }
 
@@ -51,12 +45,21 @@ public class PlayerTeamData : NetworkBehaviour
         OnTeamChanged();
     }
 
-    /// <summary>Render-time callback: refresh gameplay/visuals from the networked value.</summary>
+    /// <summary>Render-time callback: refresh the team color from the networked value.</summary>
     private void OnTeamChanged()
     {
-        if (playerTeamComponent != null)
+        if (Team == Team.None) return;
+        ApplyTeamColor();
+    }
+
+    private void ApplyTeamColor()
+    {
+        if (!colorizePlayer || spriteRenderer == null || TeamManager.Instance == null) return;
+
+        TeamData data = TeamManager.Instance.GetTeamData(Team);
+        if (data != null)
         {
-            playerTeamComponent.OnTeamChanged();
+            spriteRenderer.color = data.teamColor;
         }
     }
 
