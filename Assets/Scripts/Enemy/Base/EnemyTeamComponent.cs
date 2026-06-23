@@ -32,32 +32,4 @@ public class EnemyTeamComponent : MonoBehaviour
             }
         }
     }
-
-    /// <summary>
-    /// Get the damage modifier for this enemy when attacking
-    /// </summary>
-    public float GetDamageDealtModifier()
-    {
-        if (TeamManager.Instance == null)
-        {
-            Debug.LogWarning("TeamManager not found! Returning 1.0 damage modifier.");
-            return 1f;
-        }
-
-        return TeamManager.Instance.GetDamageDealtModifier(Team, territorialAdvantage);
-    }
-
-    /// <summary>
-    /// Get the damage modifier for this enemy when receiving damage
-    /// </summary>
-    public float GetDamageReceivedModifier()
-    {
-        if (TeamManager.Instance == null)
-        {
-            Debug.LogWarning("TeamManager not found! Returning 1.0 damage modifier.");
-            return 1f;
-        }
-
-        return TeamManager.Instance.GetDamageReceivedModifier(Team, territorialAdvantage);
-    }
 }

@@ -75,7 +75,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (teamSelectionUI == null)
             Debug.LogError("❌ TeamSelectionUI not assigned!");
 
-        TeamSelectionData.Reset();
         LobbyTeamChoices.Clear();
         gameStarting = false;
     }
@@ -185,9 +184,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             Debug.LogError("❌ Cannot submit team choice - runner not running!");
             return;
         }
-
-        // Keep the local player's own intent available locally (used for UI / debugging).
-        TeamSelectionData.SetLocalPlayerTeam(teamNumber);
 
         if (runner.IsServer)
         {
@@ -308,7 +304,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             menuPanel.SetActive(true);
 
         SetButtonsInteractable(true);
-        TeamSelectionData.Reset();
         LobbyTeamChoices.Clear();
         gameStarting = false;
     }

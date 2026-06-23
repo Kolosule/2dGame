@@ -94,9 +94,6 @@ public class NetworkedPlayerInventory : NetworkBehaviour
 
         return true;
     }
-    private void OnTriggerEnter2D(Collider2D collision)
-    {
-    }
     /// <summary>
     /// RPC to notify all clients that a coin was added (for visual/audio feedback)
     /// </summary>

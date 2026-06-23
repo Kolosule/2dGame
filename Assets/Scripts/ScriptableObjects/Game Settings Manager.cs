@@ -11,12 +11,6 @@ public class GameSettingsManager : MonoBehaviour
     [SerializeField] private CombatConfig combatConfig;
 
     [Header("Game Rules")]
-    [Tooltip("Enable friendly fire between team members")]
-    public bool friendlyFireEnabled = false;
-
-    [Tooltip("Enable player vs player combat")]
-    public bool pvpEnabled = true;
-
     [Tooltip("Respawn time multiplier")]
     [Range(0.1f, 5.0f)]
     public float respawnTimeMultiplier = 1.0f;
@@ -82,32 +76,6 @@ public class GameSettingsManager : MonoBehaviour
     public CombatConfig GetCombatConfig()
     {
         return combatConfig;
-    }
-
-    /// <summary>
-    /// Check if two entities can damage each other
-    /// </summary>
-    public bool CanDamage(string attackerTeam, string defenderTeam)
-    {
-        if (attackerTeam == defenderTeam)
-        {
-            return friendlyFireEnabled;
-        }
-
-        // Check if it's PvP
-        bool bothArePlayers = !IsAITeam(attackerTeam) && !IsAITeam(defenderTeam);
-
-        if (bothArePlayers && !pvpEnabled)
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private bool IsAITeam(string teamID)
-    {
-        return TeamUtil.Normalize(teamID) == Team.Team3AI;
     }
 
     /// <summary>

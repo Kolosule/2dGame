@@ -39,30 +39,6 @@ public class PlayerTeamComponent : MonoBehaviour
         }
     }
 
-    public float GetDamageDealtModifier()
-    {
-        if (TeamManager.Instance == null || Team == Team.None) return 1f;
-        return TeamManager.Instance.GetDamageDealtModifier(Team, CalculateTerritorialAdvantage());
-    }
-
-    public float GetDamageReceivedModifier()
-    {
-        if (TeamManager.Instance == null || Team == Team.None) return 1f;
-        return TeamManager.Instance.GetDamageReceivedModifier(Team, CalculateTerritorialAdvantage());
-    }
-
-    /// <summary>+1 at own base, -1 at enemy base, 0 at midpoint.</summary>
-    private float CalculateTerritorialAdvantage()
-    {
-        if (TeamManager.Instance == null || Team == Team.None) return 0f;
-        return TeamManager.Instance.GetTerritorialAdvantage(Team, transform.position);
-    }
-
-    public float GetCurrentTerritorialAdvantage()
-    {
-        return CalculateTerritorialAdvantage();
-    }
-
     public bool IsSameTeam(PlayerTeamComponent other)
     {
         return other != null && Team != Team.None && Team == other.Team;
