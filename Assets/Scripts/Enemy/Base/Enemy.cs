@@ -255,25 +255,13 @@ public class Enemy : NetworkBehaviour
 
             // ⭐ Spawn the coin on the network
             // Runner.Spawn makes sure ALL clients see the coin!
-            NetworkObject coin = Runner.Spawn(
+            // The coin gives itself its "pop" and falls under its own server-side simulation
+            // (see NetworkedCoinPickup), so no Rigidbody/force handling is needed here.
+            Runner.Spawn(
                 coinPrefab,
                 spawnPosition,
                 Quaternion.identity
             );
-
-            // Optional: Add a small upward force to make coins "pop out"
-            if (coin != null)
-            {
-                Rigidbody2D coinRb = coin.GetComponent<Rigidbody2D>();
-                if (coinRb != null)
-                {
-                    Vector2 popForce = new Vector2(
-                        Random.Range(-2f, 2f),  // Random horizontal force
-                        Random.Range(3f, 5f)     // Upward force
-                    );
-                    coinRb.AddForce(popForce, ForceMode2D.Impulse);
-                }
-            }
         }
 
     }

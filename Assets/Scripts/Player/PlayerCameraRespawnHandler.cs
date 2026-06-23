@@ -61,6 +61,12 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
     /// </summary>
     private void Update()
     {
+        // Only the LOCAL player's handler may drive the (single) gameplay camera. Without this,
+        // every player's handler instance on this client would hijack the camera when ANY player
+        // died.
+        if (statsHandler == null || statsHandler.Object == null || !statsHandler.Object.HasInputAuthority)
+            return;
+
         // Try to find camera if we don't have it yet
         if (playerCamera == null)
         {
@@ -69,24 +75,25 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
                 return;
         }
 
+        bool dead = statsHandler.IsPlayerDead();
+
         // Check if player just died
-        if (!isDead && statsHandler.GetCurrentHealth() <= 0)
+        if (!isDead && dead)
         {
-            // Player just died
             isDead = true;
             hasTriggeredRespawnTransition = false;
 
-
-            // Start the death sequence
+            // Start the death sequence (transitions the camera to the chosen respawn point).
             StartCoroutine(HandleDeathCameraSequence());
         }
-
         // Check if player respawned
-        if (isDead && statsHandler.GetCurrentHealth() > 0)
+        else if (isDead && !dead)
         {
-            // Player respawned
             isDead = false;
 
+            // The body is now at RespawnPosition (where the camera already transitioned); release
+            // the hold and resume following so it stays put rather than snapping.
+            playerCamera.OnPlayerRespawned();
         }
     }
 
@@ -133,6 +140,11 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
     /// </summary>
     private Vector3 GetRespawnPosition()
     {
+        // Prefer the authoritative point chosen at death, so the camera lands exactly where the
+        // player will respawn (instead of an independent random spawn pick).
+        if (statsHandler != null && statsHandler.RespawnPosition != Vector3.zero)
+            return statsHandler.RespawnPosition;
+
         if (NetworkedSpawnManager.Instance != null)
         {
             PlayerTeamData teamData = GetComponent<PlayerTeamData>();

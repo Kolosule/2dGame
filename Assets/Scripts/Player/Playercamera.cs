@@ -332,12 +332,32 @@ public class PlayerCamera : MonoBehaviour
 
         transform.position = newPosition;
 
-        // End transition when complete
+        // When we reach the respawn point we HOLD here (Lerp stays clamped at the target) until
+        // the player actually respawns - OnPlayerRespawned() releases the hold. This prevents the
+        // camera from snapping back to the still-dead body during the respawn delay.
         if (progress >= 1f)
         {
-            isTransitioningToRespawn = false;
             currentFollowPosition = respawnTargetPosition;
+        }
+    }
 
+    /// <summary>
+    /// Called by PlayerCameraRespawnHandler when the local player respawns. Releases the respawn
+    /// hold and resumes normal following from the player's (now respawned) position.
+    /// </summary>
+    public void OnPlayerRespawned()
+    {
+        isTransitioningToRespawn = false;
+        followVelocity = Vector3.zero;
+
+        if (targetPlayer != null)
+        {
+            currentFollowPosition = targetPlayer.position;
+            currentFollowPosition.z = cameraZPosition;
+        }
+        else
+        {
+            currentFollowPosition = respawnTargetPosition;
         }
     }
 

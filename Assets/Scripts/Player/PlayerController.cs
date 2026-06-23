@@ -7,12 +7,16 @@ public class PlayerController : NetworkBehaviour
 {
     private PlayerMovement movement;
     private PlayerCombat combat;
+    private PlayerStatsHandler stats;
+    private Rigidbody2D rb;
     private NetworkButtons previousButtons;
 
     void Awake()
     {
         movement = GetComponent<PlayerMovement>();
         combat = GetComponent<PlayerCombat>();
+        stats = GetComponent<PlayerStatsHandler>();
+        rb = GetComponent<Rigidbody2D>();
     }
 
     public override void Spawned()
@@ -31,9 +35,21 @@ public class PlayerController : NetworkBehaviour
             NetworkButtons released = current.GetReleased(previousButtons);
             previousButtons = current;
 
-            // Respect the death/respawn freeze: PlayerStatsHandler disables these
-            // components to lock controls. Since we call them directly (not via Fusion),
-            // we must honor their enabled flag here.
+            // Death freeze, gated on the networked IsDead so it is authoritative and
+            // resimulation-safe (no reliance on RPC-toggled component enabled flags). Zero the
+            // velocity and gravity so the corpse stays put; PlayerMovement.Simulate restores
+            // gravityScale on the first live tick after respawn.
+            if (stats != null && stats.IsDead)
+            {
+                if (rb != null)
+                {
+                    rb.linearVelocity = Vector2.zero;
+                    rb.gravityScale = 0f;
+                }
+                return;
+            }
+
+            // Honor either component being disabled (we drive them directly, not via Fusion).
             if (movement.enabled) movement.Simulate(input, pressed, released);
             if (combat.enabled) combat.Simulate(input, pressed);
         }

@@ -164,6 +164,30 @@ public class PlayerCombat : NetworkBehaviour
                 Vector2 knockbackForce = new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward);
                 int finalDamage = ResolveMeleeDamage(hit.gameObject, hit.transform.position);
                 enemy.TakeDamage(finalDamage, knockbackForce, hit.transform.position);
+                continue;
+            }
+
+            // Player hit. Skip ourselves and friendly players (no melee friendly-fire),
+            // mirroring the projectile's team check. Damage runs through the same RPC the
+            // projectile uses so spawn-immunity / hit-cooldown are respected on the server.
+            PlayerStatsHandler targetPlayer = hit.GetComponent<PlayerStatsHandler>();
+            if (targetPlayer != null && targetPlayer != statsHandler)
+            {
+                PlayerTeamData targetTeam = hit.GetComponent<PlayerTeamData>();
+                Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
+                Team otherTeam = targetTeam != null ? targetTeam.Team : Team.None;
+                if (!TeamUtil.AreEnemies(myTeam, otherTeam)) continue;
+
+                int finalDamage = ResolveMeleeDamage(hit.gameObject, hit.transform.position);
+                targetPlayer.RPC_TakeDamage(finalDamage);
+
+                Rigidbody2D targetRb = hit.GetComponent<Rigidbody2D>();
+                if (targetRb != null)
+                {
+                    Vector2 knockbackDirection = (hit.transform.position - transform.position).normalized;
+                    targetRb.AddForce(new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward),
+                                      ForceMode2D.Impulse);
+                }
             }
         }
     }

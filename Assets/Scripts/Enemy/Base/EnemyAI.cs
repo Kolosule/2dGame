@@ -64,6 +64,15 @@ public class EnemyAI : MonoBehaviour
     private TickTimer telegraphTimer;
     private Color originalColor;
 
+    // Detection query reuse: CheckForPlayers runs every tick while patrolling. The old
+    // Physics2D.OverlapCircleAll allocated a fresh Collider2D[] each call (~1k allocs/s on the
+    // host at 20 enemies × 64 Hz). The ContactFilter2D + reusable List overload is allocation-free
+    // after warmup. Tick() is authority-only and single-threaded, and results are consumed
+    // immediately, so a shared static buffer is safe.
+    private static readonly System.Collections.Generic.List<Collider2D> DetectionResults =
+        new System.Collections.Generic.List<Collider2D>(32);
+    private ContactFilter2D playerFilter;
+
     private void Start()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -74,6 +83,11 @@ public class EnemyAI : MonoBehaviour
         {
             moveSpeed = stats.moveSpeed;
         }
+
+        // Build the detection filter once (matches the old OverlapCircleAll: player layer mask,
+        // triggers included per the default global query behavior).
+        playerFilter = new ContactFilter2D { useTriggers = true };
+        playerFilter.SetLayerMask(playerLayer);
 
         // Start patrolling at point A
         if (pointA != null)
@@ -191,11 +205,11 @@ public class EnemyAI : MonoBehaviour
     /// </summary>
     private void CheckForPlayers()
     {
-        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, detectionRange, playerLayer);
+        int count = Physics2D.OverlapCircle(transform.position, detectionRange, playerFilter, DetectionResults);
 
-        foreach (Collider2D hit in hits)
+        for (int i = 0; i < count; i++)
         {
-            PlayerStatsHandler player = hit.GetComponent<PlayerStatsHandler>();
+            PlayerStatsHandler player = DetectionResults[i].GetComponent<PlayerStatsHandler>();
             if (player != null && !player.IsPlayerDead())
             {
                 // Found a living player - start chasing
