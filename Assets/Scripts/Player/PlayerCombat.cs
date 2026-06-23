@@ -100,13 +100,12 @@ public class PlayerCombat : NetworkBehaviour
     {
         Transform attackTransform = null;
         Vector2 attackArea = Vector2.zero;
-        string attackDirection = "side";
+        bool isGroundPound = false;
 
         if (verticalAim > 0 && upAttackPoint != null)
         {
             attackTransform = upAttackPoint;
             attackArea = upAttackArea;
-            attackDirection = "up";
         }
         else if (verticalAim < 0 && downAttackPoint != null)
         {
@@ -116,7 +115,7 @@ public class PlayerCombat : NetworkBehaviour
             {
                 attackTransform = downAttackPoint;
                 attackArea = downAttackArea;
-                attackDirection = "down";
+                isGroundPound = true;
                 if (useGroundPound)
                     rb.linearVelocity = new Vector2(rb.linearVelocity.x, -groundPoundForce);
             }
@@ -136,9 +135,17 @@ public class PlayerCombat : NetworkBehaviour
 
         if (anim != null)
         {
-            anim.SetTrigger("Attack");
-            anim.SetBool("AttackingUp", attackDirection == "up");
-            anim.SetBool("AttackingDown", attackDirection == "down");
+            // A mid-air down attack is a ground pound: fire the dedicated "Jump Attack"
+            // trigger so the Animator can play a distinct clip. NOTE: the "Jump Attack"
+            // parameter exists but is not yet consumed by any transition/state in
+            // Player.controller, so this has no visible effect until that state + clip
+            // are authored in the Animator (see editor setup notes).
+            // (There are deliberately no "AttackingUp"/"AttackingDown" params — those
+            // were never wired and logged a warning per swing.)
+            if (isGroundPound)
+                anim.SetTrigger("Jump Attack");
+            else
+                anim.SetTrigger("Attack");
         }
 
         // Damage + hit detection only on the server (avoids double-apply across clients).
