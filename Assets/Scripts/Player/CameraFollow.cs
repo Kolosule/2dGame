@@ -176,12 +176,6 @@ public class CameraFollow : MonoBehaviour
         }
     }
 
-    public void ShakeCamera()
-    {
-        originalPos = camTransform.localPosition;
-        shakeDuration = 0.2f;
-    }
-
     /// <summary>
     /// Sets the camera target - validates that it's the local player
     /// </summary>

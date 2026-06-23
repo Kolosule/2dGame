@@ -48,17 +48,4 @@ public class CoinData : ScriptableObject
                 return 0;
         }
     }
-
-    /// <summary>
-    /// The opposing player team's value (for cross-team coin mechanics).
-    /// </summary>
-    public int GetOppositeTeamValue(Team collectingTeam)
-    {
-        switch (collectingTeam)
-        {
-            case Team.Team1: return team2Value;
-            case Team.Team2: return team1Value;
-            default: return 0;
-        }
-    }
 }

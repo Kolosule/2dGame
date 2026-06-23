@@ -99,15 +99,6 @@ public class PlayerStatsHandler : NetworkBehaviour
     }
 
     /// <summary>
-    /// Set the player ID (called by RespawnManager when spawning)
-    /// </summary>
-    public void SetPlayerID(int id)
-    {
-        // This is used by the old RespawnManager system
-        // We don't actually need to store this since Fusion handles it
-    }
-
-    /// <summary>
     /// Legacy TakeDamage method (for compatibility with Enemy scripts)
     /// Converts float to match our networked float health system
     /// </summary>
