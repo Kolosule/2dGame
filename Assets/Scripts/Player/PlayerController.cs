@@ -17,13 +17,8 @@ public class PlayerController : NetworkBehaviour
 
     public override void Spawned()
     {
-        // Bind the camera to the local player only.
-        if (HasInputAuthority)
-        {
-            CameraFollow cam = FindFirstObjectByType<CameraFollow>();
-            if (cam != null) cam.SetTarget(transform);
-        }
-
+        // The gameplay camera (PlayerCamera) self-finds the local player via
+        // HasInputAuthority, so no explicit camera binding is needed here.
         StartCoroutine(SetupTeammateCollisionsWhenReady());
     }
 
