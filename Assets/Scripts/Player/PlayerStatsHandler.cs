@@ -7,8 +7,7 @@ using UnityEngine;
 /// INCLUDES SPAWN IMMUNITY to prevent damage on spawn
 /// 
 /// WHAT CHANGED:
-/// - Fixed Respawn() method to convert string team ID to int
-/// - Works with both PlayerTeamData (int) and PlayerTeamComponent (string)
+/// - Respawn() resolves the team from the networked PlayerTeamData enum
 /// - Compatible with the fixed NetworkedSpawnManager
 /// - FIXED LINE 244: String-to-int conversion for GetSpawnPosition()
 /// </summary>

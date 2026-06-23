@@ -13,10 +13,10 @@ public class PlayerCombat : NetworkBehaviour
 
     [Header("Attack Settings")]
     [SerializeField] private LayerMask attackableLayer;
-    [SerializeField] private int damageAmount = 25;
-    [SerializeField] private float knockbackStrength = 10f;
+    // Melee damage, knockback strength, and cooldown are driven by PlayerStats
+    // (attackDamage / attackForce / attackCooldown) so designers tune them in one place.
+    // Upward knockback has no PlayerStats equivalent and stays a per-prefab tuning value.
     [SerializeField] private float knockbackUpward = 5f;
-    [SerializeField] private float attackCooldown = 0.3f;
 
     [Header("Attack Points")]
     [SerializeField] private Transform sideAttackPoint;
@@ -52,7 +52,7 @@ public class PlayerCombat : NetworkBehaviour
     [SerializeField] private LayerMask groundLayer;
 
     private Animator anim;
-    private PlayerTeamComponent teamComponent;
+    private PlayerTeamData teamComponent;
     private PlayerStatsHandler statsHandler;
     private Rigidbody2D rb;
     private PlayerMovement playerMovement;
@@ -69,7 +69,7 @@ public class PlayerCombat : NetworkBehaviour
             Debug.LogWarning("PlayerCombat: Animator not found in children!");
         }
 
-        teamComponent = GetComponent<PlayerTeamComponent>();
+        teamComponent = GetComponent<PlayerTeamData>();
         statsHandler = GetComponent<PlayerStatsHandler>();
         rb = GetComponent<Rigidbody2D>();
         playerMovement = GetComponent<PlayerMovement>();
@@ -82,7 +82,7 @@ public class PlayerCombat : NetworkBehaviour
 
         if (pressed.IsSet((int)PlayerButton.Melee) && AttackCooldownTimer.ExpiredOrNotRunning(Runner))
         {
-            AttackCooldownTimer = TickTimer.CreateFromSeconds(Runner, attackCooldown);
+            AttackCooldownTimer = TickTimer.CreateFromSeconds(Runner, stats.attackCooldown);
             Attack();
         }
 
@@ -161,7 +161,7 @@ public class PlayerCombat : NetworkBehaviour
             if (enemy != null)
             {
                 Vector2 knockbackDirection = (hit.transform.position - transform.position).normalized;
-                Vector2 knockbackForce = new Vector2(knockbackDirection.x * knockbackStrength, knockbackUpward);
+                Vector2 knockbackForce = new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward);
                 int finalDamage = ResolveMeleeDamage(hit.gameObject, hit.transform.position);
                 enemy.TakeDamage(finalDamage, knockbackForce, hit.transform.position);
             }
@@ -177,7 +177,7 @@ public class PlayerCombat : NetworkBehaviour
         CombatConfig config = GameSettingsManager.Instance != null
             ? GameSettingsManager.Instance.GetCombatConfig()
             : null;
-        if (config == null) return damageAmount;
+        if (config == null) return Mathf.RoundToInt(stats.attackDamage);
 
         Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
 
@@ -189,11 +189,11 @@ public class PlayerCombat : NetworkBehaviour
         }
         else
         {
-            PlayerTeamComponent ptc = target.GetComponent<PlayerTeamComponent>();
+            PlayerTeamData ptc = target.GetComponent<PlayerTeamData>();
             if (ptc != null) targetTeam = ptc.Team;
         }
 
-        return config.ResolveDamage(damageAmount, myTeam, transform.position, targetTeam, targetPos);
+        return config.ResolveDamage(stats.attackDamage, myTeam, transform.position, targetTeam, targetPos);
     }
 
     private void ShootProjectile(Vector2 aimWorldPoint)

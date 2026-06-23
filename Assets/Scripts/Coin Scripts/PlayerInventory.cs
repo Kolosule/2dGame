@@ -36,7 +36,7 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     private List<CoinData> heldCoins = new List<CoinData>();
 
     // Cache for team component
-    private PlayerTeamComponent teamComponent;
+    private PlayerTeamData teamComponent;
     private bool teamComponentChecked = false;
 
     /// <summary>
@@ -48,7 +48,7 @@ public class NetworkedPlayerInventory : NetworkBehaviour
         {
             if (!teamComponentChecked)
             {
-                teamComponent = GetComponent<PlayerTeamComponent>();
+                teamComponent = GetComponent<PlayerTeamData>();
                 teamComponentChecked = true;
             }
 

@@ -64,7 +64,7 @@ public class Projectile : NetworkBehaviour
         PlayerStatsHandler playerStats = other.GetComponent<PlayerStatsHandler>();
         if (playerStats != null)
         {
-            PlayerTeamComponent pt = other.GetComponent<PlayerTeamComponent>();
+            PlayerTeamData pt = other.GetComponent<PlayerTeamData>();
             Team targetTeam = pt != null ? pt.Team : Team.None;
             bool friendly = targetTeam != Team.None && targetTeam == ShooterTeam;
             if (!friendly)

@@ -19,6 +19,6 @@ MonoBehaviour:
   dashTime: 0.25
   dashCooldown: 0.75
   attackDamage: 25
-  attackForce: 1
-  attackCooldown: 0.3
+  attackForce: 10
+  attackCooldown: 0.1
   maxHealth: 100
