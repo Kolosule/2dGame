@@ -201,6 +201,11 @@ public class NetworkedHomeBase : NetworkBehaviour
 
                     // Notify all clients to play effects
                     RPC_OnDeposit(playerNetObj.transform.position, points);
+
+                    // Additive: credit the player's personal deposited-value total so buffs
+                    // progress. Team scoring above is untouched.
+                    PlayerBuffs buffs = playerNetObj.GetComponent<PlayerBuffs>();
+                    if (buffs != null) buffs.ServerAddDepositedValue(points);
                 }
                 else
                 {

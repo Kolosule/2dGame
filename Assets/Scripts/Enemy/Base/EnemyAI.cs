@@ -210,7 +210,9 @@ public class EnemyAI : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             PlayerStatsHandler player = DetectionResults[i].GetComponent<PlayerStatsHandler>();
-            if (player != null && !player.IsPlayerDead())
+            PlayerBuffs buffs = DetectionResults[i].GetComponent<PlayerBuffs>();
+            bool stealthed = buffs != null && buffs.IsStealthed;
+            if (player != null && !player.IsPlayerDead() && !stealthed)
             {
                 // Found a living player - start chasing
                 currentPlayer = player.transform;
@@ -339,7 +341,9 @@ public class EnemyAI : MonoBehaviour
 
         // If player escaped or died, return to patrol
         PlayerStatsHandler player = currentPlayer.GetComponent<PlayerStatsHandler>();
-        if (distance > detectionRange || (player != null && player.IsPlayerDead()))
+        PlayerBuffs buffs = currentPlayer.GetComponent<PlayerBuffs>();
+        bool stealthed = buffs != null && buffs.IsStealthed;
+        if (distance > detectionRange || stealthed || (player != null && player.IsPlayerDead()))
         {
             currentPlayer = null;
             currentState = State.Patrolling;

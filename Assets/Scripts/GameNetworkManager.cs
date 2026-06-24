@@ -38,6 +38,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private static readonly Fusion.Sockets.ReliableKey TeamChoiceKey =
         Fusion.Sockets.ReliableKey.FromInts(0x54454100, 0x4D, 0, 0); // "TEAM"
 
+    // Reliable-data channel tag for a client sending its buff loadout to the host.
+    private static readonly Fusion.Sockets.ReliableKey LoadoutKey =
+        Fusion.Sockets.ReliableKey.FromInts(0x4C4F4144, 0x55, 0, 0); // "LOAD"
+
     private NetworkRunner runner;
     private bool isConnected = false;
     private bool gameStarting = false;
@@ -71,6 +75,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             Debug.LogError("❌ TeamSelectionUI not assigned!");
 
         LobbyTeamChoices.Clear();
+        LobbyLoadoutChoices.Clear();
         gameStarting = false;
     }
 
@@ -191,6 +196,20 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
+    /// <summary>
+    /// Called by TeamSelectionUI when the local player confirms their buff order. Records on the host
+    /// (directly if we are the host, else over reliable-data), parallel to SubmitLocalTeamChoice.
+    /// </summary>
+    public void SubmitLocalLoadoutChoice(byte[] order)
+    {
+        if (order == null || runner == null || !runner.IsRunning) return;
+
+        if (runner.IsServer)
+            LobbyLoadoutChoices.Set(runner.LocalPlayer, order);
+        else
+            runner.SendReliableDataToServer(LoadoutKey, order);
+    }
+
     /// <summary>Host-only: store a player's choice and refresh the host's Start button.</summary>
     private void RecordChoice(PlayerRef player, int teamNumber)
     {
@@ -304,6 +323,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (runner.IsServer && !gameStarting)
         {
             LobbyTeamChoices.Remove(player);
+            LobbyLoadoutChoices.Remove(player);
             RefreshStartGate();
         }
     }
@@ -320,6 +340,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         SetButtonsInteractable(true);
         LobbyTeamChoices.Clear();
+        LobbyLoadoutChoices.Clear();
         gameStarting = false;
     }
 
@@ -349,18 +370,27 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
     public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data)
     {
-        // Host receives clients' team choices here (clients use SendReliableDataToServer).
-        if (!runner.IsServer || key != TeamChoiceKey)
-            return;
+        if (!runner.IsServer) return;
 
-        if (data.Count < 1 || data.Array == null)
+        if (key == TeamChoiceKey)
         {
-            Debug.LogError($"❌ [HOST] Empty team-choice payload from Player {player.PlayerId}");
+            if (data.Count < 1 || data.Array == null)
+            {
+                Debug.LogError($"❌ [HOST] Empty team-choice payload from Player {player.PlayerId}");
+                return;
+            }
+            int teamNumber = data.Array[data.Offset];
+            RecordChoice(player, teamNumber);
             return;
         }
 
-        int teamNumber = data.Array[data.Offset];
-        RecordChoice(player, teamNumber);
+        if (key == LoadoutKey)
+        {
+            if (data.Count < 1 || data.Array == null) return;
+            var order = new byte[data.Count];
+            System.Array.Copy(data.Array, data.Offset, order, 0, data.Count);
+            LobbyLoadoutChoices.Set(player, order);
+        }
     }
     public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     public void OnSceneLoadDone(NetworkRunner runner)
@@ -391,4 +421,19 @@ public static class LobbyTeamChoices
     public static void Remove(PlayerRef player) => choices.Remove(player);
     public static void Clear() => choices.Clear();
     public static int Count => choices.Count;
+}
+
+/// <summary>
+/// Per-player buff loadout (priority order as BuffId bytes) collected by the host during the lobby,
+/// parallel to LobbyTeamChoices. Read by NetworkedSpawnManager on the host to initialise each
+/// player's PlayerBuffs. A missing entry falls back to the BuffLoadoutConfig default order.
+/// </summary>
+public static class LobbyLoadoutChoices
+{
+    private static readonly Dictionary<PlayerRef, byte[]> choices = new Dictionary<PlayerRef, byte[]>();
+
+    public static void Set(PlayerRef player, byte[] order) => choices[player] = order;
+    public static bool TryGet(PlayerRef player, out byte[] order) => choices.TryGetValue(player, out order);
+    public static void Remove(PlayerRef player) => choices.Remove(player);
+    public static void Clear() => choices.Clear();
 }

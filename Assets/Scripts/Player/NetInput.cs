@@ -8,6 +8,7 @@ public enum PlayerButton
     Dash = 1,
     Melee = 2,
     Shoot = 3,
+    Stealth = 4,
 }
 
 /// <summary>All per-tick player input, collected in NetworkInputProvider.OnInput
