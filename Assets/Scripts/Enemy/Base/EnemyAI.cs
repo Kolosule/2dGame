@@ -2,76 +2,70 @@ using UnityEngine;
 using Fusion;
 
 /// <summary>
-/// Networked enemy AI: patrolling, chasing, attack telegraphing and attacking.
+/// Networked, zone-bound enemy AI. Wanders around a home anchor, engages the nearest
+/// valid player who enters detection range, leashes back to home, and reuses the
+/// telegraph/attack flow.
 ///
 /// The state machine and Rigidbody2D are driven ONLY on the state authority via
-/// <see cref="Tick"/> (called from Enemy.FixedUpdateNetwork). Proxies interpolate
-/// position through NetworkRigidbody2D and reproduce the facing + telegraph visuals
-/// from networked state via <see cref="RenderVisuals"/> (called from Enemy.Render).
+/// <see cref="Tick"/> (from Enemy.FixedUpdateNetwork). Proxies interpolate position via
+/// NetworkRigidbody2D and reproduce facing + telegraph from networked state via
+/// <see cref="RenderVisuals"/> (from Enemy.Render).
 /// </summary>
 public class EnemyAI : MonoBehaviour
 {
-    [Header("Enemy Configuration")]
-    [SerializeField] private EnemyStats stats;
-
-    [Header("Patrol Points")]
-    [Tooltip("First patrol point")]
-    [SerializeField] private Transform pointA;
-    [Tooltip("Second patrol point")]
-    [SerializeField] private Transform pointB;
-
-    [Header("Detection Settings")]
-    [Tooltip("How far the enemy can detect players")]
-    [SerializeField] private float detectionRange = 10f;
-
-    [Tooltip("Layer mask for detecting players")]
-    [SerializeField] private LayerMask playerLayer;
-
-    [Header("Attack Settings")]
-    [Tooltip("How close enemy needs to be to attack")]
-    [SerializeField] private float attackRange = 1.5f;
-
     [Header("Attack Telegraph Settings")]
-    [Tooltip("How long to show attack warning before attacking (in seconds)")]
+    [Tooltip("How long to show the attack warning before attacking (seconds).")]
     [SerializeField] private float attackTelegraphDuration = 0.5f;
 
-    [Tooltip("Color to flash when telegraphing attack")]
-    [SerializeField] private Color telegraphColor = new Color(1f, 0.3f, 0.3f, 1f); // Red tint
+    [Tooltip("Color to flash when telegraphing an attack.")]
+    [SerializeField] private Color telegraphColor = new Color(1f, 0.3f, 0.3f, 1f);
 
-    [Tooltip("Should the enemy freeze during attack telegraph?")]
+    [Tooltip("Freeze movement during the attack telegraph?")]
     [SerializeField] private bool freezeDuringTelegraph = true;
 
-    // AI State
-    private enum State
-    {
-        Patrolling,
-        Chasing,
-        Telegraphing,  // Showing attack warning
-        Attacking
-    }
+    [Header("Wander")]
+    [Tooltip("Seconds to pause at a wander point before picking the next one.")]
+    [SerializeField] private float wanderPauseDuration = 1f;
 
-    private State currentState = State.Patrolling;
-    private Transform currentTarget; // Current patrol point
-    private Transform currentPlayer; // Player being chased/attacked
+    private enum State { Guard, Chasing, Telegraphing, Attacking, Returning }
+
+    // Config resolved at Initialize (authority only).
+    private Vector2 home;
     private float moveSpeed;
+    private float detectionRange;
+    private float attackRange;
+    private float leashRadius;
+    private float wanderRadius;
+    private bool initialized;
 
-    // Components
+    private State currentState = State.Guard;
+    private Transform currentPlayer;
+
+    // Wander bookkeeping.
+    private Vector2 wanderTarget;
+    private TickTimer wanderPauseTimer;
+    private bool hasWanderTarget;
+
+    // Components.
     private Rigidbody2D rb;
     private Enemy enemyComponent;
     private SpriteRenderer spriteRenderer;
 
-    // Telegraph tracking (TickTimer = simulation-path timing, authority only)
+    // Telegraph.
     private TickTimer telegraphTimer;
     private Color originalColor;
 
-    // Detection query reuse: CheckForPlayers runs every tick while patrolling. The old
-    // Physics2D.OverlapCircleAll allocated a fresh Collider2D[] each call (~1k allocs/s on the
-    // host at 20 enemies × 64 Hz). The ContactFilter2D + reusable List overload is allocation-free
-    // after warmup. Tick() is authority-only and single-threaded, and results are consumed
-    // immediately, so a shared static buffer is safe.
+    // Allocation-free detection buffer (authority-only, results consumed immediately).
     private static readonly System.Collections.Generic.List<Collider2D> DetectionResults =
         new System.Collections.Generic.List<Collider2D>(32);
     private ContactFilter2D playerFilter;
+    private LayerMask playerLayer;
+
+    [Header("Detection")]
+    [Tooltip("Layer mask used to find players.")]
+    [SerializeField] private LayerMask playerLayerMask;
+
+    private const float ArriveThreshold = 0.5f;
 
     private void Start()
     {
@@ -79,92 +73,88 @@ public class EnemyAI : MonoBehaviour
         enemyComponent = GetComponent<Enemy>();
         spriteRenderer = GetComponent<SpriteRenderer>();
 
-        if (stats != null)
-        {
-            moveSpeed = stats.moveSpeed;
-        }
-
-        // Build the detection filter once (matches the old OverlapCircleAll: player layer mask,
-        // triggers included per the default global query behavior).
+        playerLayer = playerLayerMask;
         playerFilter = new ContactFilter2D { useTriggers = true };
         playerFilter.SetLayerMask(playerLayer);
 
-        // Start patrolling at point A
-        if (pointA != null)
-        {
-            currentTarget = pointA;
-        }
-
-        // Store original sprite color for telegraph effect
         if (spriteRenderer != null)
         {
             originalColor = spriteRenderer.color;
         }
         else
         {
-            Debug.LogWarning($"{gameObject.name}: No SpriteRenderer found - telegraph effect won't work!");
+            Debug.LogWarning($"{gameObject.name}: No SpriteRenderer - telegraph flash disabled.");
         }
     }
 
     /// <summary>
-    /// Authority-only AI step, driven by Enemy.FixedUpdateNetwork. Proxies never run this.
+    /// Authority-only setup from Enemy.Spawned. Captures home + effective speed and the
+    /// per-archetype ranges from stats.
     /// </summary>
+    public void Initialize(Vector2 homeAnchor, float effectiveMoveSpeed, EnemyStats stats)
+    {
+        home = homeAnchor;
+        moveSpeed = effectiveMoveSpeed;
+        if (stats != null)
+        {
+            detectionRange = stats.detectionRange;
+            attackRange = stats.attackRange;
+            leashRadius = stats.leashRadius;
+            wanderRadius = Mathf.Min(stats.wanderRadius, stats.leashRadius);
+        }
+        currentState = State.Guard;
+        hasWanderTarget = false;
+        initialized = true;
+    }
+
+    /// <summary>Authority-only AI step (from Enemy.FixedUpdateNetwork).</summary>
     public void Tick()
     {
-        if (rb == null || enemyComponent == null) return;
+        if (!initialized || rb == null || enemyComponent == null) return;
 
-        // Don't move if being knocked back
-        if (enemyComponent.IsKnockedBack())
-        {
-            return;
-        }
+        if (enemyComponent.IsKnockedBack()) return;
 
-        // Handle telegraph: wait for the timer, then resolve the attack
         if (currentState == State.Telegraphing)
         {
             if (telegraphTimer.Expired(enemyComponent.Runner))
             {
                 CompleteTelegraph();
             }
-            return; // Don't do anything else while telegraphing
+            return;
         }
 
-        // State machine
         switch (currentState)
         {
-            case State.Patrolling:
-                Patrol();
-                CheckForPlayers();
+            case State.Guard:
+                Wander();
+                AcquireTarget();
                 break;
 
             case State.Chasing:
                 ChasePlayer();
-                CheckAttackRange();
-                CheckIfPlayerEscaped();
                 break;
 
             case State.Attacking:
                 Attack();
                 break;
+
+            case State.Returning:
+                ReturnHome();
+                AcquireTarget();
+                break;
         }
     }
 
-    /// <summary>
-    /// Runs on EVERY client (from Enemy.Render) to reproduce the networked visual state:
-    /// sprite facing and the attack telegraph flash.
-    /// </summary>
+    /// <summary>Runs on every client (from Enemy.Render): facing + telegraph flash.</summary>
     public void RenderVisuals()
     {
         if (spriteRenderer == null || enemyComponent == null) return;
 
-        // Facing (networked so proxies match the authority)
         spriteRenderer.flipX = enemyComponent.FacingLeft;
 
-        // Telegraph flash (driven by networked bool; phase is cosmetic/local)
         if (enemyComponent.IsTelegraphing)
         {
-            float flashSpeed = 8f;
-            float t = Mathf.PingPong(Time.time * flashSpeed, 1f);
+            float t = Mathf.PingPong(Time.time * 8f, 1f);
             spriteRenderer.color = Color.Lerp(originalColor, telegraphColor, t);
         }
         else
@@ -173,237 +163,208 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Patrol between two points
-    /// </summary>
-    private void Patrol()
+    // ---- Guard / wander -------------------------------------------------
+
+    private void Wander()
     {
-        if (currentTarget == null)
+        // Pausing between wander points.
+        if (!wanderPauseTimer.ExpiredOrNotRunning(enemyComponent.Runner))
         {
-            Debug.LogWarning($"{stats.enemyName}: No patrol target!");
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
             return;
         }
 
-        // Move toward current target
-        Vector2 direction = ((Vector2)currentTarget.position - rb.position).normalized;
-        rb.linearVelocity = new Vector2(direction.x * moveSpeed, rb.linearVelocity.y);
-
-        // Face movement direction
-        SetFacing(direction.x);
-
-        // Check if reached target
-        float distance = Vector2.Distance(rb.position, currentTarget.position);
-        if (distance < 0.5f)
+        if (!hasWanderTarget)
         {
-            // Switch to other patrol point
-            currentTarget = (currentTarget == pointA) ? pointB : pointA;
+            PickWanderTarget();
+        }
+
+        MoveToward(wanderTarget);
+
+        if (Vector2.Distance(rb.position, wanderTarget) < ArriveThreshold)
+        {
+            hasWanderTarget = false;
+            wanderPauseTimer = TickTimer.CreateFromSeconds(enemyComponent.Runner, wanderPauseDuration);
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
         }
     }
 
+    private void PickWanderTarget()
+    {
+        Vector2 offset = Random.insideUnitCircle * wanderRadius;
+        wanderTarget = home + offset;
+        hasWanderTarget = true;
+    }
+
+    // ---- Targeting ------------------------------------------------------
+
     /// <summary>
-    /// Check if any players are in detection range
+    /// Find the nearest living, non-stealthed player within detectionRange AND within
+    /// leashRadius of home. Enters Chasing if found.
     /// </summary>
-    private void CheckForPlayers()
+    private void AcquireTarget()
     {
         int count = Physics2D.OverlapCircle(transform.position, detectionRange, playerFilter, DetectionResults);
+
+        Transform best = null;
+        float bestSqr = float.MaxValue;
 
         for (int i = 0; i < count; i++)
         {
             PlayerStatsHandler player = DetectionResults[i].GetComponent<PlayerStatsHandler>();
+            if (player == null || player.IsPlayerDead()) continue;
+
             PlayerBuffs buffs = DetectionResults[i].GetComponent<PlayerBuffs>();
-            bool stealthed = buffs != null && buffs.IsStealthed;
-            if (player != null && !player.IsPlayerDead() && !stealthed)
+            if (buffs != null && buffs.IsStealthed) continue;
+
+            Vector2 playerPos = player.transform.position;
+            if ((playerPos - home).sqrMagnitude > leashRadius * leashRadius) continue;
+
+            float sqr = (playerPos - (Vector2)transform.position).sqrMagnitude;
+            if (sqr < bestSqr)
             {
-                // Found a living player - start chasing
-                currentPlayer = player.transform;
-                currentState = State.Chasing;
-                return;
+                bestSqr = sqr;
+                best = player.transform;
             }
+        }
+
+        if (best != null)
+        {
+            currentPlayer = best;
+            currentState = State.Chasing;
         }
     }
 
-    /// <summary>
-    /// Chase the current player
-    /// </summary>
+    // ---- Chase / attack -------------------------------------------------
+
     private void ChasePlayer()
     {
         if (currentPlayer == null)
         {
-            // Lost player - return to patrol
-            currentState = State.Patrolling;
+            currentState = State.Returning;
             return;
         }
 
-        // Move toward player
-        Vector2 direction = ((Vector2)currentPlayer.position - rb.position).normalized;
-        rb.linearVelocity = new Vector2(direction.x * moveSpeed, rb.linearVelocity.y);
+        Vector2 playerPos = currentPlayer.position;
 
-        // Face player
-        SetFacing(direction.x);
-    }
-
-    /// <summary>
-    /// Check if player is in attack range
-    /// </summary>
-    private void CheckAttackRange()
-    {
-        if (currentPlayer == null) return;
-
-        float distance = Vector2.Distance(transform.position, currentPlayer.position);
-
-        if (distance <= attackRange)
+        if (EnemyAILeash.ShouldDisengage(rb.position, home, playerPos, detectionRange, leashRadius)
+            || IsTargetInvalid())
         {
-            // Start attack telegraph
-            StartTelegraph();
+            currentPlayer = null;
+            currentState = State.Returning;
+            return;
         }
+
+        // Close enough to attack?
+        if (Vector2.Distance(transform.position, playerPos) <= attackRange)
+        {
+            StartTelegraph();
+            return;
+        }
+
+        Vector2 steer = EnemyAILeash.ClampToLeash(home, playerPos, leashRadius);
+        MoveToward(steer);
     }
 
-    /// <summary>
-    /// Starts the attack telegraph (visual warning)
-    /// </summary>
+    private bool IsTargetInvalid()
+    {
+        if (currentPlayer == null) return true;
+        PlayerStatsHandler player = currentPlayer.GetComponent<PlayerStatsHandler>();
+        if (player == null || player.IsPlayerDead()) return true;
+        PlayerBuffs buffs = currentPlayer.GetComponent<PlayerBuffs>();
+        return buffs != null && buffs.IsStealthed;
+    }
+
     private void StartTelegraph()
     {
         currentState = State.Telegraphing;
         telegraphTimer = TickTimer.CreateFromSeconds(enemyComponent.Runner, attackTelegraphDuration);
         enemyComponent.IsTelegraphing = true;
 
-        // Stop movement if configured to freeze
         if (freezeDuringTelegraph)
         {
-            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
         }
     }
 
-    /// <summary>
-    /// Completes the telegraph and checks if player is still in range before attacking
-    /// </summary>
     private void CompleteTelegraph()
     {
         enemyComponent.IsTelegraphing = false;
 
-        // Check if player is STILL in attack range
-        if (currentPlayer != null)
+        if (currentPlayer == null || IsTargetInvalid())
         {
-            float distance = Vector2.Distance(transform.position, currentPlayer.position);
+            currentPlayer = null;
+            currentState = State.Returning;
+            return;
+        }
 
-            // Only attack if player is still in range
-            if (distance <= attackRange)
-            {
-                // Player didn't dodge - perform attack
-                currentState = State.Attacking;
-            }
-            else
-            {
-                // Player successfully dodged - return to chasing
-                currentState = State.Chasing;
-            }
-        }
-        else
-        {
-            // Player is gone - return to patrol
-            currentState = State.Patrolling;
-        }
+        float distance = Vector2.Distance(transform.position, currentPlayer.position);
+        currentState = distance <= attackRange ? State.Attacking : State.Chasing;
     }
 
-    /// <summary>
-    /// Attack the player
-    /// </summary>
     private void Attack()
     {
         if (currentPlayer == null)
         {
-            currentState = State.Patrolling;
+            currentState = State.Returning;
             return;
         }
 
-        // Stop movement
-        rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+        rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
 
-        // Try to attack
         PlayerStatsHandler player = currentPlayer.GetComponent<PlayerStatsHandler>();
         if (player != null && enemyComponent != null)
         {
             enemyComponent.AttackPlayer(player);
         }
 
-        // Return to chasing state after attack
         currentState = State.Chasing;
     }
 
-    /// <summary>
-    /// Check if player escaped detection range
-    /// </summary>
-    private void CheckIfPlayerEscaped()
+    // ---- Return ---------------------------------------------------------
+
+    private void ReturnHome()
     {
-        if (currentPlayer == null) return;
-
-        float distance = Vector2.Distance(transform.position, currentPlayer.position);
-
-        // If player escaped or died, return to patrol
-        PlayerStatsHandler player = currentPlayer.GetComponent<PlayerStatsHandler>();
-        PlayerBuffs buffs = currentPlayer.GetComponent<PlayerBuffs>();
-        bool stealthed = buffs != null && buffs.IsStealthed;
-        if (distance > detectionRange || stealthed || (player != null && player.IsPlayerDead()))
+        if (Vector2.Distance(rb.position, home) < ArriveThreshold)
         {
-            currentPlayer = null;
-            currentState = State.Patrolling;
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+            hasWanderTarget = false;
+            currentState = State.Guard;
+            return;
         }
+        MoveToward(home);
     }
 
-    /// <summary>
-    /// Record facing direction into networked state so all clients flip the sprite alike.
-    /// </summary>
+    // ---- Movement / facing ---------------------------------------------
+
+    private void MoveToward(Vector2 target)
+    {
+        Vector2 direction = (target - rb.position).normalized;
+        rb.linearVelocity = new Vector2(direction.x * moveSpeed, rb.linearVelocity.y);
+        SetFacing(direction.x);
+    }
+
     private void SetFacing(float directionX)
     {
         if (enemyComponent == null) return;
-
-        if (directionX > 0)
-        {
-            enemyComponent.FacingLeft = false;
-        }
-        else if (directionX < 0)
-        {
-            enemyComponent.FacingLeft = true;
-        }
+        if (directionX > 0f) enemyComponent.FacingLeft = false;
+        else if (directionX < 0f) enemyComponent.FacingLeft = true;
     }
 
-    /// <summary>
-    /// Set patrol points (called by spawner)
-    /// </summary>
-    public void SetPatrolPoints(Transform a, Transform b)
-    {
-        pointA = a;
-        pointB = b;
-
-        if (pointA != null)
-        {
-            currentTarget = pointA;
-        }
-
-    }
-
-    // Show detection and attack ranges in editor
     private void OnDrawGizmosSelected()
     {
-        // Detection range
+        Vector2 center = Application.isPlaying && initialized ? home : (Vector2)transform.position;
+
         Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, detectionRange);
+        Gizmos.DrawWireSphere(center, detectionRange > 0f ? detectionRange : 10f);
 
-        // Attack range
         Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, attackRange);
+        Gizmos.DrawWireSphere(transform.position, attackRange > 0f ? attackRange : 1.5f);
 
-        // Telegraph color indicator
-        Gizmos.color = telegraphColor;
-        Gizmos.DrawWireSphere(transform.position, attackRange * 0.8f);
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawWireSphere(center, leashRadius > 0f ? leashRadius : 12f);
 
-        // Draw patrol path if points are assigned
-        if (pointA != null && pointB != null)
-        {
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawLine(pointA.position, pointB.position);
-            Gizmos.DrawWireSphere(pointA.position, 0.3f);
-            Gizmos.DrawWireSphere(pointB.position, 0.3f);
-        }
+        Gizmos.color = new Color(0.3f, 1f, 0.3f, 0.6f);
+        Gizmos.DrawWireSphere(center, wanderRadius > 0f ? wanderRadius : 5f);
     }
 }
