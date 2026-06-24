@@ -10,6 +10,10 @@ public class GameSettingsManager : MonoBehaviour
     [Header("Combat Configuration")]
     [SerializeField] private CombatConfig combatConfig;
 
+    [Header("Enemy Difficulty")]
+    [Tooltip("Concentric difficulty rings applied to enemies by distance from center.")]
+    [SerializeField] private DifficultyRingConfig difficultyRingConfig;
+
     [Header("Game Rules")]
     [Tooltip("Respawn time multiplier")]
     [Range(0.1f, 5.0f)]
@@ -76,6 +80,14 @@ public class GameSettingsManager : MonoBehaviour
     public CombatConfig GetCombatConfig()
     {
         return combatConfig;
+    }
+
+    /// <summary>
+    /// Get the shared enemy difficulty ring configuration (may be null if unassigned).
+    /// </summary>
+    public DifficultyRingConfig GetDifficultyRingConfig()
+    {
+        return difficultyRingConfig;
     }
 
     /// <summary>
