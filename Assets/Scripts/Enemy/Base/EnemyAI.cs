@@ -184,7 +184,10 @@ public class EnemyAI : MonoBehaviour
 
         MoveToward(wanderTarget);
 
-        if (Vector2.Distance(rb.position, wanderTarget) < ArriveThreshold)
+        // Horizontal arrival: this is a gravity platformer and movement only drives X
+        // velocity, so the enemy's Y is owned by physics. A 2D distance check against a
+        // target with any Y delta would never satisfy, stranding the enemy at one X.
+        if (Mathf.Abs(rb.position.x - wanderTarget.x) < ArriveThreshold)
         {
             hasWanderTarget = false;
             wanderPauseTimer = TickTimer.CreateFromSeconds(enemyComponent.Runner, wanderPauseDuration);
@@ -194,8 +197,10 @@ public class EnemyAI : MonoBehaviour
 
     private void PickWanderTarget()
     {
-        Vector2 offset = Random.insideUnitCircle * wanderRadius;
-        wanderTarget = home + offset;
+        // Wander horizontally within wanderRadius of home; keep the target at home's
+        // height so the X-based arrival check can be reached under gravity.
+        float offsetX = Random.Range(-wanderRadius, wanderRadius);
+        wanderTarget = new Vector2(home.x + offsetX, home.y);
         hasWanderTarget = true;
     }
 
@@ -329,7 +334,8 @@ public class EnemyAI : MonoBehaviour
 
     private void ReturnHome()
     {
-        if (Vector2.Distance(rb.position, home) < ArriveThreshold)
+        // Horizontal arrival (same reason as Wander: Y is gravity-owned).
+        if (Mathf.Abs(rb.position.x - home.x) < ArriveThreshold)
         {
             rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
             hasWanderTarget = false;
