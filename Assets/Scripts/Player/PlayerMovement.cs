@@ -27,6 +27,7 @@ public class PlayerMovement : NetworkBehaviour
     // Component refs
     private Rigidbody2D rb;
     private FlagCarrierMarker flagCarrierMarker;
+    private PlayerStatModifiers mods;
     private float baseGravity = 5f;
 
     // Networked simulation state
@@ -46,12 +47,13 @@ public class PlayerMovement : NetworkBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         flagCarrierMarker = GetComponent<FlagCarrierMarker>();
+        mods = GetComponent<PlayerStatModifiers>();
         if (rb != null) baseGravity = rb.gravityScale;
 
         if (HasStateAuthority)
         {
             FacingRight = transform.localScale.x >= 0f;
-            RemainingAirJumps = stats.maxAirJumps;
+            RemainingAirJumps = mods != null ? mods.EffectiveMaxAirJumps : stats.maxAirJumps;
         }
     }
 
@@ -94,7 +96,7 @@ public class PlayerMovement : NetworkBehaviour
         if (grounded)
         {
             CoyoteCounter = coyoteTimeTicks;
-            RemainingAirJumps = stats.maxAirJumps;
+            RemainingAirJumps = mods != null ? mods.EffectiveMaxAirJumps : stats.maxAirJumps;
             if (Jumping && rb.linearVelocity.y <= 0.01f) Jumping = false;
         }
         else if (CoyoteCounter > 0)
@@ -147,7 +149,7 @@ public class PlayerMovement : NetworkBehaviour
         else if (RemainingAirJumps > 0)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, stats.jumpForce);
-            RemainingAirJumps--;
+            if (mods == null || !mods.UnlimitedAirJumps) RemainingAirJumps--;
         }
         Jumping = true;
         JumpCut = false;
@@ -158,7 +160,7 @@ public class PlayerMovement : NetworkBehaviour
     {
         Dashing = true;
         DashDir = FacingRight ? 1f : -1f;
-        DashDurationTimer = TickTimer.CreateFromSeconds(Runner, stats.dashTime);
+        DashDurationTimer = TickTimer.CreateFromSeconds(Runner, mods != null ? mods.EffectiveDashTime : stats.dashTime);
         rb.linearVelocity = new Vector2(DashDir * stats.dashSpeed, 0f);
     }
 
@@ -166,7 +168,7 @@ public class PlayerMovement : NetworkBehaviour
     {
         if (!Dashing) return;
         Dashing = false;
-        DashCooldownTimer = TickTimer.CreateFromSeconds(Runner, stats.dashCooldown);
+        DashCooldownTimer = TickTimer.CreateFromSeconds(Runner, mods != null ? mods.EffectiveDashCooldown : stats.dashCooldown);
     }
 
     /// <summary>SERVER: stun the player for a duration (set by projectile hits).</summary>
@@ -213,9 +215,10 @@ public class PlayerMovement : NetworkBehaviour
 
     public float GetDashCooldownPercent()
     {
-        if (stats.dashCooldown <= 0f) return 1f;
+        float effectiveCd = mods != null ? mods.EffectiveDashCooldown : stats.dashCooldown;
+        if (effectiveCd <= 0f) return 1f;
         float remaining = DashCooldownTimer.RemainingTime(Runner) ?? 0f;
-        return 1f - Mathf.Clamp01(remaining / stats.dashCooldown);
+        return 1f - Mathf.Clamp01(remaining / effectiveCd);
     }
 
     public float GetDashCooldownRemaining() => DashCooldownTimer.RemainingTime(Runner) ?? 0f;
