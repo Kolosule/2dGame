@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ddb36169c7c382b45be48cea685fd2bc, type: 3}
+  m_Name: BuffLoadoutConfig
+  m_EditorClassIdentifier: Assembly-CSharp::BuffLoadoutConfig
+  allBuffs:
+  - {fileID: 11400000, guid: 4632087f1471cdc4c8fb91c9208aa046, type: 2}
+  - {fileID: 11400000, guid: 87072e9a6b5e28b40a1f5dfa81379274, type: 2}
+  - {fileID: 11400000, guid: 3dea78701a9fd144b9467f9edcbeab94, type: 2}
+  thresholds: 050000000a0000000f0000001e0000002d0000003c00000078000000b4000000f0000000
+  defaultOrder: 000201
