@@ -75,6 +75,11 @@ public class EnemyAI : MonoBehaviour
         playerFilter = new ContactFilter2D { useTriggers = true };
         playerFilter.SetLayerMask(playerLayerMask);
 
+        if (playerLayerMask == 0)
+        {
+            Debug.LogWarning($"{gameObject.name}: EnemyAI playerLayerMask is unassigned - player detection will not work. Set it on the prefab.");
+        }
+
         if (spriteRenderer != null)
         {
             originalColor = spriteRenderer.color;
