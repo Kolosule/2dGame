@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Fusion;
 
@@ -59,6 +60,10 @@ public class PlayerCombat : NetworkBehaviour
     private PlayerStatModifiers mods;
     private int verticalAim;
 
+    // Dash-strike dedup: server-only, non-networked. Cleared on each new dash rising edge.
+    private readonly HashSet<Collider2D> dashStruck = new HashSet<Collider2D>();
+    private bool wasDashing;
+
     [Networked] private TickTimer AttackCooldownTimer { get; set; }
     [Networked] private TickTimer ShootCooldownTimer { get; set; }
 
@@ -93,11 +98,14 @@ public class PlayerCombat : NetworkBehaviour
         }
 
         // Quicker Dash tier 3: deal melee damage in the front swing box while dashing.
-        if (HasStateAuthority && playerMovement != null && playerMovement.IsDashing()
-            && mods != null && mods.DashDealsDamage && sideAttackPoint != null)
+        // Each target is hit AT MOST ONCE per dash (dashStruck dedup set cleared on rising edge).
+        bool dashing = playerMovement != null && playerMovement.IsDashing();
+        if (HasStateAuthority && dashing && mods != null && mods.DashDealsDamage && sideAttackPoint != null)
         {
-            ApplyMeleeHits(sideAttackPoint.position, sideAttackArea, spawnHitMarkers: false);
+            if (!wasDashing) dashStruck.Clear();
+            ApplyMeleeHits(sideAttackPoint.position, sideAttackArea, spawnHitMarkers: false, dashStruck);
         }
+        wasDashing = dashing;
     }
 
     private void Attack()
@@ -157,13 +165,23 @@ public class PlayerCombat : NetworkBehaviour
     /// <summary>
     /// SERVER: overlap the given box and apply melee damage/knockback to enemies and enemy
     /// players. Shared by the normal swing and the dash-strike (Quicker Dash tier 3).
+    /// When <paramref name="alreadyHit"/> is non-null, each collider is processed at most once
+    /// (used by the dash-strike to limit damage to one hit per target per dash).
+    /// Normal Attack() calls pass null → behaviour is byte-identical to before.
     /// </summary>
-    private void ApplyMeleeHits(Vector2 center, Vector2 area, bool spawnHitMarkers)
+    private void ApplyMeleeHits(Vector2 center, Vector2 area, bool spawnHitMarkers,
+                                HashSet<Collider2D> alreadyHit = null)
     {
         Collider2D[] objectsHit = Physics2D.OverlapBoxAll(center, area, 0f, attackableLayer);
 
         foreach (Collider2D hit in objectsHit)
         {
+            if (alreadyHit != null)
+            {
+                if (alreadyHit.Contains(hit)) continue;
+                alreadyHit.Add(hit);
+            }
+
             if (spawnHitMarkers && hitMarkerPrefab != null)
             {
                 GameObject marker = Instantiate(hitMarkerPrefab, hit.transform.position, Quaternion.identity);

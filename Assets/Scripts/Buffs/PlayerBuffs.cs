@@ -47,6 +47,7 @@ public class PlayerBuffs : NetworkBehaviour
     public void ServerInitLoadout(byte[] order)
     {
         if (!HasStateAuthority || order == null) return;
+        if (order.Length == 0) return; // empty choice: keep the default loadout applied in Spawned
         int n = Mathf.Min(order.Length, 8);
         for (int i = 0; i < n; i++) LoadoutOrder.Set(i, order[i]);
         LoadoutLength = n;

@@ -31,7 +31,6 @@ namespace Game.Buffs.Core
         {
             if (buffCount <= 0 || unlockedSteps <= priorityPosition) return 0;
             int tier = (unlockedSteps - priorityPosition - 1) / buffCount + 1;
-            if (tier < 0) return 0;
             return tier > maxTier ? maxTier : tier;
         }
     }
