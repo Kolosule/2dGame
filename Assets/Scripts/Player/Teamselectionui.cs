@@ -28,6 +28,16 @@ public class TeamSelectionUI : MonoBehaviour
     [Header("🎮 Network Settings")]
     [SerializeField] private GameNetworkManager networkManager;
 
+    [Header("🧪 Loadout Picker")]
+    [Tooltip("The buff loadout config (same asset used by the player prefab).")]
+    [SerializeField] private BuffLoadoutConfig buffConfig;
+    [Tooltip("One row per loadout slot, top = highest priority. Each needs a label + Up/Down buttons.")]
+    [SerializeField] private Text[] slotLabels;
+    [SerializeField] private Button[] slotUpButtons;
+    [SerializeField] private Button[] slotDownButtons;
+
+    private System.Collections.Generic.List<Game.Buffs.Core.BuffId> loadoutOrder;
+
     [Header("⏳ Status Message")]
     [Tooltip("Optional. Shows prompts like \"Waiting for other players...\". " +
              "If left empty, a basic label is created at runtime under the panel.")]
@@ -75,6 +85,10 @@ public class TeamSelectionUI : MonoBehaviour
             startButton.onClick.AddListener(OnStartButtonClicked);
             startButton.gameObject.SetActive(false);
         }
+
+        InitLoadoutOrder();
+        WireLoadoutButtons();
+        RefreshLoadoutLabels();
     }
 
     public void ShowTeamSelection(NetworkRunner networkRunner)
@@ -91,6 +105,8 @@ public class TeamSelectionUI : MonoBehaviour
 
         // Reset to the initial "pick a team" state in case the panel is shown again.
         SetButtonsInteractable(true);
+        SetLoadoutInteractable(true);
+        RefreshLoadoutLabels();
         SetStatus("Choose your team!");
 
         // The Start button is the host's alone; clients never see it. It starts disabled and is
@@ -129,8 +145,10 @@ public class TeamSelectionUI : MonoBehaviour
         // Submit the choice to the host. The host loads the Gameplay scene only once every
         // connected player has chosen, so we do NOT load the scene here. Lock the buttons so the
         // player sees they are now waiting for the others.
+        networkManager.SubmitLocalLoadoutChoice(LoadoutAsBytes());
         networkManager.SubmitLocalTeamChoice(teamNumber);
         SetButtonsInteractable(false);
+        SetLoadoutInteractable(false);
         SetStatus($"Joined Team {teamNumber}.\nWaiting for other players...");
 
     }
@@ -214,5 +232,70 @@ public class TeamSelectionUI : MonoBehaviour
 
         if (team2Button != null)
             team2Button.interactable = interactable;
+    }
+
+    private void InitLoadoutOrder()
+    {
+        loadoutOrder = new System.Collections.Generic.List<Game.Buffs.Core.BuffId>();
+        if (buffConfig != null && buffConfig.DefaultOrder != null)
+        {
+            foreach (var id in buffConfig.DefaultOrder) loadoutOrder.Add(id);
+        }
+    }
+
+    private void WireLoadoutButtons()
+    {
+        if (slotUpButtons != null)
+            for (int i = 0; i < slotUpButtons.Length; i++)
+            {
+                int idx = i;
+                if (slotUpButtons[i] != null) slotUpButtons[i].onClick.AddListener(() => MoveSlot(idx, -1));
+            }
+        if (slotDownButtons != null)
+            for (int i = 0; i < slotDownButtons.Length; i++)
+            {
+                int idx = i;
+                if (slotDownButtons[i] != null) slotDownButtons[i].onClick.AddListener(() => MoveSlot(idx, +1));
+            }
+    }
+
+    private void MoveSlot(int index, int delta)
+    {
+        if (loadoutOrder == null) return;
+        int target = index + delta;
+        if (index < 0 || index >= loadoutOrder.Count || target < 0 || target >= loadoutOrder.Count) return;
+        (loadoutOrder[index], loadoutOrder[target]) = (loadoutOrder[target], loadoutOrder[index]);
+        RefreshLoadoutLabels();
+    }
+
+    private void RefreshLoadoutLabels()
+    {
+        if (slotLabels == null || loadoutOrder == null || buffConfig == null) return;
+        for (int i = 0; i < slotLabels.Length; i++)
+        {
+            if (slotLabels[i] == null) continue;
+            if (i < loadoutOrder.Count)
+            {
+                var def = buffConfig.GetById(loadoutOrder[i]);
+                slotLabels[i].text = $"{i + 1}. {(def != null ? def.DisplayName : loadoutOrder[i].ToString())}";
+            }
+            else slotLabels[i].text = "";
+        }
+    }
+
+    private byte[] LoadoutAsBytes()
+    {
+        if (loadoutOrder == null) return null;
+        var bytes = new byte[loadoutOrder.Count];
+        for (int i = 0; i < loadoutOrder.Count; i++) bytes[i] = (byte)loadoutOrder[i];
+        return bytes;
+    }
+
+    private void SetLoadoutInteractable(bool interactable)
+    {
+        if (slotUpButtons != null)
+            foreach (var b in slotUpButtons) if (b != null) b.interactable = interactable;
+        if (slotDownButtons != null)
+            foreach (var b in slotDownButtons) if (b != null) b.interactable = interactable;
     }
 }
