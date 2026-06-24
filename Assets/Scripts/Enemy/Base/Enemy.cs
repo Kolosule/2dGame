@@ -54,36 +54,74 @@ public class Enemy : NetworkBehaviour
     // AI driver (authority only)
     private EnemyAI ai;
 
+    // Effective (ring-scaled) stats, resolved once on the authority in Spawned().
+    private int effectiveMaxHealth;
+    private int effectiveAttackDamage;
+    private float effectiveMoveSpeed;
+
+    // Home anchor captured at spawn (authority); the AI leashes to this point.
+    public Vector2 Home { get; private set; }
+
     /// <summary>
     /// Called when this enemy spawns on the network
     /// </summary>
     public override void Spawned()
     {
-        // Initialize health from stats
-        if (stats != null)
-        {
-            // ⭐ IMPORTANT: Only the server sets initial health
-            // Clients will automatically receive this value
-            if (HasStateAuthority)
-            {
-                CurrentHealth = stats.maxHealth;
-            }
-        }
-        else
-        {
-            Debug.LogError($"Enemy on {gameObject.name} has no EnemyStats assigned!");
-        }
-
-        // Get components
+        // Get components first (needed by both authority and proxies).
         teamComponent = GetComponent<EnemyTeamComponent>();
         rb = GetComponent<Rigidbody2D>();
         ai = GetComponent<EnemyAI>();
 
-        // Warn if coin prefab is missing
+        if (stats == null)
+        {
+            Debug.LogError($"Enemy on {gameObject.name} has no EnemyStats assigned!");
+            return;
+        }
+
+        if (HasStateAuthority)
+        {
+            ResolveEffectiveStats();
+            CurrentHealth = effectiveMaxHealth;
+
+            if (ai != null)
+            {
+                ai.Initialize(Home, effectiveMoveSpeed, stats);
+            }
+        }
+
         if (coinPrefab == null)
         {
             Debug.LogWarning($"{gameObject.name} has no coin prefab assigned - won't drop coins on death!");
         }
+    }
+
+    /// <summary>
+    /// Authority-only: capture home and scale base stats by the difficulty ring for
+    /// this enemy's distance from the arena center. Falls back to base stats (x1.0)
+    /// if the ring config or arena center is missing.
+    /// </summary>
+    private void ResolveEffectiveStats()
+    {
+        Home = transform.position;
+
+        RingTier tier = RingTier.Identity;
+        DifficultyRingConfig ringConfig = GameSettingsManager.Instance != null
+            ? GameSettingsManager.Instance.GetDifficultyRingConfig()
+            : null;
+
+        if (ringConfig != null && ArenaCenter.Instance != null)
+        {
+            float distance = Vector2.Distance(Home, ArenaCenter.Instance.Position);
+            tier = ringConfig.GetRing(distance);
+        }
+        else
+        {
+            Debug.LogWarning($"{gameObject.name}: no DifficultyRingConfig/ArenaCenter; using base stats.");
+        }
+
+        effectiveMaxHealth = Mathf.Max(1, Mathf.RoundToInt(stats.maxHealth * tier.healthMult));
+        effectiveAttackDamage = Mathf.Max(0, Mathf.RoundToInt(stats.attackDamage * tier.damageMult));
+        effectiveMoveSpeed = stats.moveSpeed * tier.speedMult;
     }
 
     /// <summary>
@@ -193,7 +231,7 @@ public class Enemy : NetworkBehaviour
         }
 
         // Calculate damage through the unified pipeline (review item #4).
-        int finalDamage = stats.attackDamage;
+        int finalDamage = effectiveAttackDamage;
         CombatConfig config = GameSettingsManager.Instance != null
             ? GameSettingsManager.Instance.GetCombatConfig()
             : null;
@@ -202,7 +240,7 @@ public class Enemy : NetworkBehaviour
             Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
             PlayerTeamData playerTeam = player.GetComponent<PlayerTeamData>();
             Team defenderTeam = playerTeam != null ? playerTeam.Team : Team.None;
-            finalDamage = config.ResolveDamage(stats.attackDamage, myTeam, transform.position,
+            finalDamage = config.ResolveDamage(effectiveAttackDamage, myTeam, transform.position,
                                                defenderTeam, player.transform.position);
         }
 
@@ -279,7 +317,7 @@ public class Enemy : NetworkBehaviour
     /// </summary>
     public int GetMaxHealth()
     {
-        return stats.maxHealth;
+        return effectiveMaxHealth;
     }
 
     // Visual feedback for detection range in editor
