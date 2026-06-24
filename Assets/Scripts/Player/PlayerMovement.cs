@@ -26,7 +26,6 @@ public class PlayerMovement : NetworkBehaviour
 
     // Component refs
     private Rigidbody2D rb;
-    private Animator anim;
     private FlagCarrierMarker flagCarrierMarker;
     private float baseGravity = 5f;
 
@@ -46,7 +45,6 @@ public class PlayerMovement : NetworkBehaviour
     public override void Spawned()
     {
         rb = GetComponent<Rigidbody2D>();
-        anim = GetComponentInChildren<Animator>();
         flagCarrierMarker = GetComponent<FlagCarrierMarker>();
         if (rb != null) baseGravity = rb.gravityScale;
 
@@ -153,7 +151,7 @@ public class PlayerMovement : NetworkBehaviour
         }
         Jumping = true;
         JumpCut = false;
-        if (anim != null) anim.SetTrigger("Jump");
+        // Animation is derived from networked state by PlayerAnimator (no trigger here).
     }
 
     private void StartDash()
@@ -192,11 +190,8 @@ public class PlayerMovement : NetworkBehaviour
         if (rb == null) return;
         ApplyFacing();
 
-        if (anim != null)
-        {
-            anim.SetBool("Walking", Mathf.Abs(rb.linearVelocity.x) > 0.1f && !Dashing);
-            anim.SetBool("Dashing", Dashing);
-        }
+        // Animation is no longer driven here — PlayerAnimator derives Walk/Jump/Fall/Dash
+        // from networked state + velocity and applies it on every client.
 
         if (dashCooldownBar != null && HasInputAuthority)
             dashCooldownBar.fillAmount = GetDashCooldownPercent();
@@ -205,6 +200,16 @@ public class PlayerMovement : NetworkBehaviour
     // ---- Public accessors (used by other scripts) ----
     public bool IsDashing() => Dashing;
     public bool IsStunned() => !StunTimer.ExpiredOrNotRunning(Runner);
+
+    /// <summary>
+    /// Single source of truth for grounded state, computed from the groundCheck
+    /// OverlapCircle. Read by PlayerAnimator to pick Jump/Fall/Walk/Idle. Evaluated on
+    /// state authority (PlayerAnimator.Simulate only runs there), matching where the
+    /// internal Simulate() grounded check runs.
+    /// </summary>
+    public bool IsGrounded() =>
+        groundCheck != null &&
+        Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
 
     public float GetDashCooldownPercent()
     {

@@ -51,7 +51,7 @@ public class PlayerCombat : NetworkBehaviour
     [SerializeField] private float groundCheckRadius = 0.2f;
     [SerializeField] private LayerMask groundLayer;
 
-    private Animator anim;
+    private PlayerAnimator playerAnimator;
     private PlayerTeamData teamComponent;
     private PlayerStatsHandler statsHandler;
     private Rigidbody2D rb;
@@ -63,12 +63,7 @@ public class PlayerCombat : NetworkBehaviour
 
     void Awake()
     {
-        anim = GetComponentInChildren<Animator>();
-        if (anim == null)
-        {
-            Debug.LogWarning("PlayerCombat: Animator not found in children!");
-        }
-
+        playerAnimator = GetComponent<PlayerAnimator>();
         teamComponent = GetComponent<PlayerTeamData>();
         statsHandler = GetComponent<PlayerStatsHandler>();
         rb = GetComponent<Rigidbody2D>();
@@ -133,19 +128,15 @@ public class PlayerCombat : NetworkBehaviour
 
         if (attackTransform == null) return;
 
-        if (anim != null)
+        // Latch the animation as networked state (replicates to every client). A mid-air
+        // down attack is a ground pound and gets its own latched state. These self-guard on
+        // state authority, so the visible animation is driven by the authoritative latch.
+        if (playerAnimator != null)
         {
-            // A mid-air down attack is a ground pound: fire the dedicated "Jump Attack"
-            // trigger so the Animator can play a distinct clip. NOTE: the "Jump Attack"
-            // parameter exists but is not yet consumed by any transition/state in
-            // Player.controller, so this has no visible effect until that state + clip
-            // are authored in the Animator (see editor setup notes).
-            // (There are deliberately no "AttackingUp"/"AttackingDown" params — those
-            // were never wired and logged a warning per swing.)
             if (isGroundPound)
-                anim.SetTrigger("Jump Attack");
+                playerAnimator.TriggerGroundPound();
             else
-                anim.SetTrigger("Attack");
+                playerAnimator.TriggerAttack();
         }
 
         // Damage + hit detection only on the server (avoids double-apply across clients).
@@ -229,7 +220,7 @@ public class PlayerCombat : NetworkBehaviour
 
     private void ShootProjectile(Vector2 aimWorldPoint)
     {
-        if (anim != null) anim.SetTrigger("Shoot");
+        if (playerAnimator != null) playerAnimator.TriggerShoot();
         if (projectilePrefab == null || projectileSpawnPoint == null) return;
         if (!HasStateAuthority)
         {

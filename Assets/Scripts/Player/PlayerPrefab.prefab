@@ -229,6 +229,7 @@ GameObject:
   - component: {fileID: 963116542380703858}
   - component: {fileID: 3973079578160004190}
   - component: {fileID: 1952719817621573329}
+  - component: {fileID: 7654321098765432100}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -512,6 +513,7 @@ MonoBehaviour:
   - {fileID: -4804353808761203150}
   - {fileID: 3973079578160004190}
   - {fileID: 1952719817621573329}
+  - {fileID: 7654321098765432100}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &3973079578160004190
 MonoBehaviour:
@@ -551,6 +553,26 @@ MonoBehaviour:
     Position: 0.01
     Rotation: 0.01
     Scale: 0.01
+--- !u!114 &7654321098765432100
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e2b9a4c1d8f4e3aab5c6d2f8a91b3c4, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerAnimator
+  attackDuration: 0.3
+  groundPoundDuration: 0.3
+  shootDuration: 0.3
+  anim: {fileID: 8461757289261199447}
+  weaponAnim: {fileID: 316185546467214530}
+  audioSource: {fileID: 0}
+  jumpClip: {fileID: 0}
+  landClip: {fileID: 0}
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0

@@ -8,6 +8,7 @@ public class PlayerController : NetworkBehaviour
     private PlayerMovement movement;
     private PlayerCombat combat;
     private PlayerStatsHandler stats;
+    private PlayerAnimator animator;
     private Rigidbody2D rb;
     private NetworkButtons previousButtons;
 
@@ -16,6 +17,7 @@ public class PlayerController : NetworkBehaviour
         movement = GetComponent<PlayerMovement>();
         combat = GetComponent<PlayerCombat>();
         stats = GetComponent<PlayerStatsHandler>();
+        animator = GetComponent<PlayerAnimator>();
         rb = GetComponent<Rigidbody2D>();
     }
 
@@ -46,12 +48,18 @@ public class PlayerController : NetworkBehaviour
                     rb.linearVelocity = Vector2.zero;
                     rb.gravityScale = 0f;
                 }
+                // Still tick the animator while dead so the Dead state latches (it computes
+                // Dead with top priority regardless of movement/combat having run).
+                if (animator != null) animator.Simulate();
                 return;
             }
 
             // Honor either component being disabled (we drive them directly, not via Fusion).
             if (movement.enabled) movement.Simulate(input, pressed, released);
             if (combat.enabled) combat.Simulate(input, pressed);
+
+            // Derive animation state AFTER movement/combat so velocity/dash/stun are current.
+            if (animator != null) animator.Simulate();
         }
     }
 
