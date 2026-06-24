@@ -9,6 +9,7 @@ public class PlayerController : NetworkBehaviour
     private PlayerCombat combat;
     private PlayerStatsHandler stats;
     private PlayerAnimator animator;
+    private PlayerBuffs buffs;
     private Rigidbody2D rb;
     private NetworkButtons previousButtons;
 
@@ -18,6 +19,7 @@ public class PlayerController : NetworkBehaviour
         combat = GetComponent<PlayerCombat>();
         stats = GetComponent<PlayerStatsHandler>();
         animator = GetComponent<PlayerAnimator>();
+        buffs = GetComponent<PlayerBuffs>();
         rb = GetComponent<Rigidbody2D>();
     }
 
@@ -57,6 +59,7 @@ public class PlayerController : NetworkBehaviour
             // Honor either component being disabled (we drive them directly, not via Fusion).
             if (movement.enabled) movement.Simulate(input, pressed, released);
             if (combat.enabled) combat.Simulate(input, pressed);
+            if (buffs != null) buffs.Simulate(input, pressed);
 
             // Derive animation state AFTER movement/combat so velocity/dash/stun are current.
             if (animator != null) animator.Simulate();

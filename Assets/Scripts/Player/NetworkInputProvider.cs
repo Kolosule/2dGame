@@ -51,12 +51,14 @@ public class NetworkInputProvider : MonoBehaviour, INetworkRunnerCallbacks
         bool jump  = (keyboard != null && keyboard.spaceKey.isPressed)    || (gamepad != null && gamepad.buttonNorth.isPressed);
         bool dash  = (keyboard != null && keyboard.leftShiftKey.isPressed) || (gamepad != null && gamepad.rightShoulder.isPressed);
         bool melee = (mouse != null && mouse.leftButton.isPressed)         || (keyboard != null && keyboard.leftCtrlKey.isPressed) || (gamepad != null && gamepad.buttonSouth.isPressed);
-        bool shoot = (mouse != null && mouse.rightButton.isPressed)        || (keyboard != null && keyboard.leftAltKey.isPressed)  || (gamepad != null && gamepad.buttonWest.isPressed);
+        bool shoot   = (mouse != null && mouse.rightButton.isPressed)        || (keyboard != null && keyboard.leftAltKey.isPressed)  || (gamepad != null && gamepad.buttonWest.isPressed);
+        bool stealth = (keyboard != null && keyboard.qKey.isPressed)         || (gamepad != null && gamepad.buttonEast.isPressed);
 
-        data.Buttons.Set((int)PlayerButton.Jump,  jump);
-        data.Buttons.Set((int)PlayerButton.Dash,  dash);
-        data.Buttons.Set((int)PlayerButton.Melee, melee);
-        data.Buttons.Set((int)PlayerButton.Shoot, shoot);
+        data.Buttons.Set((int)PlayerButton.Jump,    jump);
+        data.Buttons.Set((int)PlayerButton.Dash,    dash);
+        data.Buttons.Set((int)PlayerButton.Melee,   melee);
+        data.Buttons.Set((int)PlayerButton.Shoot,   shoot);
+        data.Buttons.Set((int)PlayerButton.Stealth, stealth);
 
         // Aim world point (for projectiles); PlayerCombat turns this into a direction
         // relative to its spawn point at sim time.
