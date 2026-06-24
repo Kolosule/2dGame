@@ -2,8 +2,8 @@ using UnityEngine;
 using Fusion;
 
 /// <summary>
-/// Spawner that automatically assigns team, territorial advantage, AND patrol points to spawned enemies.
-/// Uses standard EnemyAI (non-networked AI).
+/// Spawner that automatically assigns team and territorial advantage to spawned enemies.
+/// The Enemy captures its own home anchor at spawn.
 /// </summary>
 public class NetworkedEnemySpawner : NetworkBehaviour
 {
@@ -22,25 +22,12 @@ public class NetworkedEnemySpawner : NetworkBehaviour
     [Range(-1f, 1f)]
     [SerializeField] private float territorialAdvantage = 0f;
 
-    [Header("Patrol Points")]
-    [Tooltip("Assign patrol points for enemies spawned from this spawner")]
-    [SerializeField] private Transform patrolPointA;
-    [SerializeField] private Transform patrolPointB;
-
-    [Tooltip("Create patrol points relative to spawn position (if manual points not assigned)")]
-    [SerializeField] private bool useRelativePatrolPoints = true;
-    [SerializeField] private Vector2 relativePointA = new Vector2(-5f, 0f);
-    [SerializeField] private Vector2 relativePointB = new Vector2(5f, 0f);
-
     [Header("Debug")]
     [SerializeField] private bool showGizmo = true;
 
     // Network state
     [Networked] private int CurrentEnemyCount { get; set; }
     [Networked] private TickTimer NextSpawnTimer { get; set; }
-
-    private Transform autoPatrolPointA;
-    private Transform autoPatrolPointB;
 
     public override void Spawned()
     {
@@ -50,29 +37,6 @@ public class NetworkedEnemySpawner : NetworkBehaviour
         // Initialize spawn timer
         NextSpawnTimer = TickTimer.CreateFromSeconds(Runner, spawnInterval);
         CurrentEnemyCount = 0;
-
-        // Create automatic patrol points if using relative positioning
-        if (useRelativePatrolPoints && (patrolPointA == null || patrolPointB == null))
-        {
-            CreateRelativePatrolPoints();
-        }
-
-    }
-
-    private void CreateRelativePatrolPoints()
-    {
-        // Create patrol point A
-        GameObject pointAObj = new GameObject($"{gameObject.name}_PatrolPointA");
-        pointAObj.transform.position = transform.position + (Vector3)relativePointA;
-        pointAObj.transform.parent = transform; // Make it a child so it moves with spawner
-        autoPatrolPointA = pointAObj.transform;
-
-        // Create patrol point B
-        GameObject pointBObj = new GameObject($"{gameObject.name}_PatrolPointB");
-        pointBObj.transform.position = transform.position + (Vector3)relativePointB;
-        pointBObj.transform.parent = transform;
-        autoPatrolPointB = pointBObj.transform;
-
     }
 
     public override void FixedUpdateNetwork()
@@ -111,8 +75,8 @@ public class NetworkedEnemySpawner : NetworkBehaviour
     }
 
     /// <summary>
-    /// Initialize the spawned enemy with team, territory, and patrol points
-    /// Called by the spawn callback on the server
+    /// Initialize the spawned enemy with team and territory.
+    /// Called by the spawn callback on the server.
     /// </summary>
     private void InitializeEnemy(NetworkObject enemyNetObj)
     {
@@ -124,32 +88,6 @@ public class NetworkedEnemySpawner : NetworkBehaviour
         {
             teamComponent.teamID = teamID;
             teamComponent.territorialAdvantage = territorialAdvantage;
-        }
-        else
-        {
-           // Debug.LogWarning($"[SERVER] Spawned enemy doesn't have EnemyTeamComponent!");
-        }
-
-        // Assign patrol points to AI (using standard EnemyAI, not NetworkedEnemyAI)
-        EnemyAI enemyAI = enemyObj.GetComponent<EnemyAI>();
-        if (enemyAI != null)
-        {
-            // Use manually assigned points if available, otherwise use auto-created ones
-            Transform pointA = patrolPointA != null ? patrolPointA : autoPatrolPointA;
-            Transform pointB = patrolPointB != null ? patrolPointB : autoPatrolPointB;
-
-            if (pointA != null && pointB != null)
-            {
-                enemyAI.SetPatrolPoints(pointA, pointB);
-            }
-            else
-            {
-                Debug.LogWarning($"[SERVER] No patrol points available for {enemyObj.name}");
-            }
-        }
-        else
-        {
-            Debug.LogWarning($"[SERVER] Spawned enemy doesn't have EnemyAI component!");
         }
 
         // Track enemy count
@@ -178,35 +116,7 @@ public class NetworkedEnemySpawner : NetworkBehaviour
     {
         if (!showGizmo) return;
 
-        // Draw spawn point
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, 0.5f);
-
-        // Draw patrol points
-        Gizmos.color = Color.yellow;
-
-        if (patrolPointA != null)
-        {
-            Gizmos.DrawLine(transform.position, patrolPointA.position);
-            Gizmos.DrawWireSphere(patrolPointA.position, 0.3f);
-        }
-        else if (useRelativePatrolPoints)
-        {
-            Vector3 pointA = transform.position + (Vector3)relativePointA;
-            Gizmos.DrawLine(transform.position, pointA);
-            Gizmos.DrawWireSphere(pointA, 0.3f);
-        }
-
-        if (patrolPointB != null)
-        {
-            Gizmos.DrawLine(transform.position, patrolPointB.position);
-            Gizmos.DrawWireSphere(patrolPointB.position, 0.3f);
-        }
-        else if (useRelativePatrolPoints)
-        {
-            Vector3 pointB = transform.position + (Vector3)relativePointB;
-            Gizmos.DrawLine(transform.position, pointB);
-            Gizmos.DrawWireSphere(pointB, 0.3f);
-        }
     }
 }
