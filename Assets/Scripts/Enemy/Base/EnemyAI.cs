@@ -59,7 +59,6 @@ public class EnemyAI : MonoBehaviour
     private static readonly System.Collections.Generic.List<Collider2D> DetectionResults =
         new System.Collections.Generic.List<Collider2D>(32);
     private ContactFilter2D playerFilter;
-    private LayerMask playerLayer;
 
     [Header("Detection")]
     [Tooltip("Layer mask used to find players.")]
@@ -73,9 +72,8 @@ public class EnemyAI : MonoBehaviour
         enemyComponent = GetComponent<Enemy>();
         spriteRenderer = GetComponent<SpriteRenderer>();
 
-        playerLayer = playerLayerMask;
         playerFilter = new ContactFilter2D { useTriggers = true };
-        playerFilter.SetLayerMask(playerLayer);
+        playerFilter.SetLayerMask(playerLayerMask);
 
         if (spriteRenderer != null)
         {
@@ -204,6 +202,7 @@ public class EnemyAI : MonoBehaviour
     /// </summary>
     private void AcquireTarget()
     {
+        DetectionResults.Clear();
         int count = Physics2D.OverlapCircle(transform.position, detectionRange, playerFilter, DetectionResults);
 
         Transform best = null;
