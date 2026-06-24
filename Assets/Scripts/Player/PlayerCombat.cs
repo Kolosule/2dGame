@@ -56,6 +56,7 @@ public class PlayerCombat : NetworkBehaviour
     private PlayerStatsHandler statsHandler;
     private Rigidbody2D rb;
     private PlayerMovement playerMovement;
+    private PlayerStatModifiers mods;
     private int verticalAim;
 
     [Networked] private TickTimer AttackCooldownTimer { get; set; }
@@ -68,6 +69,7 @@ public class PlayerCombat : NetworkBehaviour
         statsHandler = GetComponent<PlayerStatsHandler>();
         rb = GetComponent<Rigidbody2D>();
         playerMovement = GetComponent<PlayerMovement>();
+        mods = GetComponent<PlayerStatModifiers>();
     }
 
     /// <summary>Called every tick by PlayerController when input is available.</summary>
@@ -88,6 +90,13 @@ public class PlayerCombat : NetworkBehaviour
                 ShootCooldownTimer = TickTimer.CreateFromSeconds(Runner, projectileCooldown);
                 ShootProjectile(input.AimWorldPoint);
             }
+        }
+
+        // Quicker Dash tier 3: deal melee damage in the front swing box while dashing.
+        if (HasStateAuthority && playerMovement != null && playerMovement.IsDashing()
+            && mods != null && mods.DashDealsDamage && sideAttackPoint != null)
+        {
+            ApplyMeleeHits(sideAttackPoint.position, sideAttackArea, spawnHitMarkers: false);
         }
     }
 
@@ -142,12 +151,20 @@ public class PlayerCombat : NetworkBehaviour
         // Damage + hit detection only on the server (avoids double-apply across clients).
         if (!HasStateAuthority) return;
 
-        Collider2D[] objectsHit = Physics2D.OverlapBoxAll(
-            attackTransform.position, attackArea, 0f, attackableLayer);
+        ApplyMeleeHits(attackTransform.position, attackArea, spawnHitMarkers: true);
+    }
+
+    /// <summary>
+    /// SERVER: overlap the given box and apply melee damage/knockback to enemies and enemy
+    /// players. Shared by the normal swing and the dash-strike (Quicker Dash tier 3).
+    /// </summary>
+    private void ApplyMeleeHits(Vector2 center, Vector2 area, bool spawnHitMarkers)
+    {
+        Collider2D[] objectsHit = Physics2D.OverlapBoxAll(center, area, 0f, attackableLayer);
 
         foreach (Collider2D hit in objectsHit)
         {
-            if (hitMarkerPrefab != null)
+            if (spawnHitMarkers && hitMarkerPrefab != null)
             {
                 GameObject marker = Instantiate(hitMarkerPrefab, hit.transform.position, Quaternion.identity);
                 SpriteRenderer sr = marker.GetComponent<SpriteRenderer>();
@@ -165,9 +182,9 @@ public class PlayerCombat : NetworkBehaviour
                 continue;
             }
 
-            // Player hit. Skip ourselves and friendly players (no melee friendly-fire),
-            // mirroring the projectile's team check. Damage runs through the same RPC the
-            // projectile uses so spawn-immunity / hit-cooldown are respected on the server.
+            // Player hit. Skip ourselves and friendly players (no melee friendly-fire). Damage
+            // goes through RPC_TakeDamage so spawn-immunity / hit-cooldown are respected — which
+            // also throttles the dash-strike's per-tick calls to one hit per 0.1s per target.
             PlayerStatsHandler targetPlayer = hit.GetComponent<PlayerStatsHandler>();
             if (targetPlayer != null && targetPlayer != statsHandler)
             {
