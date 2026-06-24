@@ -186,6 +186,12 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             teamData.SetTeam(TeamUtil.FromNumber(team));
         }
         // Position is set by Runner.Spawn and synced by NetworkRigidbody2D.
+
+        // Initialise the player's buff loadout from their lobby choice (host-authoritative).
+        PlayerBuffs buffs = obj.GetComponent<PlayerBuffs>();
+        if (buffs != null && LobbyLoadoutChoices.TryGet(obj.InputAuthority, out byte[] order))
+            buffs.ServerInitLoadout(order);
+        // If no lobby choice, PlayerBuffs.Spawned applies the config default order.
     }
     #endregion
 
