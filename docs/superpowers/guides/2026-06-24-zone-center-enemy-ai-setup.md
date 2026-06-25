@@ -33,10 +33,18 @@ For **each** of the 7 enemy prefabs in `Assets/Scripts/Enemy/Prefabs/`
 1. Open the prefab.
 2. Select the root object → find the **Enemy AI** component → **Detection** section.
 3. Set **Player Layer Mask** to **`Player`** (this project's Player layer is layer 8).
-4. Save the prefab.
+4. In the **Jump** section, set:
+   - **Ground Layer** → `Ground` (layer 3). *(If left empty, jumping is disabled and you'll see a console warning — the enemy can never detect ground.)*
+   - **Obstacle Layer** → `Enemy` + `Ground` (so it hops over other enemies and low walls).
+5. Save the prefab.
 
-> Tip: you can multi-select all 7 prefabs in the Project window and set Player Layer Mask
+> Tip: you can multi-select all 7 prefabs in the Project window and set these masks
 > once in the Inspector to apply to all.
+
+The remaining **Jump** fields have sensible defaults (jump force 7, cooldown 0.6s, probe
+distance 0.6, ground-check radius 0.15, chase-jump height 1.5). The enemy prefab uses
+`gravityScale: 1` (floaty); if jumps arc too high, lower **Jump Force**. A green gizmo at
+the feet shows the ground-check when the prefab is selected.
 
 While you're there, the old fields `pointA`, `pointB`, `detectionRange`, `attackRange`,
 `playerLayer` may still appear as leftover ("script has been changed") values — they're
@@ -106,6 +114,8 @@ falls back to base stats (×1.0). That is a supported mode, not an error.
      resumes wandering.
    - Telegraph flash + dodge window still work; contact deals damage.
    - Dead / stealthed players are ignored.
+   - Two enemies walking into each other **hop over/past** instead of grinding in place.
+   - A player standing on a ledge above a chasing enemy gets **jumped toward**.
    - (If Step 3 done) enemies spawned near `ArenaCenter` are visibly tankier/harder.
 
 ---
@@ -119,7 +129,11 @@ falls back to base stats (×1.0). That is a supported mode, not an error.
 | Enemy doesn't roam / moves once then freezes | (fixed in code) had been the 2D-target bug; if still seen, Wander Radius is 0 | Set Wander Radius > 0 (Step 2) |
 | Enemy slides off forever | Leash Radius is 0 | Set Leash Radius (Step 2) |
 | "no DifficultyRingConfig/ArenaCenter" warning | Difficulty not wired | Expected if skipping Step 3/4; otherwise do them |
-| Only the host sees the AI move | By design — AI is authority-only; clients interpolate | none |
+| Enemies never jump / "groundLayer is unassigned" warning | Ground Layer mask unset on prefab | Set Jump → Ground Layer = `Ground` (Step 1) |
+| Enemies don't hop over each other | Obstacle Layer doesn't include `Enemy` | Set Jump → Obstacle Layer = `Enemy` + `Ground` (Step 1) |
+| Enemies jump too high / float | gravityScale 1 + high jump force | Lower Jump Force on the prefab |
+| Enemy jump-spams against an un-climbable wall | obstacle ahead it can't clear | Cosmetic; the jump cooldown caps it. Lower Obstacle Probe Distance or exclude that wall layer |
+| Only the host sees the AI move/jump | By design — AI is authority-only; clients interpolate | none |
 
 ---
 
