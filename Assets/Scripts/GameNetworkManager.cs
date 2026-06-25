@@ -202,7 +202,17 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     /// </summary>
     public void SubmitLocalLoadoutChoice(byte[] order)
     {
-        if (order == null || runner == null || !runner.IsRunning) return;
+        if (runner == null || !runner.IsRunning) return;
+
+        // A zero-length reliable payload trips a Fusion assert on the real socket path
+        // (only reproduces on remote clients; the host's IsServer branch sends nothing).
+        // Treat null/empty as "no custom loadout" — the server keeps its default. An empty
+        // order usually means BuffLoadoutConfig is unassigned on TeamSelectionUI.
+        if (order == null || order.Length == 0)
+        {
+            Debug.LogWarning("SubmitLocalLoadoutChoice: empty loadout (is BuffLoadoutConfig assigned on TeamSelectionUI?) - using server default.");
+            return;
+        }
 
         if (runner.IsServer)
             LobbyLoadoutChoices.Set(runner.LocalPlayer, order);
