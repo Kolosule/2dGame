@@ -42,9 +42,21 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private static readonly Fusion.Sockets.ReliableKey LoadoutKey =
         Fusion.Sockets.ReliableKey.FromInts(0x4C4F4144, 0x55, 0, 0); // "LOAD"
 
+    // Reliable-data channel: server -> client per-client lobby status ([isHost, canStart]).
+    private static readonly Fusion.Sockets.ReliableKey LobbyStatusKey =
+        Fusion.Sockets.ReliableKey.FromInts(0x4C425953, 0, 0, 0); // "LBYS"
+
+    // Reliable-data channel: designated host-client -> server "start the match".
+    private static readonly Fusion.Sockets.ReliableKey StartMatchKey =
+        Fusion.Sockets.ReliableKey.FromInts(0x53545254, 0, 0, 0); // "STRT"
+
     private NetworkRunner runner;
     private bool isConnected = false;
     private bool gameStarting = false;
+
+    // Server-only: PlayerId of the current designated host-client (lowest active id), or
+    // LobbyHostPolicy.NoHost when no players are connected.
+    private int currentHostId = LobbyHostPolicy.NoHost;
 
     void Start()
     {
@@ -293,8 +305,46 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (runner == null || !runner.IsServer)
             return;
 
-        if (teamSelectionUI != null)
+        // A real dedicated server has no local player; push status to the clients. A
+        // host-as-player (solo dev) keeps the old local-UI gate.
+        if (runner.LocalPlayer == PlayerRef.None)
+            RecomputeLobbyAndBroadcast();
+        else if (teamSelectionUI != null)
             teamSelectionUI.SetStartAvailable(CanStartMatch());
+    }
+
+    /// <summary>
+    /// Dedicated-server only: recompute the host-client designation and start gate, then push a
+    /// per-client lobby-status reliable message to every connected player. Re-sent on any lobby
+    /// change (join, leave, choice recorded) so the UI stays correct.
+    /// </summary>
+    private void RecomputeLobbyAndBroadcast()
+    {
+        if (runner == null || !runner.IsServer || gameStarting)
+            return;
+
+        var ids = new List<int>();
+        foreach (var p in runner.ActivePlayers)
+            ids.Add(p.PlayerId);
+
+        currentHostId = LobbyHostPolicy.DesignateHostId(ids);
+        bool canStart = LobbyHostPolicy.CanStart(ids, HasChoiceForId);
+
+        foreach (var p in runner.ActivePlayers)
+        {
+            byte isHost = (byte)(p.PlayerId == currentHostId ? 1 : 0);
+            byte start = (byte)(canStart ? 1 : 0);
+            runner.SendReliableDataToPlayer(p, LobbyStatusKey, new byte[] { isHost, start });
+        }
+    }
+
+    /// <summary>Server-only: has the active player with this PlayerId submitted a team choice?</summary>
+    private bool HasChoiceForId(int id)
+    {
+        foreach (var p in runner.ActivePlayers)
+            if (p.PlayerId == id)
+                return LobbyTeamChoices.Has(p);
+        return false;
     }
 
     /// <summary>
