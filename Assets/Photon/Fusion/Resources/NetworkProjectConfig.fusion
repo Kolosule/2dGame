@@ -16,7 +16,7 @@
     "ClientsRecordFrameAndPacketTimingTraces": false,
     "Simulation": {
         "InputDataWordCount": 0,
-        "ReplicationFeatures": 1,
+        "ReplicationFeatures": 2,
         "InputTransferMode": 0,
         "SimulationUpdateTimeMode": 0,
         "PlayerCount": 20,
