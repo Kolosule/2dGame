@@ -86,9 +86,20 @@ public class EnemyAI : MonoBehaviour
     [Tooltip("While chasing, jump if the target is at least this much higher than the enemy.")]
     [SerializeField] private float chaseJumpHeight = 1.5f;
 
-    // Jump bookkeeping (authority only).
+    [Header("Enemy Avoidance")]
+    [Tooltip("Layers of other enemies to turn away from while wandering (e.g. Enemy).")]
+    [SerializeField] private LayerMask enemyAvoidLayer;
+
+    [Tooltip("How far ahead (beyond the body) to look for another enemy blocking the way.")]
+    [SerializeField] private float enemyProbeDistance = 0.5f;
+
+    [Tooltip("Minimum seconds between wander turn-arounds (prevents jitter).")]
+    [SerializeField] private float turnAroundCooldown = 0.4f;
+
+    // Jump / avoidance bookkeeping (authority only).
     private Collider2D bodyCollider;
     private TickTimer jumpCooldownTimer;
+    private TickTimer turnCooldownTimer;
     private float lastProgressX;
     private int stuckCounter;
 
@@ -218,6 +229,15 @@ public class EnemyAI : MonoBehaviour
             PickWanderTarget();
         }
 
+        // Stay solid but don't grind into another enemy: if one is directly ahead, turn
+        // around to a new wander point on the other side (rate-limited to avoid jitter).
+        float dirX = Mathf.Sign(wanderTarget.x - rb.position.x);
+        if (turnCooldownTimer.ExpiredOrNotRunning(enemyComponent.Runner) && EnemyAhead(dirX))
+        {
+            FlipWanderTarget(dirX);
+            turnCooldownTimer = TickTimer.CreateFromSeconds(enemyComponent.Runner, turnAroundCooldown);
+        }
+
         MoveToward(wanderTarget);
 
         // Horizontal arrival: this is a gravity platformer and movement only drives X
@@ -237,6 +257,35 @@ public class EnemyAI : MonoBehaviour
         // height so the X-based arrival check can be reached under gravity.
         float offsetX = Random.Range(-wanderRadius, wanderRadius);
         wanderTarget = new Vector2(home.x + offsetX, home.y);
+        hasWanderTarget = true;
+    }
+
+    /// <summary>True if another enemy is directly ahead in the given horizontal direction.</summary>
+    private bool EnemyAhead(float dirX)
+    {
+        if (enemyAvoidLayer == 0 || Mathf.Approximately(dirX, 0f)) return false;
+        float facing = Mathf.Sign(dirX);
+
+        Vector2 center = rb.position;
+        float extentX = 0.25f;
+        if (bodyCollider != null)
+        {
+            center = bodyCollider.bounds.center;
+            extentX = bodyCollider.bounds.extents.x;
+        }
+        Vector2 probeStart = new Vector2(center.x + facing * (extentX + 0.02f), center.y);
+        RaycastHit2D hit = Physics2D.Raycast(probeStart, new Vector2(facing, 0f), enemyProbeDistance, enemyAvoidLayer);
+        // Exclude ourselves via the rigidbody the hit collider belongs to.
+        return hit.collider != null && hit.rigidbody != rb;
+    }
+
+    /// <summary>Retarget wander to the opposite side of the blocking enemy, within the zone.</summary>
+    private void FlipWanderTarget(float blockedDir)
+    {
+        float away = -Mathf.Sign(blockedDir);
+        float dist = Random.Range(wanderRadius * 0.5f, wanderRadius);
+        float newX = Mathf.Clamp(rb.position.x + away * dist, home.x - wanderRadius, home.x + wanderRadius);
+        wanderTarget = new Vector2(newX, home.y);
         hasWanderTarget = true;
     }
 
