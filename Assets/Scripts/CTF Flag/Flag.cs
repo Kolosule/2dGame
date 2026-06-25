@@ -65,6 +65,9 @@ public class Flag : NetworkBehaviour
 
     // Public properties
     public string OwningTeam => owningTeam;
+
+    /// <summary>Canonical Team for this flag (HUD/color lookups). Derived from the authored string.</summary>
+    public Team OwningTeamEnum => TeamUtil.Normalize(owningTeam);
     public FlagState State => CurrentState;
     public GameObject Carrier => carrierGameObject; // Use the renamed variable
 
@@ -314,10 +317,6 @@ public class Flag : NetworkBehaviour
     private void OnStateChanged()
     {
         UpdateVisuals();
-
-        // Drive CTF HUD off this networked state change instead of a per-frame UI rebuild.
-        if (CTFGameManager.Instance != null)
-            CTFGameManager.Instance.OnFlagStateChanged(this);
     }
 
     /// <summary>
