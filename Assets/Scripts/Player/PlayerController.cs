@@ -13,6 +13,13 @@ public class PlayerController : NetworkBehaviour
     private Rigidbody2D rb;
     private NetworkButtons previousButtons;
 
+    [Header("Area of Interest")]
+    [Tooltip("Server-only: radius (world units) around this player that is replicated to them. " +
+             "Must exceed the camera's max view half-extent to avoid pop-in at the screen edge. " +
+             "Camera base size 5 + speed-zoom can show ~14 units half-width on widescreen, so the " +
+             "default 25 leaves margin. Tune with the multi-peer pop-in check.")]
+    [SerializeField] private float areaOfInterestRadius = 25f;
+
     void Awake()
     {
         movement = GetComponent<PlayerMovement>();
@@ -32,6 +39,13 @@ public class PlayerController : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
+        // Area of Interest: on the server, register this player's interest region around itself
+        // every tick (Fusion clears regions per tick). Drives which objects replicate to this
+        // player. No effect until AoI is enabled in the NetworkProjectConfig. Runs regardless of
+        // input/alive state so the region never lapses (e.g. while dead/awaiting respawn).
+        if (Runner.IsServer)
+            Runner.AddPlayerAreaOfInterest(Object.InputAuthority, transform.position, areaOfInterestRadius);
+
         if (GetInput(out NetInput input))
         {
             NetworkButtons current = input.Buttons;

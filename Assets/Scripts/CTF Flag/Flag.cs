@@ -214,6 +214,13 @@ public class Flag : NetworkBehaviour
             marker.SetCarryingFlag(true);
         }
 
+        // Area of Interest: the carrier must replicate to EVERY player (even distant ones) or the
+        // flag-direction HUD and carried-flag position desync for players outside the carrier's
+        // region. NetworkRigidbody2D carries no position to a culling client otherwise.
+        NetworkObject carrierObj = player.GetComponent<NetworkObject>();
+        if (carrierObj != null && AreaOfInterestRegistrar.Instance != null)
+            AreaOfInterestRegistrar.Instance.AddAlwaysInterested(carrierObj);
+
         // Play pickup effect
         if (pickupEffect != null)
             pickupEffect.Play();
@@ -253,6 +260,9 @@ public class Flag : NetworkBehaviour
             {
                 marker.SetCarryingFlag(false);
             }
+            NetworkObject carrierObj = carrierGameObject.GetComponent<NetworkObject>();
+            if (carrierObj != null && AreaOfInterestRegistrar.Instance != null)
+                AreaOfInterestRegistrar.Instance.RemoveAlwaysInterested(carrierObj);
             carrierGameObject = null;
         }
 
@@ -293,6 +303,9 @@ public class Flag : NetworkBehaviour
             {
                 marker.SetCarryingFlag(false);
             }
+            NetworkObject carrierObj = carrierGameObject.GetComponent<NetworkObject>();
+            if (carrierObj != null && AreaOfInterestRegistrar.Instance != null)
+                AreaOfInterestRegistrar.Instance.RemoveAlwaysInterested(carrierObj);
             carrierGameObject = null;
         }
 
