@@ -51,6 +51,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         Fusion.Sockets.ReliableKey.FromInts(0x53545254, 0, 0, 0); // "STRT"
 
     private NetworkRunner runner;
+    private PooledNetworkObjectProvider objectProvider;
     private bool isConnected = false;
     private bool gameStarting = false;
 
@@ -72,6 +73,9 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // local player's position.
         var simulatePhysics = gameObject.AddComponent<RunnerSimulatePhysics2D>();
         simulatePhysics.ClientPhysicsSimulation = ClientPhysicsSimulation.SimulateForward;
+
+        // Pool high-churn networked prefabs (projectiles) instead of Instantiate/Destroy each shot.
+        objectProvider = gameObject.AddComponent<PooledNetworkObjectProvider>();
 
         // Register the single input source.
         var inputProvider = gameObject.AddComponent<NetworkInputProvider>();
@@ -121,7 +125,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             GameMode = mode,
             SessionName = sessionName,
-            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
+            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>(),
+            ObjectProvider = objectProvider
         };
 
         var result = await runner.StartGame(args);
@@ -145,7 +150,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             GameMode = GameMode.Server,
             SessionName = sessionName,
-            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
+            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>(),
+            ObjectProvider = objectProvider
         };
 
         var result = await runner.StartGame(args);
@@ -164,7 +170,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             GameMode = GameMode.Client,
             SessionName = sessionName,
-            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
+            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>(),
+            ObjectProvider = objectProvider
         };
 
         var result = await runner.StartGame(args);
