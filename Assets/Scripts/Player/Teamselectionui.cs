@@ -113,8 +113,10 @@ public class TeamSelectionUI : MonoBehaviour
         // enabled by the host's GameNetworkManager once every connected player has chosen.
         if (startButton != null)
         {
-            bool isHost = runner != null && runner.IsServer;
-            startButton.gameObject.SetActive(isHost);
+            // Hidden until the server pushes lobby status (SetHostControls). In the solo-dev
+            // host path, RefreshStartGate -> SetStartAvailable still drives it.
+            bool soloHost = runner != null && runner.IsServer && runner.LocalPlayer != Fusion.PlayerRef.None;
+            startButton.gameObject.SetActive(soloHost);
             startButton.interactable = false;
         }
     }
@@ -173,6 +175,17 @@ public class TeamSelectionUI : MonoBehaviour
     {
         if (startButton != null)
             startButton.interactable = available;
+    }
+
+    /// <summary>
+    /// Driven by the server's lobby-status message (dedicated-server path). Shows the Start button
+    /// only on the designated host-client, and enables it only once every player has chosen.
+    /// </summary>
+    public void SetHostControls(bool isHost, bool canStart)
+    {
+        if (startButton == null) return;
+        startButton.gameObject.SetActive(isHost);
+        startButton.interactable = isHost && canStart;
     }
 
     /// <summary>Sets the status message, creating a fallback label if none was assigned.</summary>
