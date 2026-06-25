@@ -30,19 +30,6 @@ public class CTFGameManager : NetworkBehaviour
     [Tooltip("Text for winner announcement")]
     [SerializeField] private TextMeshProUGUI winnerText;
 
-    [Tooltip("Text for Team1/Blue flag status")]
-    [SerializeField] private TextMeshProUGUI team1FlagStatusText;
-
-    [Tooltip("Text for Team2/Red flag status")]
-    [SerializeField] private TextMeshProUGUI team2FlagStatusText;
-
-    [Header("Flag Indicators")]
-    [Tooltip("Transform showing Team1 flag location")]
-    [SerializeField] private GameObject team1FlagIndicator;
-
-    [Tooltip("Transform showing Team2 flag location")]
-    [SerializeField] private GameObject team2FlagIndicator;
-
     [Header("Settings")]
     [Tooltip("Time in seconds to show notifications")]
     [SerializeField] private float notificationDuration = 3f;
@@ -84,8 +71,6 @@ public class CTFGameManager : NetworkBehaviour
             FindFlags();
         }
 
-        // Initialize UI on all clients from current flag state (event-driven thereafter).
-        RefreshAllFlagUI();
         OnGameOverChanged();
     }
 
@@ -96,20 +81,6 @@ public class CTFGameManager : NetworkBehaviour
         {
             Instance = null;
         }
-    }
-
-    private void Update()
-    {
-        // Indicators follow the continuously-moving flags only while shown. Their text and
-        // visibility are event-driven (OnFlagStateChanged); this is a cheap transform follow,
-        // no string rebuilds and no distance polling.
-        if (team1FlagIndicator != null && team1FlagIndicator.activeSelf &&
-            team1Flag != null && team1Flag.Object != null && team1Flag.Object.IsValid)
-            team1FlagIndicator.transform.position = team1Flag.transform.position;
-
-        if (team2FlagIndicator != null && team2FlagIndicator.activeSelf &&
-            team2Flag != null && team2Flag.Object != null && team2Flag.Object.IsValid)
-            team2FlagIndicator.transform.position = team2Flag.transform.position;
     }
 
     /// <summary>
@@ -231,60 +202,6 @@ public class CTFGameManager : NetworkBehaviour
     {
         if (GameIsOver && gameOverPanel != null)
             gameOverPanel.SetActive(true);
-    }
-
-    /// <summary>
-    /// Called by a Flag when its networked state changes (via Flag.OnStateChanged). Refreshes
-    /// only that flag's HUD - no per-frame rebuild of all flag UI.
-    /// </summary>
-    public void OnFlagStateChanged(Flag flag)
-    {
-        if (flag == team1Flag)
-            RefreshFlagUI(team1Flag, team1FlagStatusText, team1FlagIndicator);
-        else if (flag == team2Flag)
-            RefreshFlagUI(team2Flag, team2FlagStatusText, team2FlagIndicator);
-    }
-
-    private void RefreshAllFlagUI()
-    {
-        RefreshFlagUI(team1Flag, team1FlagStatusText, team1FlagIndicator);
-        RefreshFlagUI(team2Flag, team2FlagStatusText, team2FlagIndicator);
-    }
-
-    private void RefreshFlagUI(Flag flag, TextMeshProUGUI statusText, GameObject indicator)
-    {
-        if (flag == null || flag.Object == null || !flag.Object.IsValid) return;
-
-        Flag.FlagState state = flag.State;
-
-        if (statusText != null)
-        {
-            switch (state)
-            {
-                // NOTE: the default LiberationSans SDF atlas has no emoji glyphs, so
-                // emoji here render as the missing-glyph box. Use plain text (state is
-                // also conveyed by color). To restore icons, add an emoji TMP font to
-                // the LiberationSans fallback list and put the emoji back.
-                case Flag.FlagState.AtHome:
-                    statusText.text = "At Base";
-                    statusText.color = Color.green;
-                    break;
-                case Flag.FlagState.Carried:
-                    statusText.text = "Taken!";
-                    statusText.color = Color.red;
-                    break;
-                default:
-                    statusText.text = "Dropped";
-                    statusText.color = Color.yellow;
-                    break;
-            }
-        }
-
-        if (indicator != null)
-        {
-            indicator.transform.position = flag.transform.position;
-            indicator.SetActive(state != Flag.FlagState.AtHome);
-        }
     }
 
     #region Public Getters
