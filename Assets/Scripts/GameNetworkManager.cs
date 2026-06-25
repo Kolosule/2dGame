@@ -52,7 +52,14 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         runner = gameObject.AddComponent<NetworkRunner>();
 
         // Fusion steps Physics2D inside the network tick (required for NetworkRigidbody2D prediction).
-        gameObject.AddComponent<RunnerSimulatePhysics2D>();
+        // ClientPhysicsSimulation defaults to Disabled, which means CLIENTS never call
+        // Physics.Simulate() and so never integrate their own rigidbody forward — NetworkRigidbody2D's
+        // _clientPrediction stays false, so the non-host's body only ever shows server snapshots, a
+        // full round-trip late (the "delayed position" bug). SimulateForward simulates physics on
+        // forward ticks (and SyncTransforms on resimulations), enabling client-side prediction of the
+        // local player's position.
+        var simulatePhysics = gameObject.AddComponent<RunnerSimulatePhysics2D>();
+        simulatePhysics.ClientPhysicsSimulation = ClientPhysicsSimulation.SimulateForward;
 
         // Register the single input source.
         var inputProvider = gameObject.AddComponent<NetworkInputProvider>();
