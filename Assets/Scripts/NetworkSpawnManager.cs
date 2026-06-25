@@ -75,6 +75,12 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         ValidateSpawnPoints();
 
+        // Area of Interest: hand the registrar the active runner so it can mark the flags/managers
+        // (and later the flag carrier) always-interested for every player. No-op if no registrar
+        // is present in the scene (AoI simply not configured yet).
+        if (AreaOfInterestRegistrar.Instance != null)
+            AreaOfInterestRegistrar.Instance.ServerInitialize(Runner);
+
         // Every player who reached gameplay already submitted a choice in the lobby, so spawn the
         // current roster now. (OnPlayerJoined for these players fired back in the MainMenu before
         // this manager existed, so we reconcile against ActivePlayers here.)
