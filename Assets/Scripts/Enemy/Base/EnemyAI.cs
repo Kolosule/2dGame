@@ -64,13 +64,44 @@ public class EnemyAI : MonoBehaviour
     [Tooltip("Layer mask used to find players.")]
     [SerializeField] private LayerMask playerLayerMask;
 
+    [Header("Jump")]
+    [Tooltip("Upward velocity applied when the enemy jumps.")]
+    [SerializeField] private float jumpForce = 7f;
+
+    [Tooltip("Layers treated as solid ground for the grounded check (e.g. Ground).")]
+    [SerializeField] private LayerMask groundLayer;
+
+    [Tooltip("Layers that count as a hop-over obstacle ahead (e.g. Enemy + Ground/walls).")]
+    [SerializeField] private LayerMask obstacleLayer;
+
+    [Tooltip("Radius of the grounded overlap check at the feet.")]
+    [SerializeField] private float groundCheckRadius = 0.15f;
+
+    [Tooltip("Minimum seconds between jumps.")]
+    [SerializeField] private float jumpCooldown = 0.6f;
+
+    [Tooltip("How far ahead (beyond the body) to probe for a blocking obstacle.")]
+    [SerializeField] private float obstacleProbeDistance = 0.6f;
+
+    [Tooltip("While chasing, jump if the target is at least this much higher than the enemy.")]
+    [SerializeField] private float chaseJumpHeight = 1.5f;
+
+    // Jump bookkeeping (authority only).
+    private Collider2D bodyCollider;
+    private TickTimer jumpCooldownTimer;
+    private float lastProgressX;
+    private int stuckCounter;
+
     private const float ArriveThreshold = 0.5f;
+    private const int StuckSampleTicks = 12;      // ticks of no horizontal progress before a fallback hop
+    private const float StuckMoveEpsilon = 0.05f; // min X movement that counts as progress
 
     private void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         enemyComponent = GetComponent<Enemy>();
         spriteRenderer = GetComponent<SpriteRenderer>();
+        bodyCollider = GetComponent<Collider2D>();
 
         playerFilter = new ContactFilter2D { useTriggers = true };
         playerFilter.SetLayerMask(playerLayerMask);
@@ -78,6 +109,11 @@ public class EnemyAI : MonoBehaviour
         if (playerLayerMask == 0)
         {
             Debug.LogWarning($"{gameObject.name}: EnemyAI playerLayerMask is unassigned - player detection will not work. Set it on the prefab.");
+        }
+
+        if (groundLayer == 0)
+        {
+            Debug.LogWarning($"{gameObject.name}: EnemyAI groundLayer is unassigned - jumping is disabled (enemy can never detect ground). Set it on the prefab.");
         }
 
         if (spriteRenderer != null)
@@ -271,6 +307,13 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
+        // Jump toward a player perched above us (e.g. on a ledge). TryJump sets vertical
+        // velocity; MoveToward below preserves it while driving horizontal pursuit.
+        if (playerPos.y - rb.position.y > chaseJumpHeight)
+        {
+            TryJump();
+        }
+
         Vector2 steer = EnemyAILeash.ClampToLeash(home, playerPos, leashRadius);
         MoveToward(steer);
     }
@@ -352,6 +395,82 @@ public class EnemyAI : MonoBehaviour
         Vector2 direction = (target - rb.position).normalized;
         rb.linearVelocity = new Vector2(direction.x * moveSpeed, rb.linearVelocity.y);
         SetFacing(direction.x);
+        HandleMovementJump(direction.x);
+    }
+
+    // ---- Jump -----------------------------------------------------------
+
+    /// <summary>
+    /// While actively moving horizontally, hop over a blocking obstacle (primarily other
+    /// enemies) detected by a short forward probe, with a stuck-detection fallback for
+    /// anything the probe misses.
+    /// </summary>
+    private void HandleMovementJump(float dirX)
+    {
+        if (Mathf.Approximately(dirX, 0f)) return;
+        float facing = Mathf.Sign(dirX);
+
+        // Forward obstacle probe (primary). Origin sits just outside the body's front edge
+        // so the ray never starts inside our own collider.
+        if (obstacleLayer != 0)
+        {
+            Vector2 origin = rb.position;
+            float extentX = 0.25f;
+            if (bodyCollider != null)
+            {
+                origin = new Vector2(bodyCollider.bounds.center.x, bodyCollider.bounds.center.y);
+                extentX = bodyCollider.bounds.extents.x;
+            }
+            Vector2 probeStart = new Vector2(origin.x + facing * (extentX + 0.02f), origin.y);
+            RaycastHit2D hit = Physics2D.Raycast(probeStart, new Vector2(facing, 0f), obstacleProbeDistance, obstacleLayer);
+            if (hit.collider != null && hit.collider.gameObject != gameObject)
+            {
+                if (TryJump()) return;
+            }
+        }
+
+        // Stuck fallback: no meaningful horizontal progress for a while → hop.
+        if (Mathf.Abs(rb.position.x - lastProgressX) > StuckMoveEpsilon)
+        {
+            lastProgressX = rb.position.x;
+            stuckCounter = 0;
+        }
+        else
+        {
+            stuckCounter++;
+            if (stuckCounter >= StuckSampleTicks)
+            {
+                TryJump();
+            }
+        }
+    }
+
+    /// <summary>Jump if grounded and off cooldown. Returns true if a jump was performed.</summary>
+    private bool TryJump()
+    {
+        if (!IsGrounded()) return false;
+        if (!jumpCooldownTimer.ExpiredOrNotRunning(enemyComponent.Runner)) return false;
+
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+        jumpCooldownTimer = TickTimer.CreateFromSeconds(enemyComponent.Runner, jumpCooldown);
+        stuckCounter = 0;
+        lastProgressX = rb.position.x;
+        return true;
+    }
+
+    private bool IsGrounded()
+    {
+        if (groundLayer == 0) return false;
+        return Physics2D.OverlapCircle(GetFeetPosition(), groundCheckRadius, groundLayer);
+    }
+
+    private Vector2 GetFeetPosition()
+    {
+        if (bodyCollider != null)
+        {
+            return new Vector2(bodyCollider.bounds.center.x, bodyCollider.bounds.min.y);
+        }
+        return rb.position;
     }
 
     private void SetFacing(float directionX)
@@ -376,5 +495,13 @@ public class EnemyAI : MonoBehaviour
 
         Gizmos.color = new Color(0.3f, 1f, 0.3f, 0.6f);
         Gizmos.DrawWireSphere(center, wanderRadius > 0f ? wanderRadius : 5f);
+
+        // Ground check (feet) — only meaningful with a collider present.
+        Collider2D col = bodyCollider != null ? bodyCollider : GetComponent<Collider2D>();
+        if (col != null)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(new Vector2(col.bounds.center.x, col.bounds.min.y), groundCheckRadius);
+        }
     }
 }
