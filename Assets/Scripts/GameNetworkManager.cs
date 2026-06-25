@@ -517,6 +517,16 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     public void OnSceneLoadDone(NetworkRunner runner)
     {
+        // A real dedicated server (no local player) should not render or play audio. -nographics
+        // already suppresses rendering; disabling cameras/listeners avoids per-frame work and
+        // AudioListener warnings on the headless build.
+        if (runner.IsServer && runner.LocalPlayer == PlayerRef.None)
+        {
+            foreach (var cam in FindObjectsByType<Camera>(FindObjectsSortMode.None))
+                cam.enabled = false;
+            foreach (var listener in FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
+                listener.enabled = false;
+        }
     }
     public void OnSceneLoadStart(NetworkRunner runner)
     {
