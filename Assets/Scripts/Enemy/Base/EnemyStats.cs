@@ -14,6 +14,19 @@ public class EnemyStats : ScriptableObject
     [Header("Movement")]
     public float moveSpeed = 3f;
 
+    [Header("AI Ranges")]
+    [Tooltip("How far the enemy senses players.")]
+    public float detectionRange = 10f;
+
+    [Tooltip("How close a player must be to start an attack.")]
+    public float attackRange = 1.5f;
+
+    [Tooltip("Hard max distance from home the enemy will ever travel (chase leash).")]
+    public float leashRadius = 12f;
+
+    [Tooltip("Area around home the enemy roams while idle. Keep <= leashRadius.")]
+    public float wanderRadius = 5f;
+
     [Header("Progression")]
     public int level = 1;
     public string enemyTeam = "Team3";
