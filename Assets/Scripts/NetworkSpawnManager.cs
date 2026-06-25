@@ -179,6 +179,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
     private void OnPlayerSpawned(NetworkRunner runner, NetworkObject obj, int team)
     {
+        // Register this object as the player's canonical player-object. Fusion replicates the
+        // association to every peer, so Runner.TryGetPlayerObject(playerRef) resolves on clients
+        // (not just the host). CTF flag carrier resolution (Flag.cs) depends on this; without it
+        // clients can't find the carrier GameObject, so head markers and the carried-flag arrow
+        // never track the carrier.
+        runner.SetPlayerObject(obj.InputAuthority, obj);
+
         PlayerTeamData teamData = obj.GetComponent<PlayerTeamData>();
 
         if (teamData != null)
