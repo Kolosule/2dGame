@@ -68,6 +68,21 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // Receive lobby callbacks (player join/leave, reliable team-choice data) on the host.
         runner.AddCallbacks(this);
 
+        LobbyTeamChoices.Clear();
+        LobbyLoadoutChoices.Clear();
+        gameStarting = false;
+
+        var boot = NetworkBootMode.Resolve(
+            Application.isBatchMode,
+            System.Environment.GetCommandLineArgs(),
+            singlePlayerMode);
+
+        if (boot == NetworkBootKind.DedicatedServer)
+        {
+            StartServer();
+            return; // headless server: no menu, no team-selection UI
+        }
+
         if (hostButton != null)
             hostButton.onClick.AddListener(StartHost);
         else
@@ -80,10 +95,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (teamSelectionUI == null)
             Debug.LogError("❌ TeamSelectionUI not assigned!");
-
-        LobbyTeamChoices.Clear();
-        LobbyLoadoutChoices.Clear();
-        gameStarting = false;
     }
 
     async void StartHost()
@@ -116,15 +127,25 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
+    async void StartServer()
+    {
+        var args = new StartGameArgs()
+        {
+            GameMode = GameMode.Server,
+            SessionName = sessionName,
+            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
+        };
+
+        var result = await runner.StartGame(args);
+
+        if (result.Ok)
+            Debug.Log("✅ Dedicated server started — waiting for players.");
+        else
+            Debug.LogError($"❌ Server failed to start: {result.ShutdownReason}");
+    }
+
     async void StartClient()
     {
-        // In single player mode, client button does the same as host
-        if (singlePlayerMode)
-        {
-            StartHost();
-            return;
-        }
-
         SetButtonsInteractable(false);
 
         var args = new StartGameArgs()
