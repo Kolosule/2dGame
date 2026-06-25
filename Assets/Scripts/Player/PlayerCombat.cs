@@ -146,8 +146,9 @@ public class PlayerCombat : NetworkBehaviour
         if (attackTransform == null) return;
 
         // Latch the animation as networked state (replicates to every client). A mid-air
-        // down attack is a ground pound and gets its own latched state. These self-guard on
-        // state authority, so the visible animation is driven by the authoritative latch.
+        // down attack is a ground pound and gets its own latched state. The latch runs on the
+        // state authority (authoritative) and the local input authority (predicted), so the
+        // local player's swing animates on this tick instead of after a server round-trip.
         if (playerAnimator != null)
         {
             if (isGroundPound)
