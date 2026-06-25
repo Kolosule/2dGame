@@ -47,6 +47,16 @@ public class PlayerCombat : NetworkBehaviour
     [SerializeField] private float projectileScale = 1f;
     [SerializeField] private float projectileCooldown = 0.5f;
 
+    [Header("Shoot Prediction (cosmetic, firing client only)")]
+    [Tooltip("Optional muzzle-flash prefab spawned instantly on the firing client. Null = tracer only.")]
+    [SerializeField] private GameObject muzzleFlashPrefab;
+    [SerializeField] private float muzzleFlashLifetime = 0.2f;
+    [Tooltip("Code-generated tracer shown instantly on fire (no art needed).")]
+    [SerializeField] private Color tracerColor = new Color(1f, 0.9f, 0.3f, 1f);
+    [SerializeField] private float tracerLength = 1.5f;
+    [SerializeField] private float tracerWidth = 0.08f;
+    [SerializeField] private float tracerDuration = 0.1f;
+
     [Header("Ground Check (for down attack)")]
     [SerializeField] private Transform groundCheck;
     [SerializeField] private float groundCheckRadius = 0.2f;
@@ -258,6 +268,16 @@ public class PlayerCombat : NetworkBehaviour
     {
         if (playerAnimator != null) playerAnimator.TriggerShoot();
         if (projectilePrefab == null || projectileSpawnPoint == null) return;
+
+        // Cosmetic local prediction: instant muzzle/tracer on the firing client only. IsForward
+        // fires it exactly once (not on resimulation); !HasStateAuthority skips a host-as-player
+        // whose real projectile is already instant. The server still spawns the authoritative one.
+        if (HasInputAuthority && !HasStateAuthority && Runner.IsForward)
+        {
+            Vector2 dir = (aimWorldPoint - (Vector2)projectileSpawnPoint.position).normalized;
+            PlayLocalShootFx(projectileSpawnPoint.position, dir);
+        }
+
         if (!HasStateAuthority)
         {
             return; // only the server spawns networked objects
@@ -277,6 +297,21 @@ public class PlayerCombat : NetworkBehaviour
                 Projectile p = obj.GetComponent<Projectile>();
                 if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam);
             });
+    }
+
+    /// <summary>
+    /// Client-local, non-networked shot feedback (muzzle flash + tracer). No gameplay effect — the
+    /// server's networked projectile is authoritative. Called only on the firing input-authority
+    /// client, once per shot.
+    /// </summary>
+    private void PlayLocalShootFx(Vector3 origin, Vector2 dir)
+    {
+        if (muzzleFlashPrefab != null)
+        {
+            GameObject flash = Instantiate(muzzleFlashPrefab, origin, Quaternion.identity);
+            Destroy(flash, muzzleFlashLifetime);
+        }
+        CosmeticTracer.Spawn(origin, dir, tracerLength, tracerWidth, tracerColor, tracerDuration);
     }
 
     void OnDrawGizmosSelected()
