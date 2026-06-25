@@ -9,8 +9,12 @@ using Fusion;
 /// Design:
 /// - The animator is described by a single networked <see cref="AnimState"/> enum
 ///   (mirrors the movement/combat pattern of syncing state, not input).
-/// - State is COMPUTED on state authority once per tick (<see cref="Simulate"/>),
-///   derived from networked movement/combat/stats + the Rigidbody2D velocity.
+/// - State is COMPUTED on the state authority AND predicted on the local input
+///   authority once per tick (<see cref="Simulate"/>), derived from networked
+///   movement/combat/stats + the Rigidbody2D velocity. Predicting on the input
+///   authority — exactly as PlayerMovement predicts its own [Networked] state — is
+///   what keeps a client's OWN animation in lockstep with its (already predicted)
+///   movement instead of lagging a full server round-trip behind the input.
 /// - State is APPLIED on EVERY client in <see cref="Render"/> via a single
 ///   Animator integer parameter ("State"). No triggers, no per-state bools.
 /// - One-shot actions (Attack/Shoot/GroundPound) are LATCHED for a clip duration
@@ -96,13 +100,17 @@ public class PlayerAnimator : NetworkBehaviour
     }
 
     /// <summary>
-    /// STATE AUTHORITY: recompute the networked animation state once per tick.
-    /// Called by PlayerController.FixedUpdateNetwork AFTER movement/combat simulate
-    /// (and also while dead, so the Dead state latches).
+    /// STATE AUTHORITY + LOCAL INPUT AUTHORITY: recompute the networked animation state once
+    /// per tick. The host writes the authoritative value; the local player ALSO writes it
+    /// predictively (Fusion reconciles it against the host), so its own animation fires on the
+    /// same tick as the input rather than after a round-trip. Proxies (other players) never get
+    /// here — PlayerController only calls Simulate when GetInput succeeds — so they keep reading
+    /// the replicated State in Render(). Called by PlayerController.FixedUpdateNetwork AFTER
+    /// movement/combat simulate (and also while dead, so the Dead state latches).
     /// </summary>
     public void Simulate()
     {
-        if (!HasStateAuthority) return;
+        if (!HasStateAuthority && !HasInputAuthority) return;
         State = ComputeState();
     }
 
@@ -144,8 +152,11 @@ public class PlayerAnimator : NetworkBehaviour
 
     private void LatchAction(AnimState action, float duration)
     {
-        // Only the authority owns the networked latch; it replicates to all clients.
-        if (!HasStateAuthority) return;
+        // State authority owns the authoritative latch; the local input authority also latches
+        // predictively so its attack/shoot/ground-pound animation fires on the input tick instead
+        // of after a server round-trip. Fusion reconciles the networked latch against the host.
+        // Proxies never call this (combat's Trigger* run only during predicted/authoritative ticks).
+        if (!HasStateAuthority && !HasInputAuthority) return;
         ActionState = action;
         ActionTimer = TickTimer.CreateFromSeconds(Runner, duration);
     }
