@@ -1,73 +1,47 @@
 using UnityEngine;
 
 /// <summary>
-/// Attach this to player prefabs to mark when they're carrying a flag
-/// Handles disabling dash and showing visual indicator
+/// Attach to player prefabs. Shows a floating icon above the player's head while
+/// they carry a flag, on every peer. Dash suppression is handled elsewhere via
+/// IsCarryingFlag(); this component is purely the head-icon visual.
 /// </summary>
 public class FlagCarrierMarker : MonoBehaviour
 {
     [Header("Visual Indicator")]
-    [Tooltip("Icon to show above player's head when carrying flag")]
+    [Tooltip("Icon to show above the player's head when carrying a flag")]
     [SerializeField] private GameObject flagIconPrefab;
-    
-    [Tooltip("Height above player to show icon")]
+
+    [Tooltip("Height above the player to show the icon")]
     [SerializeField] private float iconHeight = 2f;
 
     private GameObject flagIcon;
-    private bool isCarryingFlag = false;
-    private PlayerMovement playerMovement;
+    private bool isCarryingFlag;
 
-    private void Awake()
-    {
-        playerMovement = GetComponent<PlayerMovement>();
-    }
-
-    /// <summary>
-    /// Set whether this player is carrying a flag
-    /// </summary>
+    /// <summary>Idempotent: repeated calls with the same value do nothing.</summary>
     public void SetCarryingFlag(bool carrying)
     {
+        if (carrying == isCarryingFlag) return;
         isCarryingFlag = carrying;
 
-        // Disable/enable dash
-        if (playerMovement != null)
+        if (carrying)
         {
-            if (carrying)
+            if (flagIcon == null && flagIconPrefab != null)
             {
-                // Store original canDash state might be useful, but for now just disable
-                playerMovement.enabled = false;
-                playerMovement.enabled = true;
-                // The dash will be disabled by checking this component in PlayerMovement
+                flagIcon = Instantiate(flagIconPrefab, transform);
+                flagIcon.transform.localPosition = Vector3.up * iconHeight;
             }
         }
-
-        // Show/hide visual indicator
-        if (carrying && flagIcon == null && flagIconPrefab != null)
-        {
-            flagIcon = Instantiate(flagIconPrefab, transform);
-            flagIcon.transform.localPosition = Vector3.up * iconHeight;
-        }
-        else if (!carrying && flagIcon != null)
+        else if (flagIcon != null)
         {
             Destroy(flagIcon);
             flagIcon = null;
         }
-
     }
 
-    /// <summary>
-    /// Check if player is currently carrying a flag
-    /// </summary>
-    public bool IsCarryingFlag()
-    {
-        return isCarryingFlag;
-    }
+    public bool IsCarryingFlag() => isCarryingFlag;
 
     private void OnDestroy()
     {
-        if (flagIcon != null)
-        {
-            Destroy(flagIcon);
-        }
+        if (flagIcon != null) Destroy(flagIcon);
     }
 }
