@@ -17,5 +17,9 @@ MonoBehaviour:
   attackDamage: 10
   attackCooldown: 1
   moveSpeed: 10
+  detectionRange: 20
+  attackRange: 1.5
+  leashRadius: 30
+  wanderRadius: 20
   level: 9
   enemyTeam: 

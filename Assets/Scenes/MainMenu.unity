@@ -1030,7 +1030,7 @@ MonoBehaviour:
   team2CountText: {fileID: 0}
   startButton: {fileID: 1911525706}
   networkManager: {fileID: 492863698}
-  buffConfig: {fileID: 0}
+  buffConfig: {fileID: 11400000, guid: 38988aca44f198f45839382843d4911e, type: 2}
   slotLabels: []
   slotUpButtons: []
   slotDownButtons: []

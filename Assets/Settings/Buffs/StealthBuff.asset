@@ -20,5 +20,5 @@ MonoBehaviour:
   - 1
   - 3
   - 10
-  cooldown: 20
+  cooldown: 10
   flagUsableFromTier: 3
