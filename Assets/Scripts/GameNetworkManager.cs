@@ -348,16 +348,26 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     }
 
     /// <summary>
-    /// Host-only: called when the host clicks the Start button. Loads the Gameplay scene if every
-    /// connected player has chosen a team. Idempotent - only triggers the load once.
+    /// Called when the local player clicks the Start button. In the solo-dev host path, starts
+    /// directly. In the dedicated-server path, sends a reliable message to the server to start.
     /// </summary>
     public void RequestStartMatch()
     {
-        if (!CanStartMatch())
+        if (runner == null || !runner.IsRunning)
             return;
 
-        gameStarting = true;
-        LoadGameplayScene();
+        if (runner.IsServer)
+        {
+            // Solo-dev host path: start directly.
+            if (!CanStartMatch()) return;
+            gameStarting = true;
+            LoadGameplayScene();
+        }
+        else
+        {
+            // Dedicated-server path: ask the server to start (it re-validates the gate).
+            runner.SendReliableDataToServer(StartMatchKey, new byte[] { 1 });
+        }
     }
 
     private async void LoadGameplayScene()
@@ -458,26 +468,50 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
     public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data)
     {
-        if (!runner.IsServer) return;
-
-        if (key == TeamChoiceKey)
+        if (runner.IsServer)
         {
-            if (data.Count < 1 || data.Array == null)
+            if (key == TeamChoiceKey)
             {
-                Debug.LogError($"❌ [HOST] Empty team-choice payload from Player {player.PlayerId}");
+                if (data.Count < 1 || data.Array == null)
+                {
+                    Debug.LogError($"❌ [HOST] Empty team-choice payload from Player {player.PlayerId}");
+                    return;
+                }
+                int teamNumber = data.Array[data.Offset];
+                RecordChoice(player, teamNumber);
                 return;
             }
-            int teamNumber = data.Array[data.Offset];
-            RecordChoice(player, teamNumber);
+
+            if (key == LoadoutKey)
+            {
+                if (data.Count < 1 || data.Array == null) return;
+                var order = new byte[data.Count];
+                System.Array.Copy(data.Array, data.Offset, order, 0, data.Count);
+                LobbyLoadoutChoices.Set(player, order);
+                return;
+            }
+
+            if (key == StartMatchKey)
+            {
+                // Only the designated host-client may start, and only once everyone has chosen.
+                if (player.PlayerId == currentHostId && CanStartMatch())
+                {
+                    gameStarting = true;
+                    LoadGameplayScene();
+                }
+                return;
+            }
+
             return;
         }
 
-        if (key == LoadoutKey)
+        // ---- Client ----
+        if (key == LobbyStatusKey && data.Count >= 2 && data.Array != null)
         {
-            if (data.Count < 1 || data.Array == null) return;
-            var order = new byte[data.Count];
-            System.Array.Copy(data.Array, data.Offset, order, 0, data.Count);
-            LobbyLoadoutChoices.Set(player, order);
+            bool isHost = data.Array[data.Offset] == 1;
+            bool canStart = data.Array[data.Offset + 1] == 1;
+            if (teamSelectionUI != null)
+                teamSelectionUI.SetHostControls(isHost, canStart);
         }
     }
     public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
