@@ -36,6 +36,10 @@ public class Projectile : NetworkBehaviour
 
     public override void Spawned()
     {
+        // Pooled reuse: a recycled instance keeps its previous hasHit value, so clear transient
+        // runtime state here. Every per-spawn field below is re-initialised regardless.
+        hasHit = false;
+
         rb = GetComponent<Rigidbody2D>();
         var col = GetComponent<CircleCollider2D>();
         if (col != null) col.isTrigger = true;

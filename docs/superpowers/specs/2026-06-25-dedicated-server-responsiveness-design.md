@@ -5,8 +5,8 @@
 **Scope:** Make the game feel responsive at the full 20-player cap by moving off
 host-authoritative play to a **dedicated server**, cutting bandwidth with **Area of
 Interest + projectile pooling**, and tightening combat feel with **client-side
-prediction + Fusion lag compensation**. Camera feel is explicitly out of scope (handled
-separately).
+cosmetic prediction** (lag compensation was dropped — see decision). Camera feel is explicitly
+out of scope (handled separately).
 
 ## Problem
 
@@ -32,7 +32,7 @@ physical collision is a strategic/core mechanic** (body-blocking, guarding the f
 | Authority model | **Dedicated server, server-authoritative** | Single-truth physics is required for PvP collision; Shared Mode cannot arbitrate colliding bodies consistently. |
 | Match start (no host-player) | **Designated host-client** | Room creator gets the Start button and messages the server to load gameplay; preserves current "wait for all, then a human starts" UX. |
 | Scale | **Area of Interest + projectile object pooling** | AoI is the ~3× bandwidth win; pooling removes GC hitches that read as lag. |
-| Combat feel | **Cosmetic client prediction + Fusion lag compensation** | Prediction makes own actions feel instant; lag comp makes hits register against what the shooter saw. |
+| Combat feel | **Cosmetic client prediction only** (lag compensation dropped 2026-06-25 per user) | Prediction makes own actions feel instant. Lag comp was de-scoped: friends-only (no fairness/anti-cheat pressure), projectiles travel (mild corner problem), and the Hitbox conversion was the largest, riskiest change for little felt gain. |
 | Camera | **Out of scope** | Being addressed separately. |
 
 ### Approaches considered (authority model)
@@ -119,33 +119,28 @@ behave as today — with no player acting as server.
 (target the documented ~3× reduction on player sync), the flag HUD/score remain correct for
 distant players, and projectile spawn/despawn no longer produces GC spikes.
 
-### Phase 3 — Combat prediction + lag compensation (feel)
+### Phase 3 — Combat prediction (cosmetic, client-side)
 
-**Goal:** own combat actions feel instant; hits register against the shooter's view.
+**Goal:** own combat actions feel instant on the firing client, with the server still
+authoritative over actual hits/damage. **Lag compensation is dropped** (see decision above) —
+the server keeps its existing `OnTriggerEnter2D` / `OverlapBoxAll` hit detection unchanged.
 
 - **Cosmetic local prediction of shooting.** The shoot cooldown is a predicted `TickTimer`
   on input authority ([PlayerCombat.cs:93](../../../Assets/Scripts/Player/PlayerCombat.cs)),
-  so the client reliably knows locally whether a shot is allowed. On input, immediately play
-  muzzle flash + a cosmetic (non-networked) tracer/ghost; the server's authoritative
-  networked projectile arrives ~½ RTT later and takes over the visual. Reconcile/hide the
-  cosmetic ghost when the real projectile appears (or when the client-predicted cooldown
-  would have denied the shot).
+  so the client reliably knows locally whether a shot is allowed. On input, the input-authority
+  client immediately plays cosmetic, non-networked feedback (muzzle flash + a brief tracer);
+  the server's authoritative networked projectile arrives ~½ RTT later and is the real one.
+  The cosmetic feedback is short-lived so it never lingers alongside the real projectile.
 - **Predicted melee feedback.** Melee swing animation is already predicted
-  ([PlayerCombat.cs:149](../../../Assets/Scripts/Player/PlayerCombat.cs)); extend the same to
-  a locally-predicted hit marker, reconciled if the server reports no hit.
-- **Fusion lag compensation (full).** Convert combat hit detection from Unity
-  `OnTriggerEnter2D` / `OverlapBoxAll` to Fusion **Hitboxes + lag-compensated queries**
-  (`Runner.LagCompensation`), and enable `LagCompensation` in the network config so the
-  server rewinds hitboxes to the shooter's render-time. Applies to both projectile impact
-  and melee overlap.
-  - *Note:* projectiles currently travel as physical `Rigidbody2D` with trigger collision;
-    lag-compensated detection means the server resolves the hit against the rewound target
-    hitbox at the projectile's position, not Unity's live trigger. This is the largest code
-    change in Phase 3.
+  ([PlayerCombat.cs:149](../../../Assets/Scripts/Player/PlayerCombat.cs)); no change needed.
+  A predicted melee *hit marker* is explicitly NOT done — without lag comp it would produce
+  false-positive markers that feel worse than the current server-driven marker.
+- **No authority/hit-detection change.** Damage, stun, projectile spawn, and hit detection
+  stay exactly as today on the server. This phase only adds client-local visuals.
 
-**Done when:** firing produces immediate local feedback regardless of RTT; a shot aimed at
-a moving target on the shooter's screen registers as a hit on the server; melee feels
-responsive; and no double-application or phantom damage occurs under packet loss.
+**Done when:** firing produces immediate local muzzle/tracer feedback on the shooter's client
+regardless of RTT, the real networked projectile still governs actual travel/damage, and there
+is no lingering double-projectile or phantom-damage artifact.
 
 ## Risks & mitigations
 
@@ -155,9 +150,9 @@ responsive; and no double-application or phantom damage occurs under packet loss
 - **AoI hides objects that must stay visible (flag HUD/score).** Mitigation: the
   always-interested set is an explicit, reviewed list; add a smoke test that a distant
   player still sees flag state and score.
-- **Lag-comp Hitbox conversion changes hit behavior.** Mitigation: convert melee and
-  projectile detection behind the same hit-resolution entry points; verify damage/stun
-  parity against the current `OnTriggerEnter2D` behavior before enabling rewind.
+- **Cosmetic prediction lingers as a double-projectile.** Mitigation: the predicted muzzle/
+  tracer is short-lived and non-networked; it never carries damage, so worst case is a brief
+  visual, not a gameplay artifact.
 - **Server build accidentally runs client-only systems.** Mitigation: gate rendering/camera
   /audio behind a server-build check; verify headless boot has no missing-Camera errors.
 
