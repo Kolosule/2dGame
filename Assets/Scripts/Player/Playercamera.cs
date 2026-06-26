@@ -287,7 +287,10 @@ public class PlayerCamera : MonoBehaviour
     private Vector3 ComputeFollowPosition()
     {
         if (holdTimer > 0f)
+        {
+            lastBodyPosition = targetPlayer.position; // keep the absorber's reference current so motion during the hold isn't mis-absorbed as a snap on release
             return currentFollowPosition; // hit-stop: keep the camera put (offsets still apply)
+        }
 
         Vector3 body = AbsorbCorrection(targetPlayer.position);
 
