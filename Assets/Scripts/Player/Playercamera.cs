@@ -69,6 +69,14 @@ public class PlayerCamera : MonoBehaviour
     [Tooltip("Should the camera arrive before the player respawns?")]
     [SerializeField] private bool arriveBeforeRespawn = true;
 
+    [Header("🩹 Network Correction Absorb")]
+    [Tooltip("Body movement faster than this (world units/sec) is treated as a reconciliation " +
+             "snap, not real motion. Keep above dash speed so dashes are followed instantly.")]
+    [SerializeField] private float maxFollowSpeed = 40f;
+
+    [Tooltip("How quickly an absorbed correction eases out (higher = faster catch-up).")]
+    [SerializeField] private float correctionRecoverRate = 9f;
+
     // === INTERNAL VARIABLES (Don't modify these in Inspector) ===
 
     // The player this camera is following
@@ -94,6 +102,11 @@ public class PlayerCamera : MonoBehaviour
     private Vector3 respawnStartPosition;
     private Vector3 respawnTargetPosition;
     private float respawnTransitionTimer = 0f;
+
+    // Network-correction absorb
+    private Vector3 lastBodyPosition;
+    private Vector3 correctionOffset;
+    private bool hasLastBodyPosition;
 
     // Camera component reference
     private Camera cam;
@@ -234,7 +247,7 @@ public class PlayerCamera : MonoBehaviour
     /// </summary>
     private Vector3 ComputeFollowPosition()
     {
-        Vector3 body = targetPlayer.position;
+        Vector3 body = AbsorbCorrection(targetPlayer.position);
 
         // Horizontal: tight follow.
         float newX = Mathf.SmoothDamp(currentFollowPosition.x, body.x,
@@ -252,6 +265,42 @@ public class PlayerCamera : MonoBehaviour
                                       ref followVelocity.y, verticalSmoothTime);
 
         return new Vector3(newX, newY, cameraZPosition);
+    }
+
+    /// <summary>
+    /// Detects reconciliation snaps: if the body moved faster than maxFollowSpeed this frame, the
+    /// excess is moved into correctionOffset (so the followed point stays put) and then eased out
+    /// over the next frames. Normal motion (including dashes) passes through untouched.
+    /// </summary>
+    private Vector3 AbsorbCorrection(Vector3 bodyPos)
+    {
+        if (!hasLastBodyPosition)
+        {
+            lastBodyPosition = bodyPos;
+            hasLastBodyPosition = true;
+        }
+
+        float dt = Time.deltaTime;
+        float maxStep = maxFollowSpeed * Mathf.Max(dt, 0.0001f);
+        Vector3 delta = bodyPos - lastBodyPosition;
+        if (delta.magnitude > maxStep)
+        {
+            // Treat the whole jump as a correction to absorb.
+            correctionOffset += delta;
+        }
+        lastBodyPosition = bodyPos;
+
+        // Ease the absorbed offset out.
+        correctionOffset = Vector3.Lerp(correctionOffset, Vector3.zero, correctionRecoverRate * dt);
+
+        return bodyPos - correctionOffset;
+    }
+
+    /// <summary>Clears absorb state on a legitimate teleport (respawn/snap).</summary>
+    private void ResetCorrection()
+    {
+        correctionOffset = Vector3.zero;
+        hasLastBodyPosition = false;
     }
 
     /// <summary>
@@ -386,6 +435,7 @@ public class PlayerCamera : MonoBehaviour
         {
             currentFollowPosition = respawnTargetPosition;
         }
+        ResetCorrection();
     }
 
     /// <summary>
@@ -414,6 +464,7 @@ public class PlayerCamera : MonoBehaviour
         transform.position = position;
         currentFollowPosition = position;
         followVelocity = Vector3.zero;
+        ResetCorrection();
 
         // Cancel any ongoing transitions
         isTransitioningToRespawn = false;
