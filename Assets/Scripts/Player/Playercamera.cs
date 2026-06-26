@@ -26,6 +26,16 @@ public class PlayerCamera : MonoBehaviour
     [Tooltip("How quickly the camera follows the player (lower = more delay/smoothing)")]
     [SerializeField] private float followSmoothTime = 0.15f;
 
+    [Tooltip("Horizontal follow smoothing — keep very low so run/dash feel instant.")]
+    [SerializeField] private float horizontalSmoothTime = 0.03f;
+
+    [Tooltip("Vertical follow smoothing applied once the player leaves the deadzone band.")]
+    [SerializeField] private float verticalSmoothTime = 0.16f;
+
+    [Tooltip("Half-height (world units) of the vertical deadzone. The camera only moves in Y " +
+             "when the player leaves this band, so jumps/hops don't jerk the view.")]
+    [SerializeField] private float verticalDeadzone = 1.2f;
+
     [Tooltip("Z position of the camera (should be negative to see the game)")]
     [SerializeField] private float cameraZPosition = -10f;
 
@@ -156,17 +166,7 @@ public class PlayerCamera : MonoBehaviour
             return;
         }
 
-        // Calculate target position (where we want the camera to be)
-        Vector3 targetPosition = targetPlayer.position;
-        targetPosition.z = cameraZPosition;
-
-        // Smoothly move camera to target position
-        currentFollowPosition = Vector3.SmoothDamp(
-            currentFollowPosition,
-            targetPosition,
-            ref followVelocity,
-            followSmoothTime
-        );
+        currentFollowPosition = ComputeFollowPosition();
 
         // Apply camera shake if active
         Vector3 finalPosition = currentFollowPosition;
@@ -225,6 +225,33 @@ public class PlayerCamera : MonoBehaviour
 
         // If we get here, we didn't find the local player yet
         // This is normal during the initial connection, so we'll just try again next frame
+    }
+
+    /// <summary>
+    /// Desired camera XY from the followed body: horizontal is near-instant; vertical uses a
+    /// deadzone band so small hops don't move the camera, easing only once the player leaves it.
+    /// Z is left at the current follow Z (applied by the caller).
+    /// </summary>
+    private Vector3 ComputeFollowPosition()
+    {
+        Vector3 body = targetPlayer.position;
+
+        // Horizontal: tight follow.
+        float newX = Mathf.SmoothDamp(currentFollowPosition.x, body.x,
+                                      ref followVelocity.x, horizontalSmoothTime);
+
+        // Vertical: deadzone. Only chase the part of the offset outside the band.
+        float dy = body.y - currentFollowPosition.y;
+        float targetY = currentFollowPosition.y;
+        if (Mathf.Abs(dy) > verticalDeadzone)
+        {
+            float overshoot = dy - Mathf.Sign(dy) * verticalDeadzone;
+            targetY = currentFollowPosition.y + overshoot;
+        }
+        float newY = Mathf.SmoothDamp(currentFollowPosition.y, targetY,
+                                      ref followVelocity.y, verticalSmoothTime);
+
+        return new Vector3(newX, newY, cameraZPosition);
     }
 
     /// <summary>
