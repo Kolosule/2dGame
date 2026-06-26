@@ -63,6 +63,11 @@ public class PlayerCameraShakeHandler : MonoBehaviour
     /// </summary>
     private void Update()
     {
+        // Only the LOCAL player's handler may drive the (single) gameplay camera. Without this,
+        // every player's handler shakes the camera when ANY player takes damage.
+        if (statsHandler == null || statsHandler.Object == null || !statsHandler.Object.HasInputAuthority)
+            return;
+
         // Try to find camera if we don't have it yet
         if (playerCamera == null)
         {

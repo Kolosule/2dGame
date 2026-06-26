@@ -26,6 +26,16 @@ public class PlayerCamera : MonoBehaviour
     [Tooltip("How quickly the camera follows the player (lower = more delay/smoothing)")]
     [SerializeField] private float followSmoothTime = 0.15f;
 
+    [Tooltip("Horizontal follow smoothing — keep very low so run/dash feel instant.")]
+    [SerializeField] private float horizontalSmoothTime = 0.03f;
+
+    [Tooltip("Vertical follow smoothing applied once the player leaves the deadzone band.")]
+    [SerializeField] private float verticalSmoothTime = 0.16f;
+
+    [Tooltip("Half-height (world units) of the vertical deadzone. The camera only moves in Y " +
+             "when the player leaves this band, so jumps/hops don't jerk the view.")]
+    [SerializeField] private float verticalDeadzone = 1.2f;
+
     [Tooltip("Z position of the camera (should be negative to see the game)")]
     [SerializeField] private float cameraZPosition = -10f;
 
@@ -59,11 +69,35 @@ public class PlayerCamera : MonoBehaviour
     [Tooltip("Should the camera arrive before the player respawns?")]
     [SerializeField] private bool arriveBeforeRespawn = true;
 
+    [Header("🩹 Network Correction Absorb")]
+    [Tooltip("Body movement faster than this (world units/sec) is treated as a reconciliation " +
+             "snap, not real motion. Keep above dash speed so dashes are followed instantly.")]
+    [SerializeField] private float maxFollowSpeed = 40f;
+
+    [Tooltip("How quickly an absorbed correction eases out (higher = faster catch-up).")]
+    [SerializeField] private float correctionRecoverRate = 9f;
+
+    [Header("🎯 Aim Lean")]
+    [Tooltip("Bias the camera toward the mouse aim direction.")]
+    [SerializeField] private bool enableAimLean = true;
+
+    [Tooltip("Max camera offset (world units) toward the aim direction. Keep small so the screen " +
+             "edge stays within the player's Area-of-Interest radius.")]
+    [SerializeField] private float aimLeanDistance = 2.0f;
+
+    [Tooltip("Smoothing for the aim lean so fast cursor flicks don't jerk the view.")]
+    [SerializeField] private float aimLeanSmoothTime = 0.2f;
+
     // === INTERNAL VARIABLES (Don't modify these in Inspector) ===
 
     // The player this camera is following
     private Transform targetPlayer;
     private Rigidbody2D targetRigidbody;
+
+    // Aim lean
+    private PlayerCombat targetCombat;
+    private Vector3 currentAimLean;
+    private Vector3 aimLeanVelocity;
 
     // Smooth following variables
     private Vector3 followVelocity;
@@ -84,6 +118,18 @@ public class PlayerCamera : MonoBehaviour
     private Vector3 respawnStartPosition;
     private Vector3 respawnTargetPosition;
     private float respawnTransitionTimer = 0f;
+
+    // Network-correction absorb
+    private Vector3 lastBodyPosition;
+    private Vector3 correctionOffset;
+    private bool hasLastBodyPosition;
+
+    // Impulse channel (dash kick, etc.) — additive, decaying.
+    private struct CamImpulse { public Vector3 dir; public float magnitude; public float duration; public float elapsed; }
+    private readonly System.Collections.Generic.List<CamImpulse> impulses = new System.Collections.Generic.List<CamImpulse>();
+
+    // Hit-stop hold
+    private float holdTimer;
 
     // Camera component reference
     private Camera cam;
@@ -156,20 +202,23 @@ public class PlayerCamera : MonoBehaviour
             return;
         }
 
-        // Calculate target position (where we want the camera to be)
-        Vector3 targetPosition = targetPlayer.position;
-        targetPosition.z = cameraZPosition;
+        if (holdTimer > 0f) holdTimer -= Time.deltaTime;
 
-        // Smoothly move camera to target position
-        currentFollowPosition = Vector3.SmoothDamp(
-            currentFollowPosition,
-            targetPosition,
-            ref followVelocity,
-            followSmoothTime
-        );
+        currentFollowPosition = ComputeFollowPosition();
+
+        // Aim lean (additive, capped, smoothed).
+        Vector3 targetLean = Vector3.zero;
+        if (enableAimLean && targetCombat != null)
+        {
+            Vector2 aimDir = targetCombat.GetAimDirection();
+            targetLean = (Vector3)(aimDir * aimLeanDistance);
+        }
+        currentAimLean = Vector3.SmoothDamp(currentAimLean, targetLean,
+                                            ref aimLeanVelocity, aimLeanSmoothTime);
 
         // Apply camera shake if active
-        Vector3 finalPosition = currentFollowPosition;
+        Vector3 finalPosition = currentFollowPosition + currentAimLean;
+        finalPosition.z = cameraZPosition;
         if (shakeTimer > 0f)
         {
             // Generate random shake offset
@@ -177,6 +226,8 @@ public class PlayerCamera : MonoBehaviour
             shakeOffset.z = 0f; // Keep shake in 2D plane
             finalPosition += shakeOffset;
         }
+
+        finalPosition += EvaluateImpulses();
 
         // Set camera position
         transform.position = finalPosition;
@@ -212,6 +263,7 @@ public class PlayerCamera : MonoBehaviour
                 // Found the local player!
                 targetPlayer = player.transform;
                 targetRigidbody = player.GetComponent<Rigidbody2D>();
+                targetCombat = player.GetComponent<PlayerCombat>();
 
                 // Initialize the camera position to the player's position immediately
                 currentFollowPosition = targetPlayer.position;
@@ -225,6 +277,76 @@ public class PlayerCamera : MonoBehaviour
 
         // If we get here, we didn't find the local player yet
         // This is normal during the initial connection, so we'll just try again next frame
+    }
+
+    /// <summary>
+    /// Desired camera XY from the followed body: horizontal is near-instant; vertical uses a
+    /// deadzone band so small hops don't move the camera, easing only once the player leaves it.
+    /// Z is left at the current follow Z (applied by the caller).
+    /// </summary>
+    private Vector3 ComputeFollowPosition()
+    {
+        if (holdTimer > 0f)
+        {
+            lastBodyPosition = targetPlayer.position; // keep the absorber's reference current so motion during the hold isn't mis-absorbed as a snap on release
+            return currentFollowPosition; // hit-stop: keep the camera put (offsets still apply)
+        }
+
+        Vector3 body = AbsorbCorrection(targetPlayer.position);
+
+        // Horizontal: tight follow.
+        float newX = Mathf.SmoothDamp(currentFollowPosition.x, body.x,
+                                      ref followVelocity.x, horizontalSmoothTime);
+
+        // Vertical: deadzone. Only chase the part of the offset outside the band.
+        float dy = body.y - currentFollowPosition.y;
+        float targetY = currentFollowPosition.y;
+        if (Mathf.Abs(dy) > verticalDeadzone)
+        {
+            float overshoot = dy - Mathf.Sign(dy) * verticalDeadzone;
+            targetY = currentFollowPosition.y + overshoot;
+        }
+        float newY = Mathf.SmoothDamp(currentFollowPosition.y, targetY,
+                                      ref followVelocity.y, verticalSmoothTime);
+
+        return new Vector3(newX, newY, cameraZPosition);
+    }
+
+    /// <summary>
+    /// Detects reconciliation snaps: if the body moved faster than maxFollowSpeed this frame, the
+    /// excess is moved into correctionOffset (so the followed point stays put) and then eased out
+    /// over the next frames. Normal motion (including dashes) passes through untouched.
+    /// </summary>
+    private Vector3 AbsorbCorrection(Vector3 bodyPos)
+    {
+        if (!hasLastBodyPosition)
+        {
+            lastBodyPosition = bodyPos;
+            hasLastBodyPosition = true;
+        }
+
+        float dt = Time.deltaTime;
+        float maxStep = maxFollowSpeed * Mathf.Max(dt, 0.0001f);
+        Vector3 delta = bodyPos - lastBodyPosition;
+        if (delta.magnitude > maxStep)
+        {
+            // Only the portion beyond maxStep is a reconciliation snap; absorb that excess so
+            // legitimate-speed motion (up to maxFollowSpeed) passes through untouched.
+            correctionOffset += delta.normalized * (delta.magnitude - maxStep);
+        }
+        lastBodyPosition = bodyPos;
+
+        // Ease the absorbed offset out.
+        correctionOffset = Vector3.Lerp(correctionOffset, Vector3.zero, 1f - Mathf.Exp(-correctionRecoverRate * dt));
+
+        return bodyPos - correctionOffset;
+    }
+
+    /// <summary>Clears absorb state on a legitimate teleport (respawn/snap).</summary>
+    private void ResetCorrection()
+    {
+        correctionOffset = Vector3.zero;
+        hasLastBodyPosition = false;
     }
 
     /// <summary>
@@ -262,6 +384,39 @@ public class PlayerCamera : MonoBehaviour
         // Horizontal view is automatically calculated based on aspect ratio.
         // To affect horizontal view, you'd need to change the camera's aspect ratio,
         // which is typically controlled by the game window size.
+    }
+
+    /// <summary>
+    /// Push a directional camera impulse that decays to zero over <paramref name="duration"/>.
+    /// Local cosmetic feedback only.
+    /// </summary>
+    public void AddImpulse(Vector2 direction, float magnitude, float duration)
+    {
+        if (duration <= 0f || magnitude <= 0f) return;
+        Vector3 d = direction.sqrMagnitude > 0.0001f ? (Vector3)direction.normalized : Vector3.zero;
+        impulses.Add(new CamImpulse { dir = d, magnitude = magnitude, duration = duration, elapsed = 0f });
+    }
+
+    /// <summary>Sums + advances all active impulses, dropping expired ones. Call once per frame.</summary>
+    private Vector3 EvaluateImpulses()
+    {
+        Vector3 sum = Vector3.zero;
+        for (int i = impulses.Count - 1; i >= 0; i--)
+        {
+            CamImpulse imp = impulses[i];
+            imp.elapsed += Time.deltaTime;
+            if (imp.elapsed >= imp.duration) { impulses.RemoveAt(i); continue; }
+            float t = 1f - (imp.elapsed / imp.duration); // linear decay
+            sum += imp.dir * (imp.magnitude * t);
+            impulses[i] = imp;
+        }
+        return sum;
+    }
+
+    /// <summary>Briefly freezes follow advancement (render-only hit-stop). Never affects the sim.</summary>
+    public void Hold(float duration)
+    {
+        if (duration > holdTimer) holdTimer = duration;
     }
 
     /// <summary>
@@ -359,6 +514,7 @@ public class PlayerCamera : MonoBehaviour
         {
             currentFollowPosition = respawnTargetPosition;
         }
+        ResetCorrection();
     }
 
     /// <summary>
@@ -387,6 +543,7 @@ public class PlayerCamera : MonoBehaviour
         transform.position = position;
         currentFollowPosition = position;
         followVelocity = Vector3.zero;
+        ResetCorrection();
 
         // Cancel any ongoing transitions
         isTransitioningToRespawn = false;
@@ -401,6 +558,7 @@ public class PlayerCamera : MonoBehaviour
     {
         targetPlayer = null;
         targetRigidbody = null;
+        targetCombat = null;
         FindLocalPlayer();
 
     }
