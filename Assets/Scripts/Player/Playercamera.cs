@@ -286,6 +286,9 @@ public class PlayerCamera : MonoBehaviour
     /// </summary>
     private Vector3 ComputeFollowPosition()
     {
+        if (holdTimer > 0f)
+            return currentFollowPosition; // hit-stop: keep the camera put (offsets still apply)
+
         Vector3 body = AbsorbCorrection(targetPlayer.position);
 
         // Horizontal: tight follow.
