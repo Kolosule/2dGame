@@ -16,7 +16,7 @@ MonoBehaviour:
   jumpForce: 25
   maxAirJumps: 1
   dashSpeed: 50
-  dashTime: 0.25
+  dashTime: 0.12
   dashCooldown: 0.75
   attackDamage: 25
   attackForce: 10

@@ -19,7 +19,7 @@ MonoBehaviour:
   moveSpeed: 5
   detectionRange: 15
   attackRange: 1.5
-  leashRadius: 30
-  wanderRadius: 20
+  leashRadius: 35
+  wanderRadius: 15
   level: 1
   enemyTeam: 
