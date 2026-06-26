@@ -77,11 +77,27 @@ public class PlayerCamera : MonoBehaviour
     [Tooltip("How quickly an absorbed correction eases out (higher = faster catch-up).")]
     [SerializeField] private float correctionRecoverRate = 9f;
 
+    [Header("🎯 Aim Lean")]
+    [Tooltip("Bias the camera toward the mouse aim direction.")]
+    [SerializeField] private bool enableAimLean = true;
+
+    [Tooltip("Max camera offset (world units) toward the aim direction. Keep small so the screen " +
+             "edge stays within the player's Area-of-Interest radius.")]
+    [SerializeField] private float aimLeanDistance = 2.0f;
+
+    [Tooltip("Smoothing for the aim lean so fast cursor flicks don't jerk the view.")]
+    [SerializeField] private float aimLeanSmoothTime = 0.2f;
+
     // === INTERNAL VARIABLES (Don't modify these in Inspector) ===
 
     // The player this camera is following
     private Transform targetPlayer;
     private Rigidbody2D targetRigidbody;
+
+    // Aim lean
+    private PlayerCombat targetCombat;
+    private Vector3 currentAimLean;
+    private Vector3 aimLeanVelocity;
 
     // Smooth following variables
     private Vector3 followVelocity;
@@ -181,8 +197,19 @@ public class PlayerCamera : MonoBehaviour
 
         currentFollowPosition = ComputeFollowPosition();
 
+        // Aim lean (additive, capped, smoothed).
+        Vector3 targetLean = Vector3.zero;
+        if (enableAimLean && targetCombat != null)
+        {
+            Vector2 aimDir = targetCombat.GetAimDirection();
+            targetLean = (Vector3)(aimDir * aimLeanDistance);
+        }
+        currentAimLean = Vector3.SmoothDamp(currentAimLean, targetLean,
+                                            ref aimLeanVelocity, aimLeanSmoothTime);
+
         // Apply camera shake if active
-        Vector3 finalPosition = currentFollowPosition;
+        Vector3 finalPosition = currentFollowPosition + currentAimLean;
+        finalPosition.z = cameraZPosition;
         if (shakeTimer > 0f)
         {
             // Generate random shake offset
@@ -225,6 +252,7 @@ public class PlayerCamera : MonoBehaviour
                 // Found the local player!
                 targetPlayer = player.transform;
                 targetRigidbody = player.GetComponent<Rigidbody2D>();
+                targetCombat = player.GetComponent<PlayerCombat>();
 
                 // Initialize the camera position to the player's position immediately
                 currentFollowPosition = targetPlayer.position;
@@ -480,6 +508,7 @@ public class PlayerCamera : MonoBehaviour
     {
         targetPlayer = null;
         targetRigidbody = null;
+        targetCombat = null;
         FindLocalPlayer();
 
     }

@@ -59,6 +59,7 @@ public class PlayerCombat : NetworkBehaviour
     private PlayerMovement playerMovement;
     private PlayerStatModifiers mods;
     private int verticalAim;
+    private Vector2 lastAimWorldPoint;
 
     // Dash-strike dedup: server-only, non-networked. Cleared on each new dash rising edge.
     private readonly HashSet<Collider2D> dashStruck = new HashSet<Collider2D>();
@@ -81,6 +82,7 @@ public class PlayerCombat : NetworkBehaviour
     public void Simulate(NetInput input, NetworkButtons pressed)
     {
         verticalAim = input.VerticalAim;
+        lastAimWorldPoint = input.AimWorldPoint;
 
         if (pressed.IsSet((int)PlayerButton.Melee) && AttackCooldownTimer.ExpiredOrNotRunning(Runner))
         {
@@ -277,6 +279,16 @@ public class PlayerCombat : NetworkBehaviour
                 Projectile p = obj.GetComponent<Projectile>();
                 if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam);
             });
+    }
+
+    /// <summary>
+    /// Local aim direction (unit vector) from this player toward the last mouse aim point. Used by
+    /// PlayerCamera for the aim lean. Returns Vector2.zero before any input or if degenerate.
+    /// </summary>
+    public Vector2 GetAimDirection()
+    {
+        Vector2 d = lastAimWorldPoint - (Vector2)transform.position;
+        return d.sqrMagnitude > 0.0001f ? d.normalized : Vector2.zero;
     }
 
     void OnDrawGizmosSelected()
