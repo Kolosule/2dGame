@@ -124,6 +124,13 @@ public class PlayerCamera : MonoBehaviour
     private Vector3 correctionOffset;
     private bool hasLastBodyPosition;
 
+    // Impulse channel (dash kick, etc.) — additive, decaying.
+    private struct CamImpulse { public Vector3 dir; public float magnitude; public float duration; public float elapsed; }
+    private readonly System.Collections.Generic.List<CamImpulse> impulses = new System.Collections.Generic.List<CamImpulse>();
+
+    // Hit-stop hold
+    private float holdTimer;
+
     // Camera component reference
     private Camera cam;
 
@@ -195,6 +202,8 @@ public class PlayerCamera : MonoBehaviour
             return;
         }
 
+        if (holdTimer > 0f) holdTimer -= Time.deltaTime;
+
         currentFollowPosition = ComputeFollowPosition();
 
         // Aim lean (additive, capped, smoothed).
@@ -217,6 +226,8 @@ public class PlayerCamera : MonoBehaviour
             shakeOffset.z = 0f; // Keep shake in 2D plane
             finalPosition += shakeOffset;
         }
+
+        finalPosition += EvaluateImpulses();
 
         // Set camera position
         transform.position = finalPosition;
@@ -367,6 +378,39 @@ public class PlayerCamera : MonoBehaviour
         // Horizontal view is automatically calculated based on aspect ratio.
         // To affect horizontal view, you'd need to change the camera's aspect ratio,
         // which is typically controlled by the game window size.
+    }
+
+    /// <summary>
+    /// Push a directional camera impulse that decays to zero over <paramref name="duration"/>.
+    /// Local cosmetic feedback only.
+    /// </summary>
+    public void AddImpulse(Vector2 direction, float magnitude, float duration)
+    {
+        if (duration <= 0f || magnitude <= 0f) return;
+        Vector3 d = direction.sqrMagnitude > 0.0001f ? (Vector3)direction.normalized : Vector3.zero;
+        impulses.Add(new CamImpulse { dir = d, magnitude = magnitude, duration = duration, elapsed = 0f });
+    }
+
+    /// <summary>Sums + advances all active impulses, dropping expired ones. Call once per frame.</summary>
+    private Vector3 EvaluateImpulses()
+    {
+        Vector3 sum = Vector3.zero;
+        for (int i = impulses.Count - 1; i >= 0; i--)
+        {
+            CamImpulse imp = impulses[i];
+            imp.elapsed += Time.deltaTime;
+            if (imp.elapsed >= imp.duration) { impulses.RemoveAt(i); continue; }
+            float t = 1f - (imp.elapsed / imp.duration); // linear decay
+            sum += imp.dir * (imp.magnitude * t);
+            impulses[i] = imp;
+        }
+        return sum;
+    }
+
+    /// <summary>Briefly freezes follow advancement (render-only hit-stop). Never affects the sim.</summary>
+    public void Hold(float duration)
+    {
+        if (duration > holdTimer) holdTimer = duration;
     }
 
     /// <summary>
