@@ -233,6 +233,8 @@ GameObject:
   - component: {fileID: 6955539971465329193}
   - component: {fileID: 4228812419356423348}
   - component: {fileID: 2004737409023527185}
+  - component: {fileID: 149290342099161498}
+  - component: {fileID: 7177406052163348810}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -347,6 +349,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7621ade7304d0724abfff8a489173ae6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
+  areaOfInterestRadius: 25
 --- !u!114 &2763095343719607636
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -404,6 +407,12 @@ MonoBehaviour:
   projectileSpeed: 40
   projectileScale: 1
   projectileCooldown: 1
+  muzzleFlashPrefab: {fileID: 0}
+  muzzleFlashLifetime: 0.2
+  tracerColor: {r: 1, g: 0.9, b: 0.3, a: 1}
+  tracerLength: 1.5
+  tracerWidth: 0.08
+  tracerDuration: 0.1
   groundCheck: {fileID: 0}
   groundCheckRadius: 0.2
   groundLayer:
@@ -627,6 +636,38 @@ MonoBehaviour:
   ownerAlpha: 0.5
   teammateAlpha: 0.5
   enemyAlpha: 0.05
+--- !u!114 &149290342099161498
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e368f8e518dcd244b65f100b4c97eef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCameraFeelHandler
+  dashKickMagnitude: 0.5
+  dashKickDuration: 0.12
+  hitStopDuration: 0.07
+  hitStopPunch: 0.15
+--- !u!114 &7177406052163348810
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e368f8e518dcd244b65f100b4c97eef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCameraFeelHandler
+  dashKickMagnitude: 0.5
+  dashKickDuration: 0.12
+  hitStopDuration: 0.07
+  hitStopPunch: 0.15
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0
