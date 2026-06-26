@@ -285,13 +285,14 @@ public class PlayerCamera : MonoBehaviour
         Vector3 delta = bodyPos - lastBodyPosition;
         if (delta.magnitude > maxStep)
         {
-            // Treat the whole jump as a correction to absorb.
-            correctionOffset += delta;
+            // Only the portion beyond maxStep is a reconciliation snap; absorb that excess so
+            // legitimate-speed motion (up to maxFollowSpeed) passes through untouched.
+            correctionOffset += delta.normalized * (delta.magnitude - maxStep);
         }
         lastBodyPosition = bodyPos;
 
         // Ease the absorbed offset out.
-        correctionOffset = Vector3.Lerp(correctionOffset, Vector3.zero, correctionRecoverRate * dt);
+        correctionOffset = Vector3.Lerp(correctionOffset, Vector3.zero, 1f - Mathf.Exp(-correctionRecoverRate * dt));
 
         return bodyPos - correctionOffset;
     }
