@@ -1,12 +1,14 @@
-# Testing Guide — Dedicated Server (Phase 1) + Area of Interest (Phase 2a)
+# Testing Guide — Dedicated Server Responsiveness (Phases 1, 2a, 2b, 3)
 
 This is the **Unity-Editor-side** work that the agent could not run (no Unity CLI in the
-authoring environment): one-time setup, then the verification procedures for Phase 1
-(dedicated server + lobby) and Phase 2a (Area of Interest).
+authoring environment): one-time setup, then the verification procedures for Phase 1 (dedicated
+server + lobby, §D), Phase 2a (Area of Interest, §B + §E), Phase 2b (projectile pooling, §F), and
+Phase 3 (cosmetic shoot prediction, §G).
 
-Do the sections in order. **Phase 2a will visibly break the game if its scene wiring
+Each phase ships on its own branch/PR — verify whichever you have merged or checked out. Do the
+setup before the matching verification. **Phase 2a will visibly break the game if its scene wiring
 (Section B) is skipped** — enabling AoI culls anything not in a player's region or marked
-always-interested.
+always-interested. **Phase 2b does nothing until you add `Poolable` to the projectile prefab (§F).**
 
 ---
 
@@ -145,25 +147,76 @@ players spread across the map.
 
 ---
 
-## F. Troubleshooting
+## F. Phase 2b verification — projectile object pooling
+
+**Setup (one-time):** open the project so Unity generates `.meta` for the new `Assets/Scripts/Pooling/`
+scripts. Then open the **projectile prefab** (the `NetworkObject` assigned to
+`PlayerCombat.projectilePrefab`) and add the **`Poolable`** component. No other prefab needs it —
+players etc. stay un-pooled. (Pooling does nothing until the prefab is marked.)
+
+- [ ] **Functional parity.** Fire repeatedly. Projectiles spawn, travel, hit (damage + stun apply),
+      and despawn exactly as before.
+- [ ] **Reuse correctness (the crux).** Fire a shot that hits something, then fire again: the second
+      projectile must still deal damage. A recycled projectile that does nothing / dies instantly
+      means `Projectile.hasHit` isn't being reset on reuse (`Projectile.Spawned` change missing).
+- [ ] **GC.** With the Unity Profiler (GC Alloc track), sustained rapid fire should no longer show
+      the per-shot allocation/`Destroy` spikes — allocations from projectile spawn/despawn drop
+      toward zero once the pool warms up.
+- [ ] **Non-pooled unaffected.** Players still spawn on join and despawn on leave normally (no
+      `Poolable` → default Instantiate/Destroy path).
+
+---
+
+## G. Phase 3 verification — cosmetic shoot prediction
+
+**Setup:** Unity generates `.meta` for `Assets/Scripts/Player/CosmeticTracer.cs`. Optionally assign a
+`muzzleFlashPrefab` on the player prefab's `PlayerCombat` (leaving it null is fine — the
+code-generated tracer still fires). Tune `tracerColor/Length/Width/Duration` to taste.
+
+Run the headless server + a real client (`singlePlayerMode = false`). On the client:
+
+- [ ] **Instant feedback.** Firing shows the muzzle/tracer the moment you press shoot — no
+      round-trip delay (before this, the projectile only appeared after ~½ RTT).
+- [ ] **Real projectile still governs gameplay.** The networked projectile still travels and deals
+      damage/stun exactly as before; the cosmetic tracer is brief and doesn't linger beside it.
+- [ ] **No duplicates.** Rapid fire / lag does not spawn multiple tracers per shot (the
+      `Runner.IsForward` guard holds under resimulation).
+- [ ] **Host-as-player unaffected.** In solo-dev host mode (`singlePlayerMode = true`) there is no
+      double projectile — the cosmetic is skipped (`!HasStateAuthority`) and the real projectile is
+      already instant.
+- [ ] **Tracer renders in a build.** If the tracer is invisible in a player build, add
+      `Sprites/Default` to Project Settings → Graphics → Always Included Shaders (build stripping).
+
+---
+
+## H. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Distant flag state / score / arrow disappears | `AlwaysInterestedMarker` missing on that object, or no `AreaOfInterestRegistrar` in the scene | Section B wiring |
 | Carried flag/arrow desyncs only for far players | carrier not getting dynamic interest — registrar absent | ensure one `AreaOfInterestRegistrar` exists; it logs nothing, so confirm the component is present |
 | Everything beyond the screen edge vanishes | `areaOfInterestRadius` too small | raise it on the player prefab (try 30–35) |
-| Whole world vanishes for all clients | AoI enabled but no regions/markets registered (e.g. registrar never initialized) | confirm `NetworkedSpawnManager` runs on the server and the registrar is in the Gameplay scene |
-| "Two assembly definitions in the same folder" compile error | AoI scripts placed under `Assets/Scripts/Net/` | move them to `Assets/Scripts/AreaOfInterest/` |
+| Whole world vanishes for all clients | AoI enabled but no regions/markers registered (e.g. registrar never initialized) | confirm `NetworkedSpawnManager` runs on the server and the registrar is in the Gameplay scene |
+| "Two assembly definitions in the same folder" compile error | new scripts placed under `Assets/Scripts/Net/` (the engine-free `Game.Net` asmdef) | move them out (AoI → `AreaOfInterest/`, pooling → `Pooling/`) |
 | Far enemy *players* never appear even when close | radius too small, or AoI region not being added | confirm `ReplicationFeatures = 2` and that `PlayerController.FixedUpdateNetwork` runs on the server |
+| Recycled projectile deals no damage / dies on spawn | `Projectile.hasHit` not reset on reuse | confirm `Spawned()` starts with `hasHit = false;` |
+| Players stop spawning after enabling pooling | provider wrongly pooling the player prefab | only the projectile prefab should have `Poolable`; non-poolable prefabs fall through to base |
+| No muzzle/tracer on fire | testing on the wrong peer | use a real client (`singlePlayerMode = false`); the cosmetic is skipped on the server/host by design |
+| Two projectiles visible per shot | cosmetic lingering next to the real one | lower `tracerDuration`/`muzzleFlashLifetime`; confirm it's a client (host-as-player skips the cosmetic) |
 
 ---
 
-## G. Known follow-ups (not blocking these tests)
+## I. Known follow-ups (not blocking these tests)
 
 - **Capture leaves the captor always-interested.** Capture ends the match without going through
   drop/return, so the captor stays in the always-interested set. Harmless for a single-capture
   match (the match is over). If you later add a **score-and-continue / multi-capture** mode, add
   a `RemoveAlwaysInterested(captor)` at the capture point.
-- **Phase 2b — projectile object pooling** is not implemented yet (separate plan).
+- **Pooled instances linger on runner shutdown** (inactive GameObjects freed by scene teardown);
+  and **`CosmeticTracer` allocates a `Material` per shot** (GC reclaims it). Both are harmless at
+  this game's scale; pool/shared-material them only if the profiler ever flags it.
+- **Traveling ghost projectile not built.** Phase 3 gives an instant muzzle/tracer but the real
+  projectile still appears ~½ RTT later. If that travel delay still feels bad after testing, a full
+  cosmetic ghost projectile is the next lever (deliberately skipped — it risks double-vision).
 - **Three cosmetic stale doc-comments** from Phase 1 (`RefreshStartGate` "Host-only",
   `SetStartAvailable` "no-op for clients") are deferred cleanup.
