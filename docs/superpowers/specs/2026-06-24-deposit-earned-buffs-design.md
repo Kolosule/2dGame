@@ -73,7 +73,13 @@ TierLevel(buff) = clamp(ceil((UnlockedSteps - p) / 3), 0, 3)
 |---|---|---|---|---|
 | **Extra Jump** | passive | +1 air jump | +2 air jumps | unlimited air jumps |
 | **Stealth** | active | 1s duration | 3s duration | 10s duration, usable while carrying flag |
-| **Quicker Dash** | passive (+on-dash) | dash cooldown ×0.5 | dash cooldown ×0 (removed) | + deals melee damage while dashing |
+| **Quicker Dash** | passive (+on-dash) | +50% dash range (longer dash duration) | + dash cooldown ×0.5 | + deals melee damage in front while dashing |
+
+> **Revised 2026-06-26.** The Quicker Dash tiers were re-tuned from the original
+> `cooldown ×0.5 / cooldown ×0 / +damage`. Tiers are now **cumulative**: T1 extends
+> dash range by 50% via `DashTimeMultiplier ×1.5` (same dash speed, 50% longer
+> duration → 50% farther), T2 *adds* `DashCooldownMultiplier ×0.5`, T3 *adds* the
+> front dash-strike. See [DashBuffDefinition.cs](../../../Assets/Scripts/Buffs/DashBuffDefinition.cs).
 
 Fixed tuning (all data-driven, listed here as defaults):
 
@@ -90,9 +96,12 @@ Fixed tuning (all data-driven, listed here as defaults):
 - **Unlimited air jumps:** facade exposes `UnlimitedAirJumps` bool. `PlayerMovement`
   gates the air jump on `unlimited || RemainingAirJumps > 0` and only decrements
   `RemainingAirJumps` when not unlimited.
-- **Dash cooldown removed (×0):** `EffectiveDashCooldown = dashCooldown × 0 = 0`; the
-  `TickTimer` expires instantly so dash is immediately reusable. Flows through the
-  existing dash code unchanged.
+- **Dash range +50% (T1, revised 2026-06-26):** `DashTimeMultiplier ×1.5` →
+  `EffectiveDashTime = dashTime × 1.5`. Dash speed is unchanged, so the dash lasts 50%
+  longer and covers 50% more ground (range = dashSpeed × dashTime). Flows through the
+  existing `StartDash` / `EffectiveDashTime` path unchanged.
+- **Dash cooldown ×0.5 (T2, revised 2026-06-26):** `EffectiveDashCooldown = dashCooldown × 0.5`;
+  cooldown halved. (Originally T1 ×0.5 / T2 ×0; re-tuned so T2 keeps a real cooldown.)
 - **Dash deals damage (T3):** `PlayerCombat.Simulate` gains a server-only branch —
   while `movement.IsDashing()` and the facade reports `DashDealsDamage`, it runs the
   same `Physics2D.OverlapBoxAll(sideAttackPoint, sideAttackArea, attackableLayer)` +

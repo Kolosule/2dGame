@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Quicker Dash
   icon: {fileID: 0}
   kind: 0
-  cooldownMultipliers:
-  - 0.5
-  - 0
-  - 0
+  rangeFromTier: 1
+  rangeMultiplier: 1.5
+  cooldownFromTier: 2
+  cooldownMultiplier: 0.5
   dashDamageFromTier: 3
