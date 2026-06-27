@@ -544,6 +544,7 @@ GameObject:
   - component: {fileID: 34990972}
   - component: {fileID: 34990971}
   - component: {fileID: 34990973}
+  - component: {fileID: 34990974}
   m_Layer: 0
   m_Name: TeamScoreManager
   m_TagString: Untagged
@@ -611,6 +612,18 @@ MonoBehaviour:
   NetworkedBehaviours:
   - {fileID: 34990971}
   ForceRemoteRenderTimeframe: 0
+--- !u!114 &34990974
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 34990970}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7df40feb07408084cbc8854d600ca30f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AlwaysInterestedMarker
 --- !u!1 &36917005
 GameObject:
   m_ObjectHideFlags: 0
@@ -7378,6 +7391,50 @@ Transform:
   m_Children: []
   m_Father: {fileID: 530325726}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &909952653
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 909952655}
+  - component: {fileID: 909952654}
+  m_Layer: 0
+  m_Name: AreaOfInterestRegitrar
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &909952654
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 909952653}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87aa14cf75683d34680b9c134cdf4bb5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AreaOfInterestRegistrar
+--- !u!4 &909952655
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 909952653}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 790.845, y: 274.67838, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &910584002
 GameObject:
   m_ObjectHideFlags: 0
@@ -8048,6 +8105,9 @@ MonoBehaviour:
   horizontalViewMultiplier: 1
   verticalViewMultiplier: 1
   followSmoothTime: 0.05
+  horizontalSmoothTime: 0.03
+  verticalSmoothTime: 0.16
+  verticalDeadzone: 1.2
   cameraZPosition: -10
   enableSpeedZoom: 1
   maxZoomOutAmount: 2
@@ -8058,6 +8118,11 @@ MonoBehaviour:
   shakeDecay: 2
   respawnTransitionTime: 2
   arriveBeforeRespawn: 1
+  maxFollowSpeed: 40
+  correctionRecoverRate: 9
+  enableAimLean: 1
+  aimLeanDistance: 2
+  aimLeanSmoothTime: 0.2
 --- !u!114 &955214613
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15533,6 +15598,7 @@ GameObject:
   - component: {fileID: 7065038410151508182}
   - component: {fileID: 5933690063085526574}
   - component: {fileID: 8612025022324218105}
+  - component: {fileID: 8612025022324218106}
   m_Layer: 0
   m_Name: CTFGameManager
   m_TagString: Untagged
@@ -15673,6 +15739,7 @@ GameObject:
   - component: {fileID: 8653766133277180242}
   - component: {fileID: 3638650706254270083}
   - component: {fileID: 8653766133277180243}
+  - component: {fileID: 8653766133277180244}
   m_Layer: 10
   m_Name: Team2Flag
   m_TagString: Untagged
@@ -15754,6 +15821,7 @@ GameObject:
   - component: {fileID: 6955762202970811500}
   - component: {fileID: 6859469528351059374}
   - component: {fileID: 7862047424769601565}
+  - component: {fileID: 7862047424769601566}
   m_Layer: 10
   m_Name: Team1Flag
   m_TagString: Untagged
@@ -15780,6 +15848,18 @@ MonoBehaviour:
   NetworkedBehaviours:
   - {fileID: 5513339658241674972}
   ForceRemoteRenderTimeframe: 0
+--- !u!114 &7862047424769601566
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7862047424769601564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7df40feb07408084cbc8854d600ca30f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AlwaysInterestedMarker
 --- !u!114 &8612025022324218105
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15799,6 +15879,18 @@ MonoBehaviour:
   NetworkedBehaviours:
   - {fileID: 5933690063085526574}
   ForceRemoteRenderTimeframe: 0
+--- !u!114 &8612025022324218106
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4868426844053686543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7df40feb07408084cbc8854d600ca30f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AlwaysInterestedMarker
 --- !u!61 &8653766133277180242
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -15864,6 +15956,18 @@ MonoBehaviour:
   NetworkedBehaviours:
   - {fileID: 5899147913656068623}
   ForceRemoteRenderTimeframe: 0
+--- !u!114 &8653766133277180244
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6937719197740284865}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7df40feb07408084cbc8854d600ca30f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AlwaysInterestedMarker
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -15885,3 +15989,4 @@ SceneRoots:
   - {fileID: 7065038410151508182}
   - {fileID: 955214616}
   - {fileID: 141480359}
+  - {fileID: 909952655}
