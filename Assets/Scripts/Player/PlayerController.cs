@@ -11,7 +11,12 @@ public class PlayerController : NetworkBehaviour
     private PlayerAnimator animator;
     private PlayerBuffs buffs;
     private Rigidbody2D rb;
-    private NetworkButtons previousButtons;
+
+    // [Networked] so it rewinds with the simulation: during a resimulation Fusion re-runs past
+    // ticks, and edge detection (GetPressed/GetReleased) must compare against the button state
+    // of the tick being re-run, not the latest one. A plain field here causes double-fired or
+    // swallowed presses on the predicting client under real latency.
+    [Networked] private NetworkButtons PreviousButtons { get; set; }
 
     [Header("Area of Interest")]
     [Tooltip("Server-only: radius (world units) around this player that is replicated to them. " +
@@ -49,9 +54,9 @@ public class PlayerController : NetworkBehaviour
         if (GetInput(out NetInput input))
         {
             NetworkButtons current = input.Buttons;
-            NetworkButtons pressed = current.GetPressed(previousButtons);
-            NetworkButtons released = current.GetReleased(previousButtons);
-            previousButtons = current;
+            NetworkButtons pressed = current.GetPressed(PreviousButtons);
+            NetworkButtons released = current.GetReleased(PreviousButtons);
+            PreviousButtons = current;
 
             // Death freeze, gated on the networked IsDead so it is authoritative and
             // resimulation-safe (no reliance on RPC-toggled component enabled flags). Zero the

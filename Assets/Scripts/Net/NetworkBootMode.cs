@@ -4,21 +4,19 @@ using System.Collections.Generic;
 public enum NetworkBootKind
 {
     DedicatedServer,   // headless GameMode.Server, not a player
-    Client,            // normal player, GameMode.Client
-    SinglePlayerHost,  // dev convenience: GameMode.Host (host is also a player)
+    Client,            // interactive build: show the menu (player picks Host or Client there)
 }
 
 /// <summary>
 /// Pure decision for how GameNetworkManager should start the runner. Kept free of UnityEngine
 /// so it is unit-testable. Batch mode or an explicit "-dedicatedServer" arg means this process
-/// is the dedicated server; otherwise it is an interactive client (or a single-player host for
-/// solo dev testing).
+/// is the dedicated server; otherwise it is an interactive build that shows the menu.
 /// </summary>
 public static class NetworkBootMode
 {
     public const string DedicatedServerArg = "-dedicatedServer";
 
-    public static NetworkBootKind Resolve(bool isBatchMode, IReadOnlyList<string> args, bool singlePlayerMode)
+    public static NetworkBootKind Resolve(bool isBatchMode, IReadOnlyList<string> args)
     {
         if (isBatchMode) return NetworkBootKind.DedicatedServer;
 
@@ -28,6 +26,6 @@ public static class NetworkBootMode
                 if (args[i] == DedicatedServerArg) return NetworkBootKind.DedicatedServer;
         }
 
-        return singlePlayerMode ? NetworkBootKind.SinglePlayerHost : NetworkBootKind.Client;
+        return NetworkBootKind.Client;
     }
 }
