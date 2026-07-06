@@ -90,6 +90,14 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             teamComponent.territorialAdvantage = territorialAdvantage;
         }
 
+        // Networked team so clients colorize correctly (the teamComponent fields above are
+        // server-local; they remain as the authored fallback for scene-placed enemies).
+        Enemy enemy = enemyObj.GetComponent<Enemy>();
+        if (enemy != null)
+        {
+            enemy.ServerSetTeam(TeamUtil.Normalize(teamID));
+        }
+
         // Track enemy count
         CurrentEnemyCount++;
 
