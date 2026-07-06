@@ -48,6 +48,10 @@ public class Flag : NetworkBehaviour
     // NetworkTransform), so without this the dropped/returned flag desyncs on clients.
     [Networked] private Vector3 DropPosition { get; set; }
 
+    // True while DropPosition holds a real drop location. Replaces the Vector3.zero sentinel
+    // check, which would break for a flag legitimately dropped at the world origin.
+    [Networked] private NetworkBool HasDropPosition { get; set; }
+
     // Server-evaluated auto-return countdown (simulation-path TickTimer, deterministic).
     [Networked] private TickTimer AutoReturnTimer { get; set; }
 
@@ -121,7 +125,7 @@ public class Flag : NetworkBehaviour
                     transform.position = carrierGameObject.transform.position + Vector3.up * carrierOffset;
                 break;
             case FlagState.Dropped:
-                if (DropPosition != Vector3.zero) transform.position = DropPosition;
+                if (HasDropPosition) transform.position = DropPosition;
                 break;
             case FlagState.AtHome:
                 // Guard against the brief window before HomePosition has replicated on a
@@ -145,6 +149,16 @@ public class Flag : NetworkBehaviour
     {
         // SERVER: auto-return a dropped flag once its countdown elapses.
         if (!HasStateAuthority) return;
+
+        // Carrier disconnect/crash: death drops the flag via PlayerStatsHandler.Die(), but a
+        // player who vanishes without dying leaves the flag stuck in Carried forever (the
+        // auto-return timer only arms on Drop). If the carrier's player object no longer
+        // exists, drop the flag where it is so the auto-return countdown starts.
+        if (CurrentState == FlagState.Carried &&
+            !Runner.TryGetPlayerObject(CarrierPlayerRef, out _))
+        {
+            DropFlag();
+        }
 
         if (CurrentState == FlagState.Dropped && AutoReturnTimer.Expired(Runner))
         {
@@ -201,6 +215,7 @@ public class Flag : NetworkBehaviour
 
         // Cancel auto-return if it was running
         AutoReturnTimer = default;
+        HasDropPosition = false;
 
         // Set flag state
         CurrentState = FlagState.Carried;
@@ -250,6 +265,7 @@ public class Flag : NetworkBehaviour
 
         // Save drop position (networked so clients see the dropped flag in the right place)
         DropPosition = transform.position;
+        HasDropPosition = true;
 
         // Clear carrier
         if (carrierGameObject != null)
@@ -294,6 +310,7 @@ public class Flag : NetworkBehaviour
 
         // Cancel auto-return if running
         AutoReturnTimer = default;
+        HasDropPosition = false;
 
         // Clear carrier
         if (carrierGameObject != null)
