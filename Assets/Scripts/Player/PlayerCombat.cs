@@ -337,9 +337,8 @@ public class PlayerCombat : NetworkBehaviour
             Object.InputAuthority,
             (runner, obj) =>
             {
-                obj.transform.localScale = Vector3.one * projectileScale;
                 Projectile p = obj.GetComponent<Projectile>();
-                if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam);
+                if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam, projectileScale);
             });
     }
 

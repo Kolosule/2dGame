@@ -22,16 +22,21 @@ public class Projectile : NetworkBehaviour
     [Networked] private int Damage { get; set; }
     [Networked] private Team ShooterTeam { get; set; }
 
+    // Networked so every peer (and every pooled reuse) applies the same visual scale.
+    // The old spawn-callback localScale write was server-only and leaked across pool reuses.
+    [Networked] private float Scale { get; set; }
+
     private Rigidbody2D rb;
     private bool hasHit;
 
     /// <summary>SERVER: set from PlayerCombat's spawn callback before Spawned runs.</summary>
-    public void ServerInitialize(Vector2 dir, float speed, int damage, Team team)
+    public void ServerInitialize(Vector2 dir, float speed, int damage, Team team, float scale)
     {
         Direction = dir.normalized;
         Speed = speed;
         Damage = damage;
         ShooterTeam = team;
+        Scale = scale > 0f ? scale : 1f;
     }
 
     public override void Spawned()
@@ -39,6 +44,10 @@ public class Projectile : NetworkBehaviour
         // Pooled reuse: a recycled instance keeps its previous hasHit value, so clear transient
         // runtime state here. Every per-spawn field below is re-initialised regardless.
         hasHit = false;
+
+        // Apply the replicated scale on every peer (and reset any stale pooled scale).
+        // Scale is 0 only before the first server write reaches a client — keep prefab scale then.
+        if (Scale > 0f) transform.localScale = Vector3.one * Scale;
 
         rb = GetComponent<Rigidbody2D>();
         var col = GetComponent<CircleCollider2D>();
