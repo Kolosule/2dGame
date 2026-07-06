@@ -443,6 +443,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (objectProvider != null)
             objectProvider.ClearPools();
 
+        // The live-coin registry is server-only static state; clear it so a restarted session
+        // doesn't inherit stale (destroyed) coin references or a bogus live count.
+        CoinRegistry.Clear();
+
         if (teamSelectionUI != null)
             teamSelectionUI.HideTeamSelection();
 

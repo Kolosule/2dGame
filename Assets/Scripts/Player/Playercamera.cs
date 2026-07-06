@@ -128,9 +128,6 @@ public class PlayerCamera : MonoBehaviour
     private struct CamImpulse { public Vector3 dir; public float magnitude; public float duration; public float elapsed; }
     private readonly System.Collections.Generic.List<CamImpulse> impulses = new System.Collections.Generic.List<CamImpulse>();
 
-    // Hit-stop hold
-    private float holdTimer;
-
     // Camera component reference
     private Camera cam;
 
@@ -201,8 +198,6 @@ public class PlayerCamera : MonoBehaviour
             HandleRespawnTransition();
             return;
         }
-
-        if (holdTimer > 0f) holdTimer -= Time.deltaTime;
 
         currentFollowPosition = ComputeFollowPosition();
 
@@ -286,12 +281,6 @@ public class PlayerCamera : MonoBehaviour
     /// </summary>
     private Vector3 ComputeFollowPosition()
     {
-        if (holdTimer > 0f)
-        {
-            lastBodyPosition = targetPlayer.position; // keep the absorber's reference current so motion during the hold isn't mis-absorbed as a snap on release
-            return currentFollowPosition; // hit-stop: keep the camera put (offsets still apply)
-        }
-
         Vector3 body = AbsorbCorrection(targetPlayer.position);
 
         // Horizontal: tight follow.
@@ -411,12 +400,6 @@ public class PlayerCamera : MonoBehaviour
             impulses[i] = imp;
         }
         return sum;
-    }
-
-    /// <summary>Briefly freezes follow advancement (render-only hit-stop). Never affects the sim.</summary>
-    public void Hold(float duration)
-    {
-        if (duration > holdTimer) holdTimer = duration;
     }
 
     /// <summary>

@@ -51,9 +51,18 @@ public class NetworkedCoinPickup : NetworkBehaviour
     [Tooltip("How long to wait after spawning before allowing pickup (prevents instant pickup)")]
     [SerializeField] private float spawnDelay = 0.25f;
 
+    [Tooltip("Seconds after spawn before an uncollected coin auto-despawns. Bounds how long " +
+             "coins can accumulate on the server (each live coin runs a per-tick pickup poll).")]
+    [SerializeField] private float lifetimeSeconds = 30f;
+
     // Network property to track if coin has been collected
     [Networked]
     private NetworkBool IsCollected { get; set; }
+
+    // Server-armed auto-despawn countdown (simulation-path TickTimer). Uncollected coins despawn
+    // when this expires so a match-long pile can't build up and slow the server tick.
+    [Networked]
+    private TickTimer LifetimeTimer { get; set; }
 
     // Networked position. Coins are spawned by the server (Runner.Spawn) at an enemy's death /
     // a player's drop location and then pop + fall on the server; a bare NetworkObject does not
@@ -108,6 +117,15 @@ public class NetworkedCoinPickup : NetworkBehaviour
             velocity = new Vector2(
                 Random.Range(-popSideSpeed, popSideSpeed),
                 Random.Range(popUpSpeedMin, popUpSpeedMax));
+
+            // Arm the auto-despawn lifetime.
+            LifetimeTimer = TickTimer.CreateFromSeconds(Runner, lifetimeSeconds);
+
+            // Register with the global cap. If we push the count over the ceiling, despawn the
+            // oldest live coin (returned by the registry, which has no Runner of its own).
+            NetworkedCoinPickup evicted = CoinRegistry.RegisterAndGetEvicted(this);
+            if (evicted != null && evicted != this && evicted.Object != null && evicted.Object.IsValid)
+                Runner.Despawn(evicted.Object);
         }
         else
         {
@@ -158,6 +176,13 @@ public class NetworkedCoinPickup : NetworkBehaviour
     {
         if (!HasStateAuthority || IsCollected) return;
 
+        // Auto-despawn once the lifetime elapses (uncollected-coin cleanup).
+        if (LifetimeTimer.Expired(Runner))
+        {
+            Runner.Despawn(Object);
+            return;
+        }
+
         float dt = Runner.DeltaTime;
 
         if (!grounded)
@@ -192,8 +217,20 @@ public class NetworkedCoinPickup : NetworkBehaviour
             SyncedPosition = transform.position;
         }
 
-        if (isReadyForPickup)
+        // Pickup polling is staggered to every 4th tick, phase-offset by this coin's id so live
+        // coins don't all run their OverlapCircle on the same tick. ~16Hz effective → ≤~47ms
+        // worst-case pickup latency, imperceptible for coin collection. Fall integration above
+        // still runs every tick, so motion stays smooth.
+        int phase = (int)(Object.Id.Raw & 3u);
+        if (isReadyForPickup && (((int)Runner.Tick + phase) & 3) == 0)
             TryServerPickup();
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        // Drop out of the global cap registry. Unregister is a no-op on peers that never
+        // registered this coin (only the state authority does), so the call is unconditional.
+        CoinRegistry.Unregister(this);
     }
 
     /// <summary>SERVER: collect the coin if a player overlaps it.</summary>
