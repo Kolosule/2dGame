@@ -24,12 +24,18 @@ public class PooledNetworkObjectProvider : NetworkObjectProviderDefault
         if (prefab.GetComponent<Poolable>() == null)
             return base.InstantiatePrefab(runner, prefab);
 
-        // Reuse an inactive instance if one is available for this prefab.
-        if (pools.TryGetValue(prefab, out var stack) && stack.Count > 0)
+        // Reuse an inactive instance if one is available for this prefab. Skip entries that
+        // were destroyed since being pooled (scene unload / previous session shutdown) —
+        // Unity's overloaded == makes destroyed objects compare null.
+        if (pools.TryGetValue(prefab, out var stack))
         {
-            var reused = stack.Pop();
-            reused.gameObject.SetActive(true);
-            return reused;
+            while (stack.Count > 0)
+            {
+                var reused = stack.Pop();
+                if (reused == null) continue;
+                reused.gameObject.SetActive(true);
+                return reused;
+            }
         }
 
         // None pooled yet → create one and remember which prefab/pool it belongs to.
@@ -59,4 +65,10 @@ public class PooledNetworkObjectProvider : NetworkObjectProviderDefault
         }
         stack.Push(instance);
     }
+
+    /// <summary>
+    /// Forget every pooled instance. Call on runner shutdown: pooled instances are scene
+    /// objects that die with the session, and the next session must not pop their corpses.
+    /// </summary>
+    public void ClearPools() => pools.Clear();
 }
