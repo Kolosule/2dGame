@@ -88,6 +88,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             TrySpawnPlayer(player);
     }
 
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        // Symmetric with the AddCallbacks in Spawned. Without this, a scene unload while the
+        // runner survives would leave the runner calling into a destroyed component.
+        runner.RemoveCallbacks(this);
+    }
+
     private void ValidateSpawnPoints()
     {
         if (team1SpawnPoints == null || team1SpawnPoints.Length == 0)
@@ -106,6 +113,22 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
+        // Runner callbacks fire on every peer; only the server owns despawning.
+        if (Object == null || !Object.IsValid || !Object.HasStateAuthority)
+            return;
+
+        // Fusion does NOT clean up a leaver's objects in Host/Server mode - that is our job.
+        // Drop any flag they were carrying FIRST (while the avatar still exists, so the flag
+        // lands at their last position and the carrier-marker cleanup can still run), then
+        // despawn the avatar so it doesn't linger as a frozen zombie.
+        foreach (var flag in FindObjectsByType<Flag>(FindObjectsSortMode.None))
+        {
+            if (flag.IsCarriedBy(player))
+                flag.DropFlag();
+        }
+
+        if (runner.TryGetPlayerObject(player, out NetworkObject playerObject))
+            runner.Despawn(playerObject);
 
         if (playerTeams.TryGetValue(player, out int team))
         {
@@ -262,7 +285,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
     {
-        request.Accept();
+        // Intentionally empty: connection policy lives in ONE place (GameNetworkManager).
     }
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
     public void OnInput(NetworkRunner runner, NetworkInput input) { }

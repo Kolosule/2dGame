@@ -11,6 +11,29 @@ using UnityEngine.InputSystem;
 /// </summary>
 public class NetworkInputProvider : MonoBehaviour, INetworkRunnerCallbacks
 {
+    // Tap latches: OnInput samples "is the key down right now", so a tap that starts and ends
+    // entirely between two polls would be lost. Update() runs every render frame and latches
+    // press edges; OnInput ORs the latch in and clears it. Only needed for the edge-triggered
+    // actions (Jump/Dash/Melee/Shoot/Stealth all act on the press edge in their Simulate paths).
+    private bool jumpQueued, dashQueued, meleeQueued, shootQueued, stealthQueued;
+
+    // Last aim point computed with a live camera. Reused when the camera or mouse is momentarily
+    // unavailable (scene transition), instead of sending (0,0) = "aim at the world origin".
+    private Vector2 lastAimWorld;
+
+    void Update()
+    {
+        var keyboard = Keyboard.current;
+        var mouse = Mouse.current;
+        var gamepad = Gamepad.current;
+
+        if ((keyboard != null && keyboard.spaceKey.wasPressedThisFrame)     || (gamepad != null && gamepad.buttonNorth.wasPressedThisFrame))   jumpQueued = true;
+        if ((keyboard != null && keyboard.leftShiftKey.wasPressedThisFrame) || (gamepad != null && gamepad.rightShoulder.wasPressedThisFrame)) dashQueued = true;
+        if ((mouse != null && mouse.leftButton.wasPressedThisFrame)         || (keyboard != null && keyboard.leftCtrlKey.wasPressedThisFrame) || (gamepad != null && gamepad.buttonSouth.wasPressedThisFrame)) meleeQueued = true;
+        if ((mouse != null && mouse.rightButton.wasPressedThisFrame)        || (keyboard != null && keyboard.leftAltKey.wasPressedThisFrame)  || (gamepad != null && gamepad.buttonWest.wasPressedThisFrame))  shootQueued = true;
+        if ((keyboard != null && keyboard.qKey.wasPressedThisFrame)         || (gamepad != null && gamepad.buttonEast.wasPressedThisFrame))   stealthQueued = true;
+    }
+
     public void OnInput(NetworkRunner runner, NetworkInput input)
     {
         var data = new NetInput();
@@ -47,12 +70,13 @@ public class NetworkInputProvider : MonoBehaviour, INetworkRunnerCallbacks
         }
         data.VerticalAim = (sbyte)Mathf.Clamp(Mathf.RoundToInt(v), -1, 1);
 
-        // Buttons
-        bool jump  = (keyboard != null && keyboard.spaceKey.isPressed)    || (gamepad != null && gamepad.buttonNorth.isPressed);
-        bool dash  = (keyboard != null && keyboard.leftShiftKey.isPressed) || (gamepad != null && gamepad.rightShoulder.isPressed);
-        bool melee = (mouse != null && mouse.leftButton.isPressed)         || (keyboard != null && keyboard.leftCtrlKey.isPressed) || (gamepad != null && gamepad.buttonSouth.isPressed);
-        bool shoot   = (mouse != null && mouse.rightButton.isPressed)        || (keyboard != null && keyboard.leftAltKey.isPressed)  || (gamepad != null && gamepad.buttonWest.isPressed);
-        bool stealth = (keyboard != null && keyboard.qKey.isPressed)         || (gamepad != null && gamepad.buttonEast.isPressed);
+        // Buttons: held state OR the Update()-latched tap, so fast taps are never dropped.
+        bool jump    = jumpQueued    || (keyboard != null && keyboard.spaceKey.isPressed)     || (gamepad != null && gamepad.buttonNorth.isPressed);
+        bool dash    = dashQueued    || (keyboard != null && keyboard.leftShiftKey.isPressed) || (gamepad != null && gamepad.rightShoulder.isPressed);
+        bool melee   = meleeQueued   || (mouse != null && mouse.leftButton.isPressed)         || (keyboard != null && keyboard.leftCtrlKey.isPressed) || (gamepad != null && gamepad.buttonSouth.isPressed);
+        bool shoot   = shootQueued   || (mouse != null && mouse.rightButton.isPressed)        || (keyboard != null && keyboard.leftAltKey.isPressed)  || (gamepad != null && gamepad.buttonWest.isPressed);
+        bool stealth = stealthQueued || (keyboard != null && keyboard.qKey.isPressed)         || (gamepad != null && gamepad.buttonEast.isPressed);
+        jumpQueued = dashQueued = meleeQueued = shootQueued = stealthQueued = false;
 
         data.Buttons.Set((int)PlayerButton.Jump,    jump);
         data.Buttons.Set((int)PlayerButton.Dash,    dash);
@@ -61,14 +85,14 @@ public class NetworkInputProvider : MonoBehaviour, INetworkRunnerCallbacks
         data.Buttons.Set((int)PlayerButton.Stealth, stealth);
 
         // Aim world point (for projectiles); PlayerCombat turns this into a direction
-        // relative to its spawn point at sim time.
-        Vector2 aimWorld = Vector2.zero;
+        // relative to its spawn point at sim time. If the camera or mouse is momentarily
+        // unavailable, reuse the last valid point rather than sending (0,0).
         if (mouse != null && Camera.main != null)
         {
             Vector3 mw = Camera.main.ScreenToWorldPoint(mouse.position.ReadValue());
-            aimWorld = new Vector2(mw.x, mw.y);
+            lastAimWorld = new Vector2(mw.x, mw.y);
         }
-        data.AimWorldPoint = aimWorld;
+        data.AimWorldPoint = lastAimWorld;
 
         input.Set(data);
     }
