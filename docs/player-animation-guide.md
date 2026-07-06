@@ -8,13 +8,20 @@ animations. Read this before touching `Player.controller`, `Weapon.controller`, 
 
 ## 1. The model in one paragraph
 
-Animation is **derived from networked state, not from input**. Every tick the state
-authority computes a single enum, `PlayerAnimator.State`, from movement/combat/stats +
-the Rigidbody2D velocity. That enum is `[Networked]`, so it replicates to every client.
-In `Render()` (which runs on **all** clients) we push it into the Animator(s) as one
-integer parameter named **`State`**. There are **no triggers and no per-state bools**
-anywhere — a remote player sees your jump/attack/shot because `State` replicated, not
-because an input event fired locally.
+Animation is **split by whether a pose can be inferred from motion**. **Authoritative**
+poses that a remote client *cannot* guess from movement — Dead, the latched one-shots
+(Attack/GroundPound/Shoot), Stunned, Dash — are computed on the state authority (and
+predicted on the local input authority) and replicated as a single `[Networked]`
+`PlayerAnimator.OverrideState` enum (`AnimState.None` = "no override"). **Locomotion**
+(Idle/Walk/Jump/Fall) is **not networked**: every client derives it in `Render()` from
+*this object's own rendered (interpolated) motion*, via the pure `LocomotionResolver`, so a
+proxy's legs stay in lockstep with the smooth position the viewer actually sees — at render
+frame-rate, not the low network send rate (that mismatch was the old choppiness). The one
+locomotion input that can't be read from smoothed motion (jump apex / landing are ambiguous)
+is a replicated `Grounded` bool. In `Render()` (all clients) the resolved pose is pushed into
+the Animator(s) as one integer parameter named **`State`**. There are still **no triggers and
+no per-state bools** — a remote player sees your attack/shot because `OverrideState`
+replicated, and your walk/jump because they derived it from your motion.
 
 There are **two animation tracks**, both driven off the same `State` int:
 
@@ -30,7 +37,7 @@ Both are wired in the prefab on the `PlayerAnimator` component (`anim` = body,
 
 ## 2. The `State` enum ↔ clip map
 
-`AnimState` lives in `Assets/Scripts/Player/PlayerAnimator.cs`. The integer values are a
+`AnimState` lives in `Assets/Scripts/Player/Animation/Core/AnimState.cs`. The integer values are a
 contract: the controllers select a state via a transition condition `State Equals <int>`.
 **If you change the enum, you must update both controllers' transitions to match.**
 
@@ -53,18 +60,31 @@ when the art exists (see §4).
 
 ---
 
-## 3. How `State` is decided (priority order)
+## 3. How the pose is decided
 
-In `PlayerAnimator.ComputeState()`, first match wins:
+**Authoritative override** — `PlayerAnimator.ComputeOverride()` runs each tick on the state
+authority (predicted on the local input authority), first match wins:
 
 1. `stats.IsDead` → **Dead**
 2. A latched one-shot action still running → **ActionState** (Attack / GroundPound / Shoot)
 3. `movement.IsStunned()` → **Stunned**
 4. `movement.IsDashing()` → **Dash**
-5. airborne & rising (`vy > 0.1`) → **Jump**
-6. airborne & not rising → **Fall**
-7. `|vx| > 0.1` → **Walk**
-8. otherwise → **Idle**
+5. otherwise → **None** (locomotion is derived locally)
+
+This result is replicated as `OverrideState`, and the grounded flag as `Grounded`.
+
+**Locomotion** — when `OverrideState == None`, `Render()` derives the pose on *every* client
+from this object's rendered motion (`(position - lastRenderPos)/Δt`) and the replicated
+`Grounded`, via `LocomotionResolver` (Fusion-free, unit-tested):
+
+- airborne & rising (`vy > riseSpeed`) → **Jump**
+- airborne & falling (`vy < fallSpeed`) → **Fall** (apex holds the current airborne pose)
+- grounded & `|vx| > walkEnterSpeed` → **Walk**; drops back to **Idle** below `walkStopSpeed`
+  (asymmetric = hysteresis), and a grounded Walk↔Idle flip must persist `minGroundedDwell`
+  seconds before it shows. These thresholds are `[SerializeField]` fields on `PlayerAnimator`.
+
+Airborne poses and any air↔ground change commit immediately; only the grounded Walk↔Idle
+flip is dwell-gated. This is what makes remote locomotion smooth instead of choppy.
 
 "Latched action" = when you melee/shoot, `PlayerCombat` calls
 `PlayerAnimator.TriggerAttack/TriggerGroundPound/TriggerShoot()`, which sets a networked
@@ -152,9 +172,15 @@ leaving) — see `HandleSfx()`.
   both `.controller` files. Add new values at the end; renumber both controllers if you
   ever reorder.
 - **Action clip length should track the latch duration**, not the other way around (§4-B/C).
-- **All state decisions run on state authority; all visual application runs in `Render()`
-  on every client.** If you add logic, keep that split: write `State` only on
-  `HasStateAuthority`, read/apply it for everyone in `Render()`.
+- **Keep the authoritative/locomotion split.** Anything a remote client can't infer from
+  motion (actions, stun, dash, death) is written to `OverrideState` only in `Simulate()`
+  (state authority + predicted input authority). Anything derivable from motion
+  (Idle/Walk/Jump/Fall) is derived in `Render()` on every client — do **not** network it.
+  If you add a new derivable pose, extend `LocomotionResolver` (and its EditMode tests); if
+  you add an authoritative pose, extend `ComputeOverride()` and give it a latch if it's a
+  one-shot.
+- **Don't network locomotion "to be safe."** It re-introduces the choppiness: a low-send-rate
+  enum snapping on top of the smoothly interpolated proxy position.
 
 ---
 
@@ -162,7 +188,10 @@ leaving) — see `HandleSfx()`.
 
 | File | Role |
 |---|---|
-| `Assets/Scripts/Player/PlayerAnimator.cs` | Owns `State`, the latch timers, Render application, SFX |
+| `Assets/Scripts/Player/PlayerAnimator.cs` | Owns `OverrideState`/`Grounded`, latch timers, Render resolution + application, SFX |
+| `Assets/Scripts/Player/Animation/Core/AnimState.cs` | The `AnimState` enum (Fusion-free assembly so the resolver is testable) |
+| `Assets/Scripts/Player/Animation/Core/PlayerLocomotionResolver.cs` | Pure Idle/Walk/Jump/Fall derivation with hysteresis + dwell |
+| `Assets/Tests/EditMode/PlayerAnimation/PlayerLocomotionResolverTests.cs` | EditMode tests for the resolver |
 | `Assets/Scripts/Player/PlayerController.cs` | Calls `animator.Simulate()` each tick (incl. while dead) |
 | `Assets/Scripts/Player/PlayerCombat.cs` | Calls `Trigger…()` latches on melee/shoot |
 | `Assets/Scripts/Player/PlayerMovement.cs` | Exposes `IsGrounded()`/`IsDashing()`/`IsStunned()` |

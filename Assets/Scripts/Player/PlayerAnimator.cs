@@ -1,47 +1,31 @@
 using UnityEngine;
 using Fusion;
+using Game.PlayerAnimation.Core;
 
 /// <summary>
-/// Networked, state-driven player animation. Replaces the old input-triggered
-/// approach (which only ran for input/state authority, so remote players never
-/// saw jumps/attacks/shots).
+/// Networked, state-driven player animation. Split into two concerns so remote players animate
+/// smoothly (see docs/player-animation-guide.md):
 ///
-/// Design:
-/// - The animator is described by a single networked <see cref="AnimState"/> enum
-///   (mirrors the movement/combat pattern of syncing state, not input).
-/// - State is COMPUTED on the state authority AND predicted on the local input
-///   authority once per tick (<see cref="Simulate"/>), derived from networked
-///   movement/combat/stats + the Rigidbody2D velocity. Predicting on the input
-///   authority — exactly as PlayerMovement predicts its own [Networked] state — is
-///   what keeps a client's OWN animation in lockstep with its (already predicted)
-///   movement instead of lagging a full server round-trip behind the input.
-/// - State is APPLIED on EVERY client in <see cref="Render"/> via a single
-///   Animator integer parameter ("State"). No triggers, no per-state bools.
-/// - One-shot actions (Attack/Shoot/GroundPound) are LATCHED for a clip duration
-///   using a networked <see cref="TickTimer"/> so they replicate without triggers.
+/// - AUTHORITATIVE states that a client CANNOT infer from motion — Dead, the latched one-shots
+///   (Attack/GroundPound/Shoot), Stunned, Dash — are computed on the state authority (and predicted
+///   on the local input authority) and REPLICATED as a single networked <see cref="OverrideState"/>
+///   enum. <see cref="AnimState.None"/> means "no override — derive locomotion locally".
+///
+/// - LOCOMOTION (Idle/Walk/Jump/Fall) is NOT networked. Every client derives it in <see cref="Render"/>
+///   from THIS object's own rendered (interpolated) motion, via the pure
+///   <see cref="LocomotionResolver"/>. That keeps a proxy's legs in lockstep with the smooth
+///   interpolated position the viewer actually sees, at render frame-rate, instead of snapping to a
+///   low-send-rate networked enum — which is what made remote animation choppy. Hysteresis + a
+///   grounded dwell in the resolver remove Walk/Idle flicker at threshold speeds.
+///
+/// - The one locomotion input that can't be read from smoothed motion (jump apex / landing are
+///   ambiguous) is <see cref="Grounded"/>, replicated as a single bool.
+///
+/// - The resolved pose is applied on EVERY client in Render() via a single Animator integer
+///   parameter ("State"). No triggers, no per-state bools.
 /// </summary>
 public class PlayerAnimator : NetworkBehaviour
 {
-    /// <summary>
-    /// One value per Animator state. Order MUST match the integer values wired into
-    /// Player.controller's "State Equals n" transitions.
-    /// NOTE: GroundPound (6) and Shoot (7) currently reuse AttackGround.anim as
-    /// PLACEHOLDER art — there is no dedicated clip for either yet (TODO).
-    /// </summary>
-    public enum AnimState : byte
-    {
-        Idle = 0,
-        Walk = 1,
-        Jump = 2,
-        Fall = 3,
-        Dash = 4,
-        Attack = 5,
-        GroundPound = 6, // placeholder clip
-        Shoot = 7,       // placeholder clip
-        Stunned = 8,
-        Dead = 9
-    }
-
     [Header("Action clip durations (seconds)")]
     [Tooltip("How long a melee swing is held as the Attack state.")]
     [SerializeField] private float attackDuration = 0.3f;
@@ -49,6 +33,20 @@ public class PlayerAnimator : NetworkBehaviour
     [SerializeField] private float groundPoundDuration = 0.3f;
     [Tooltip("How long a shot is held as the Shoot state.")]
     [SerializeField] private float shootDuration = 0.3f;
+
+    [Header("Locomotion tuning (render-side, NOT networked)")]
+    [Tooltip("|horizontal render speed| must EXCEED this (while grounded) to start the Walk pose.")]
+    [SerializeField] private float walkEnterSpeed = 0.15f;
+    [Tooltip("|horizontal render speed| must DROP BELOW this to return to Idle. Keep it below " +
+             "walkEnterSpeed — the gap is the hysteresis band that stops Walk/Idle flicker at low speed.")]
+    [SerializeField] private float walkStopSpeed = 0.05f;
+    [Tooltip("Vertical render speed ABOVE which an airborne player shows Jump.")]
+    [SerializeField] private float riseSpeed = 0.10f;
+    [Tooltip("Vertical render speed BELOW which an airborne player shows Fall (negative).")]
+    [SerializeField] private float fallSpeed = -0.10f;
+    [Tooltip("Minimum seconds a grounded Walk/Idle change must persist before it is shown (dwell; " +
+             "extra anti-flicker on top of the speed hysteresis).")]
+    [SerializeField] private float minGroundedDwell = 0.06f;
 
     [Header("Animator")]
     [Tooltip("Animator for the VISIBLE body (Player.controller). Wired in the prefab " +
@@ -58,7 +56,7 @@ public class PlayerAnimator : NetworkBehaviour
     [SerializeField] private Animator anim;
 
     [Tooltip("Optional second track for the portal/weapon (Weapon.controller on the " +
-             "SideAttackTransform child). Driven off the SAME networked State int, so it " +
+             "SideAttackTransform child). Driven off the SAME resolved State int, so it " +
              "shows the weapon emerging during Attack/GroundPound/Shoot and stays hidden " +
              "otherwise. Leave unset to disable the weapon track.")]
     [SerializeField] private Animator weaponAnim;
@@ -70,17 +68,24 @@ public class PlayerAnimator : NetworkBehaviour
     [SerializeField] private AudioClip landClip;
 
     // Networked animation state.
-    [Networked] public AnimState State { get; private set; }
+    // OverrideState: the authoritative, non-locomotion pose, or AnimState.None when locomotion
+    // should be derived locally. Grounded: the one locomotion input that can't be read from
+    // smoothed render motion (jump apex / landing are ambiguous).
+    [Networked] private AnimState OverrideState { get; set; }
+    [Networked] private NetworkBool Grounded { get; set; }
     [Networked] private TickTimer ActionTimer { get; set; }
     [Networked] private AnimState ActionState { get; set; }
 
     // Component refs (cached in Spawned).
     private PlayerMovement movement;
-    private PlayerCombat combat;
     private PlayerStatsHandler stats;
-    private Rigidbody2D rb;
 
     private static readonly int StateParam = Animator.StringToHash("State");
+
+    // Render-side locomotion derivation (runs on every client).
+    private LocomotionResolver locomotion;
+    private Vector3 lastRenderPos;
+    private bool renderMotionPrimed;
 
     // Render-side SFX edge detection (visual only, runs on every client).
     private AnimState lastRenderedState;
@@ -89,54 +94,56 @@ public class PlayerAnimator : NetworkBehaviour
     public override void Spawned()
     {
         movement = GetComponent<PlayerMovement>();
-        combat = GetComponent<PlayerCombat>();
         stats = GetComponent<PlayerStatsHandler>();
-        rb = GetComponent<Rigidbody2D>();
 
         // Prefer the explicitly-wired body Animator. Fallback keeps things working if
         // a future prefab variant forgets to assign it.
         if (anim == null) anim = GetComponentInChildren<Animator>();
         if (audioSource == null) audioSource = GetComponent<AudioSource>();
+
+        // A [Networked] enum defaults to 0 (= Idle), which Render would read as an authoritative
+        // Idle override before the first Simulate. Seed it to None so proxies derive locomotion
+        // from the very first frame.
+        if (HasStateAuthority) OverrideState = AnimState.None;
+
+        // Seed render-motion tracking so the first frame doesn't produce a velocity spike.
+        lastRenderPos = transform.position;
+        renderMotionPrimed = true;
     }
 
     /// <summary>
-    /// STATE AUTHORITY + LOCAL INPUT AUTHORITY: recompute the networked animation state once
-    /// per tick. The host writes the authoritative value; the local player ALSO writes it
-    /// predictively (Fusion reconciles it against the host), so its own animation fires on the
-    /// same tick as the input rather than after a round-trip. Proxies (other players) never get
-    /// here — PlayerController only calls Simulate when GetInput succeeds — so they keep reading
-    /// the replicated State in Render(). Called by PlayerController.FixedUpdateNetwork AFTER
-    /// movement/combat simulate (and also while dead, so the Dead state latches).
+    /// STATE AUTHORITY + LOCAL INPUT AUTHORITY: recompute the replicated, authoritative animation
+    /// inputs once per tick — the non-locomotion override pose and the grounded flag. The host writes
+    /// the authoritative values; the local player ALSO writes them predictively (Fusion reconciles),
+    /// so its own actions animate on the input tick rather than a round-trip later. Proxies never get
+    /// here (PlayerController only calls Simulate when GetInput succeeds) — they read the replicated
+    /// values in Render(). Locomotion (Idle/Walk/Jump/Fall) is intentionally NOT decided here; every
+    /// client derives it from rendered motion in Render(). Called by PlayerController.FixedUpdateNetwork
+    /// AFTER movement/combat simulate (and also while dead, so Dead latches).
     /// </summary>
     public void Simulate()
     {
         if (!HasStateAuthority && !HasInputAuthority) return;
-        State = ComputeState();
+        OverrideState = ComputeOverride();
+        Grounded = movement != null && movement.IsGrounded();
     }
 
-    /// <summary>Priority-ordered state resolution (first match wins).</summary>
-    private AnimState ComputeState()
+    /// <summary>
+    /// Priority-ordered resolution of the AUTHORITATIVE (non-locomotion) pose. Returns
+    /// <see cref="AnimState.None"/> when nothing overrides locomotion, so Render() derives the
+    /// Idle/Walk/Jump/Fall pose locally.
+    /// </summary>
+    private AnimState ComputeOverride()
     {
         // 1. Dead overrides everything.
         if (stats != null && stats.IsDead) return AnimState.Dead;
-
         // 2. A latched one-shot action (Attack/Shoot/GroundPound) holds for its duration.
         if (!ActionTimer.ExpiredOrNotRunning(Runner)) return ActionState;
-
         // 3. Stun, 4. Dash.
         if (movement != null && movement.IsStunned()) return AnimState.Stunned;
         if (movement != null && movement.IsDashing()) return AnimState.Dash;
-
-        // 5/6. Airborne: rising vs falling.
-        bool grounded = movement != null && movement.IsGrounded();
-        float vy = rb != null ? rb.linearVelocity.y : 0f;
-        if (!grounded && vy > 0.1f) return AnimState.Jump;
-        if (!grounded) return AnimState.Fall;
-
-        // 7. Walking, 8. Idle.
-        float vx = rb != null ? rb.linearVelocity.x : 0f;
-        if (Mathf.Abs(vx) > 0.1f) return AnimState.Walk;
-        return AnimState.Idle;
+        // 5. Otherwise locomotion is derived locally in Render().
+        return AnimState.None;
     }
 
     // ---- Action latches (called from PlayerCombat instead of SetTrigger) ----
@@ -161,47 +168,78 @@ public class PlayerAnimator : NetworkBehaviour
         ActionTimer = TickTimer.CreateFromSeconds(Runner, duration);
     }
 
-    /// <summary>ALL CLIENTS: apply the replicated state to the visible Animator(s).</summary>
+    /// <summary>ALL CLIENTS: resolve the pose and apply it to the visible Animator(s).</summary>
     public override void Render()
     {
-        int state = (int)State;
+        AnimState resolved = ResolveRenderState();
+        int state = (int)resolved;
+
         // Body track (locomotion + action poses).
         if (anim != null) anim.SetInteger(StateParam, state);
-        // Weapon/portal track, driven off the same State so it replicates for free.
+        // Weapon/portal track, driven off the same resolved State.
         if (weaponAnim != null) weaponAnim.SetInteger(StateParam, state);
 
         if (anim == null) return;
-        HandleSfx();
+        HandleSfx(resolved);
     }
 
     /// <summary>
-    /// Re-homed jump/land SFX (the old JumpStateBehaviour/PlaySoundBehaviour read
-    /// removed params and were never attached to any state). Edge-detected off the
-    /// replicated State so every client hears it. Fully null-safe: no clips assigned
-    /// today, so nothing plays until a designer wires them up.
+    /// Resolve the pose to show this frame: a replicated authoritative override if one is active,
+    /// otherwise a locally-derived locomotion pose from this object's rendered (interpolated) motion.
     /// </summary>
-    private void HandleSfx()
+    private AnimState ResolveRenderState()
+    {
+        // Track render motion EVERY frame (even under an override) so the velocity estimate is fresh
+        // the instant we return to locomotion — no stale-position spike.
+        Vector3 pos = transform.position;
+        float dt = Time.deltaTime;
+        Vector2 vel = Vector2.zero;
+        if (renderMotionPrimed && dt > 1e-6f)
+            vel = (Vector2)(pos - lastRenderPos) / dt;
+        lastRenderPos = pos;
+        renderMotionPrimed = true;
+
+        // Authoritative, replicated states win and bypass local locomotion derivation.
+        if (OverrideState != AnimState.None)
+            return OverrideState;
+
+        LocomotionTuning tuning = new LocomotionTuning
+        {
+            WalkEnterSpeed = walkEnterSpeed,
+            WalkStopSpeed = walkStopSpeed,
+            RiseSpeed = riseSpeed,
+            FallSpeed = fallSpeed,
+            MinGroundedDwellSeconds = minGroundedDwell
+        };
+        return locomotion.Step((bool)Grounded, vel.x, vel.y, dt, in tuning);
+    }
+
+    /// <summary>
+    /// Jump/land SFX, edge-detected off the resolved pose so every client hears it. Fully null-safe:
+    /// no clips assigned today, so nothing plays until a designer wires them up.
+    /// </summary>
+    private void HandleSfx(AnimState state)
     {
         if (!sfxPrimed)
         {
-            lastRenderedState = State;
+            lastRenderedState = state;
             sfxPrimed = true;
             return;
         }
 
-        if (State == lastRenderedState) return;
+        if (state == lastRenderedState) return;
 
         if (audioSource != null)
         {
-            if (State == AnimState.Jump && jumpClip != null)
+            if (state == AnimState.Jump && jumpClip != null)
                 audioSource.PlayOneShot(jumpClip);
 
             bool wasAirborne = lastRenderedState == AnimState.Jump || lastRenderedState == AnimState.Fall;
-            bool nowGrounded = State == AnimState.Idle || State == AnimState.Walk;
+            bool nowGrounded = state == AnimState.Idle || state == AnimState.Walk;
             if (wasAirborne && nowGrounded && landClip != null)
                 audioSource.PlayOneShot(landClip);
         }
 
-        lastRenderedState = State;
+        lastRenderedState = state;
     }
 }
