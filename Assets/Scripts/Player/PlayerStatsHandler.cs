@@ -1,4 +1,5 @@
 ﻿using Fusion;
+using Fusion.Addons.Physics;
 using UnityEngine;
 using Game.Combat.Core;
 
@@ -52,8 +53,14 @@ public class PlayerStatsHandler : NetworkBehaviour
     // landing inside the window. Never networked; cleared on respawn.
     private readonly HitCooldownLedger hitLedger = new HitCooldownLedger();
 
+    // Cached for the respawn teleport: NetworkRigidbody2D.Teleport bumps the teleport key so
+    // proxies snap to the respawn point instead of interpolating across the map.
+    private NetworkRigidbody2D netRb;
+
     public override void Spawned()
     {
+        netRb = GetComponent<NetworkRigidbody2D>();
+
         if (HasStateAuthority)
         {
             CurrentHealth = stats.maxHealth;
@@ -252,8 +259,12 @@ public class PlayerStatsHandler : NetworkBehaviour
         hitLedger.Clear(); // fresh life, no stale attacker cooldowns
 
         // Teleport to the position chosen at death (RespawnPosition), so it matches where the
-        // camera already transitioned to.
-        transform.position = RespawnPosition;
+        // camera already transitioned to. Go through NetworkRigidbody2D.Teleport so proxies snap
+        // instead of streaking across the map (a bare transform write interpolates on remotes).
+        if (netRb != null)
+            netRb.Teleport(RespawnPosition);
+        else
+            transform.position = RespawnPosition;
 
         Rigidbody2D rb = GetComponent<Rigidbody2D>();
         if (rb != null)

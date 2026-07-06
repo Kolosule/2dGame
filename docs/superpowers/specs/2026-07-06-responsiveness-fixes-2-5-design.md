@@ -27,9 +27,9 @@ interaction to worry about.
 
 1. **Lifetime.** Add `[Networked] TickTimer LifetimeTimer` to `NetworkedCoinPickup`, armed on
    the state authority in `Spawned` from a new serialized `float lifetimeSeconds` (default
-   `45`). In `FixedUpdateNetwork` (authority, before/independent of the pickup poll): if
+   `30`). In `FixedUpdateNetwork` (authority, before/independent of the pickup poll): if
    `LifetimeTimer.Expired(Runner)` → `Runner.Despawn(Object)` and return. Lifetime starts at
-   spawn; 45s ≫ fall time so a coin never despawns mid-flight in practice.
+   spawn; 30s ≫ fall time so a coin never despawns mid-flight in practice.
 
 2. **Global cap.** A server-only `CoinRegistry` static class (mirrors the existing
    `HitCooldownLedger` / static-buffer style already used in the codebase):
@@ -51,7 +51,7 @@ interaction to worry about.
    `if (isReadyForPickup && ((Runner.Tick + (int)(Object.Id.Raw & 3)) & 3) == 0) TryServerPickup();`
    ~16Hz effective poll → ≤~47ms worst-case pickup latency, imperceptible for coin collection.
 
-**Tunables:** `lifetimeSeconds` (per-coin serialized, default 45); `CoinRegistry` cap (`const`
+**Tunables:** `lifetimeSeconds` (per-coin serialized, default 30); `CoinRegistry` cap (`const`
 = 100); pickup poll interval (const/literal = 4 ticks).
 
 **Files:** `Assets/Scripts/Coin Scripts/CoinPickup.cs` (`NetworkedCoinPickup`), new
@@ -148,7 +148,7 @@ Unity holds the project lock during editor sessions; compile/EditMode runs may n
 bundled-Roslyn workaround (see project memory). Verification is primarily in-editor / multi-peer:
 
 - **Fix 2:** Spawn coins past the cap (kill many enemies); confirm oldest despawn and total
-  live coins stay ≤ cap. Confirm coins self-despawn ~45s after landing. Confirm pickup still
+  live coins stay ≤ cap. Confirm coins self-despawn ~30s after landing. Confirm pickup still
   feels instant. Watch the Fusion stats overlay: server tick time should stay flat as coins
   churn rather than climbing.
 - **Fix 3:** 2+ peers. On a non-host client, watch another player die and respawn — the avatar

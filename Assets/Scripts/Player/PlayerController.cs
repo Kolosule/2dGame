@@ -49,7 +49,16 @@ public class PlayerController : NetworkBehaviour
         // player. No effect until AoI is enabled in the NetworkProjectConfig. Runs regardless of
         // input/alive state so the region never lapses (e.g. while dead/awaiting respawn).
         if (Runner.IsServer)
+        {
             Runner.AddPlayerAreaOfInterest(Object.InputAuthority, transform.position, areaOfInterestRadius);
+
+            // While dead, the camera has already moved to the respawn point. Add a second interest
+            // region there so the spawn area is replicated before the teleport — otherwise a spawn
+            // farther than areaOfInterestRadius from the corpse pops in on respawn. RespawnPosition
+            // is networked and set in Die() before the dead window, so it is valid here.
+            if (stats != null && stats.IsDead)
+                Runner.AddPlayerAreaOfInterest(Object.InputAuthority, stats.RespawnPosition, areaOfInterestRadius);
+        }
 
         if (GetInput(out NetInput input))
         {

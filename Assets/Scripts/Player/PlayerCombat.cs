@@ -68,7 +68,6 @@ public class PlayerCombat : NetworkBehaviour
     private Rigidbody2D rb;
     private PlayerMovement playerMovement;
     private PlayerStatModifiers mods;
-    private PlayerCameraFeelHandler feelHandler;
     private int verticalAim;
     private Vector2 lastAimWorldPoint;
 
@@ -87,7 +86,6 @@ public class PlayerCombat : NetworkBehaviour
         rb = GetComponent<Rigidbody2D>();
         playerMovement = GetComponent<PlayerMovement>();
         mods = GetComponent<PlayerStatModifiers>();
-        feelHandler = GetComponent<PlayerCameraFeelHandler>();
     }
 
     /// <summary>Called every tick by PlayerController when input is available.</summary>
@@ -171,42 +169,10 @@ public class PlayerCombat : NetworkBehaviour
                 playerAnimator.TriggerAttack();
         }
 
-        // Cosmetic local hit-stop: on the firing client, on the forward tick only, predict whether
-        // the swing connects and briefly hold the camera. Render-only; the server still owns damage.
-        if (HasInputAuthority && Runner.IsForward && feelHandler != null &&
-            PredictWouldHitEnemy(attackTransform.position, attackArea))
-        {
-            feelHandler.TriggerHitStop();
-        }
-
         // Damage + hit detection only on the server (avoids double-apply across clients).
         if (!HasStateAuthority) return;
 
         ApplyMeleeHits(attackTransform.position, attackArea, spawnHitMarkers: true);
-    }
-
-    /// <summary>
-    /// CLIENT-LOCAL prediction: would this swing box overlap an enemy (enemy AI or an enemy-team
-    /// player)? Read-only — applies no damage. Used only to fire the cosmetic hit-stop on the
-    /// firing client; a rare false positive is an acceptable, render-only artifact.
-    /// </summary>
-    private bool PredictWouldHitEnemy(Vector2 center, Vector2 area)
-    {
-        Collider2D[] hits = Physics2D.OverlapBoxAll(center, area, 0f, attackableLayer);
-        Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
-        foreach (Collider2D hit in hits)
-        {
-            if (hit.GetComponent<Enemy>() != null) return true;
-
-            PlayerStatsHandler other = hit.GetComponent<PlayerStatsHandler>();
-            if (other != null && other != statsHandler)
-            {
-                PlayerTeamData otherTeam = hit.GetComponent<PlayerTeamData>();
-                Team ot = otherTeam != null ? otherTeam.Team : Team.None;
-                if (TeamUtil.AreEnemies(myTeam, ot)) return true;
-            }
-        }
-        return false;
     }
 
     /// <summary>
