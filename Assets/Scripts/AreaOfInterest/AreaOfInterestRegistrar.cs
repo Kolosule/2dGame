@@ -47,10 +47,18 @@ public class AreaOfInterestRegistrar : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
+    /// <summary>
+    /// Drop entries whose NetworkObject has been destroyed (e.g. a flag carrier who
+    /// disconnected — Flag can't un-register an already-destroyed carrier). Destroyed
+    /// Unity objects compare == null. Called from the rare mutation/join paths, not per tick.
+    /// </summary>
+    private void PruneDestroyed() => alwaysInterested.RemoveWhere(o => o == null);
+
     /// <summary>Server-only: make <paramref name="obj"/> always-interested for every active player.</summary>
     public void AddAlwaysInterested(NetworkObject obj)
     {
         if (runner == null || !runner.IsServer || obj == null) return;
+        PruneDestroyed();
         if (!alwaysInterested.Add(obj)) return; // already registered
         foreach (var player in runner.ActivePlayers)
             obj.SetPlayerAlwaysInterested(player, true);
@@ -68,6 +76,7 @@ public class AreaOfInterestRegistrar : MonoBehaviour, INetworkRunnerCallbacks
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
         if (!runner.IsServer) return;
+        PruneDestroyed();
         // A late joiner must immediately be interested in every always-interested object.
         foreach (var obj in alwaysInterested)
             if (obj != null) obj.SetPlayerAlwaysInterested(player, true);
