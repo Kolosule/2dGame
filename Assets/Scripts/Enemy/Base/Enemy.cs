@@ -244,8 +244,8 @@ public class Enemy : NetworkBehaviour
                                                defenderTeam, player.transform.position);
         }
 
-        // Deal damage to player
-        player.TakeDamage(finalDamage);
+        // Deal damage to player, attributed to this enemy (per-attacker hit cooldown).
+        player.ServerApplyDamage(finalDamage, Object.Id);
         attackCooldownTimer = TickTimer.CreateFromSeconds(Runner, stats.attackCooldown);
 
     }

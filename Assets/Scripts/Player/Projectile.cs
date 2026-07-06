@@ -73,7 +73,13 @@ public class Projectile : NetworkBehaviour
             bool friendly = targetTeam != Team.None && targetTeam == ShooterTeam;
             if (!friendly)
             {
-                playerStats.RPC_TakeDamage(Damage);
+                // Attribute the hit to the SHOOTER (so their next projectile respects the same
+                // per-attacker window), falling back to this projectile's own id if the shooter's
+                // player object can't be resolved (e.g. they disconnected mid-flight).
+                NetworkId attackerId = Object.Id;
+                if (Runner.TryGetPlayerObject(Object.InputAuthority, out NetworkObject shooterObj))
+                    attackerId = shooterObj.Id;
+                playerStats.ServerApplyDamage(Damage, attackerId);
                 if (stunPlayers)
                 {
                     PlayerMovement pm = other.GetComponent<PlayerMovement>();

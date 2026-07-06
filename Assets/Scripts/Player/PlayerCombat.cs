@@ -248,8 +248,9 @@ public class PlayerCombat : NetworkBehaviour
             }
 
             // Player hit. Skip ourselves and friendly players (no melee friendly-fire). Damage
-            // goes through RPC_TakeDamage so spawn-immunity / hit-cooldown are respected — which
-            // also throttles the dash-strike's per-tick calls to one hit per 0.1s per target.
+            // goes through ServerApplyDamage keyed by this attacker's NetworkObject id, so
+            // spawn-immunity is respected and the rapid-hit guard is per attacker — which also
+            // throttles the dash-strike's per-tick calls to one hit per 0.1s per target.
             PlayerStatsHandler targetPlayer = hit.GetComponent<PlayerStatsHandler>();
             if (targetPlayer != null && targetPlayer != statsHandler)
             {
@@ -259,7 +260,7 @@ public class PlayerCombat : NetworkBehaviour
                 if (!TeamUtil.AreEnemies(myTeam, otherTeam)) continue;
 
                 int finalDamage = ResolveMeleeDamage(hit.gameObject, hit.transform.position);
-                targetPlayer.RPC_TakeDamage(finalDamage);
+                targetPlayer.ServerApplyDamage(finalDamage, Object.Id);
 
                 Rigidbody2D targetRb = hit.GetComponent<Rigidbody2D>();
                 if (targetRb != null)
@@ -320,6 +321,13 @@ public class PlayerCombat : NetworkBehaviour
         }
 
         Vector2 aimDirection = (aimWorldPoint - (Vector2)projectileSpawnPoint.position).normalized;
+
+        // Degenerate aim (no aim data yet, or aim point exactly on the muzzle) would spawn a
+        // stationary projectile. Fall back to the player's facing direction; localScale.x tracks
+        // the networked FacingRight, so this is consistent on the server.
+        if (aimDirection == Vector2.zero)
+            aimDirection = transform.localScale.x >= 0f ? Vector2.right : Vector2.left;
+
         Team shooterTeam = teamComponent != null ? teamComponent.Team : Team.None;
 
         NetworkObject spawned = Runner.Spawn(
