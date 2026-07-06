@@ -46,8 +46,18 @@ public class TeamScoreManager : NetworkBehaviour
         }
         else
         {
-            Debug.LogWarning("Multiple TeamScoreManagers detected! Destroying duplicate.");
-            Destroy(gameObject);
+            // Never Destroy() a spawned NetworkObject locally — that desyncs Fusion's
+            // object table on this peer. Disable the duplicate and leave it inert.
+            Debug.LogWarning("Multiple TeamScoreManagers detected! Disabling duplicate.");
+            enabled = false;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (instance == this)
+        {
+            instance = null;
         }
     }
 

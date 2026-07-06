@@ -90,25 +90,28 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             teamComponent.territorialAdvantage = territorialAdvantage;
         }
 
-        // Track enemy count
-        CurrentEnemyCount++;
+        // Networked team so clients colorize correctly (the teamComponent fields above are
+        // server-local; they remain as the authored fallback for scene-placed enemies).
+        Enemy enemy = enemyObj.GetComponent<Enemy>();
+        if (enemy != null)
+        {
+            enemy.ServerSetTeam(TeamUtil.Normalize(teamID));
+        }
 
-        // Subscribe to enemy despawn to update count
-        StartCoroutine(WaitForEnemyDespawn(enemyNetObj));
+        // Track enemy count; the Enemy reports back via NotifyEnemyDespawned when it dies
+        // (event-driven — replaces one polling coroutine per live enemy).
+        CurrentEnemyCount++;
+        if (enemy != null)
+        {
+            enemy.ServerSetOwnerSpawner(this);
+        }
     }
 
-    /// <summary>
-    /// Wait for enemy to be despawned and decrement counter
-    /// </summary>
-    private System.Collections.IEnumerator WaitForEnemyDespawn(NetworkObject enemy)
+    /// <summary>SERVER: called by a spawned Enemy from its Despawned() callback.</summary>
+    public void NotifyEnemyDespawned()
     {
-        // Wait until enemy is despawned or destroyed
-        yield return new WaitUntil(() => enemy == null || !enemy.IsValid);
-
-        if (HasStateAuthority)
-        {
-            CurrentEnemyCount--;
-        }
+        if (!HasStateAuthority) return;
+        CurrentEnemyCount = Mathf.Max(0, CurrentEnemyCount - 1);
     }
 
     // Visual debugging

@@ -1,5 +1,6 @@
 ﻿using Fusion;
 using UnityEngine;
+using Game.Combat.Core;
 
 /// <summary>
 /// FIXED VERSION - Drops flag on death and uses correct float health type
@@ -44,8 +45,12 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     // Simulation-path timers (TickTimer = deterministic, authority-driven).
     [Networked] private TickTimer SpawnImmunityTimer { get; set; }
-    [Networked] private TickTimer HitCooldownTimer { get; set; }
     [Networked] private TickTimer RespawnTimer { get; set; }
+
+    // Per-attacker rapid-hit guard (server-only; keyed by the attacking NetworkObject's id).
+    // Replaces the old single global HitCooldownTimer, which ate a second attacker's hit
+    // landing inside the window. Never networked; cleared on respawn.
+    private readonly HitCooldownLedger hitLedger = new HitCooldownLedger();
 
     public override void Spawned()
     {
@@ -114,10 +119,21 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     /// <summary>
     /// SERVER: Damages the player. Only runs on server.
-    /// INCLUDES SPAWN IMMUNITY CHECK
+    /// Unknown-attacker path (legacy/RPC callers) — shares one cooldown bucket (key 0),
+    /// which matches the old global-cooldown behaviour for these callers.
     /// </summary>
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_TakeDamage(float damage)
+    {
+        ServerApplyDamage(damage, default);
+    }
+
+    /// <summary>
+    /// SERVER: apply damage attributed to a specific attacker (the attacking NetworkObject's
+    /// id: the melee player, the shooter, or the enemy). Spawn immunity is global; the
+    /// rapid-hit guard is PER ATTACKER so two players hitting in the same 0.1s both land.
+    /// </summary>
+    public void ServerApplyDamage(float damage, NetworkId attackerId)
     {
         if (!HasStateAuthority) return;
         if (IsDead) return;
@@ -128,8 +144,9 @@ public class PlayerStatsHandler : NetworkBehaviour
             return;
         }
 
-        // Rapid-hit guard: ignore damage while the hit-cooldown timer is still running.
-        if (!HitCooldownTimer.ExpiredOrNotRunning(Runner))
+        // Rapid-hit guard, per attacker.
+        int cooldownTicks = Mathf.Max(1, Mathf.RoundToInt(hitCooldown * Runner.TickRate));
+        if (!hitLedger.TryRegisterHit((ulong)attackerId.Raw, Runner.Tick, cooldownTicks))
         {
             return;
         }
@@ -137,14 +154,11 @@ public class PlayerStatsHandler : NetworkBehaviour
         CurrentHealth -= damage;
         CurrentHealth = Mathf.Max(0, CurrentHealth);
 
-
         if (CurrentHealth <= 0)
         {
             CurrentHealth = 0;
             Die();
         }
-
-        HitCooldownTimer = TickTimer.CreateFromSeconds(Runner, hitCooldown);
     }
 
     /// <summary>
@@ -235,6 +249,7 @@ public class PlayerStatsHandler : NetworkBehaviour
         CurrentHealth = stats.maxHealth;
         IsDead = false;
         SpawnImmunityTimer = TickTimer.CreateFromSeconds(Runner, spawnImmunityDuration); // Reset spawn immunity
+        hitLedger.Clear(); // fresh life, no stale attacker cooldowns
 
         // Teleport to the position chosen at death (RespawnPosition), so it matches where the
         // camera already transitioned to.

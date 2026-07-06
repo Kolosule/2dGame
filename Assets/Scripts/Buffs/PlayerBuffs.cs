@@ -18,14 +18,10 @@ public class PlayerBuffs : NetworkBehaviour
     [Networked] private TickTimer StealthDurationTimer { get; set; }
     [Networked] private TickTimer StealthCooldownTimer { get; set; }
 
-    private FlagCarrierMarker flagMarker;
-
     public int TotalDeposited => TotalDepositedValue;
 
     public override void Spawned()
     {
-        flagMarker = GetComponent<FlagCarrierMarker>();
-
         if (HasStateAuthority && LoadoutLength == 0)
             ApplyDefaultLoadout();
     }
@@ -128,7 +124,8 @@ public class PlayerBuffs : NetworkBehaviour
         if (!StealthCooldownTimer.ExpiredOrNotRunning(Runner)) return false;
         ActiveBuffParams p = StealthParams();
         if (!p.Unlocked) return false;
-        bool carrying = flagMarker != null && flagMarker.IsCarryingFlag();
+        bool carrying = CTFGameManager.Instance != null &&
+                        CTFGameManager.Instance.IsCarrying(Object.InputAuthority);
         if (carrying && !p.UsableWhileCarryingFlag) return false;
         return true;
     }

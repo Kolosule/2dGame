@@ -208,6 +208,18 @@ public class CTFGameManager : NetworkBehaviour
 
     public bool IsGameOver() => GameIsOver;
 
+    /// <summary>
+    /// Is this player currently carrying either flag? Derived purely from the flags'
+    /// [Networked] state (CurrentState + CarrierPlayerRef), so it is safe to read inside
+    /// FixedUpdateNetwork/Simulate on a predicting client — unlike FlagCarrierMarker's
+    /// local bool, which is render-path state and lags/never rewinds on resimulation.
+    /// </summary>
+    public bool IsCarrying(PlayerRef player)
+    {
+        return (team1Flag != null && team1Flag.IsCarriedBy(player)) ||
+               (team2Flag != null && team2Flag.IsCarriedBy(player));
+    }
+
     public int GetPlayerCount()
     {
         if (Runner == null) return 0;

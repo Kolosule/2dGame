@@ -39,6 +39,12 @@ public class Enemy : NetworkBehaviour
     [Networked] public NetworkBool IsTelegraphing { get; set; }
     [Networked] public NetworkBool FacingLeft { get; set; }
 
+    // The enemy's team, networked so CLIENTS colorize correctly. The spawner used to set
+    // EnemyTeamComponent.teamID in the spawn callback, which runs on the server only —
+    // every client kept the prefab default and showed the wrong team color.
+    [Networked, OnChangedRender(nameof(OnTeamChanged))]
+    public Team Team { get; private set; }
+
     // Knockback tracking (TickTimer = simulation-path timing, authority only)
     private TickTimer knockbackTimer;
 
@@ -53,6 +59,9 @@ public class Enemy : NetworkBehaviour
 
     // AI driver (authority only)
     private EnemyAI ai;
+
+    // Server-only backref to the spawner that created us, for its live-count bookkeeping.
+    private NetworkedEnemySpawner ownerSpawner;
 
     // Effective (ring-scaled) stats, resolved once on the authority in Spawned().
     private int effectiveMaxHealth;
@@ -71,6 +80,10 @@ public class Enemy : NetworkBehaviour
         teamComponent = GetComponent<EnemyTeamComponent>();
         rb = GetComponent<Rigidbody2D>();
         ai = GetComponent<EnemyAI>();
+
+        // OnChangedRender does not fire for the value a late joiner receives as initial
+        // state (same pattern as PlayerTeamData), so apply once here.
+        OnTeamChanged();
 
         if (stats == null)
         {
@@ -122,6 +135,39 @@ public class Enemy : NetworkBehaviour
         effectiveMaxHealth = Mathf.Max(1, Mathf.RoundToInt(stats.maxHealth * tier.healthMult));
         effectiveAttackDamage = Mathf.Max(0, Mathf.RoundToInt(stats.attackDamage * tier.damageMult));
         effectiveMoveSpeed = stats.moveSpeed * tier.speedMult;
+    }
+
+    /// <summary>SERVER: assign this enemy's team (called from the spawner's spawn callback).</summary>
+    public void ServerSetTeam(Team team)
+    {
+        if (!HasStateAuthority) return;
+        Team = team;
+        OnTeamChanged(); // apply immediately on the authority; clients get OnChangedRender
+    }
+
+    /// <summary>Render-time callback: push the networked team into the visual/team component.</summary>
+    private void OnTeamChanged()
+    {
+        if (Team == global::Team.None) return;
+        EnemyTeamComponent tc = teamComponent != null ? teamComponent : GetComponent<EnemyTeamComponent>();
+        if (tc != null) tc.ApplyTeam(Team);
+    }
+
+    /// <summary>SERVER: called by the spawner's spawn callback so we can report our despawn.</summary>
+    public void ServerSetOwnerSpawner(NetworkedEnemySpawner spawner)
+    {
+        ownerSpawner = spawner;
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        // Event-driven count decrement (replaces the spawner's per-enemy polling coroutine).
+        // ownerSpawner is set on the server only; Unity's == also guards a destroyed spawner.
+        if (ownerSpawner != null)
+        {
+            ownerSpawner.NotifyEnemyDespawned();
+            ownerSpawner = null;
+        }
     }
 
     /// <summary>
@@ -244,8 +290,8 @@ public class Enemy : NetworkBehaviour
                                                defenderTeam, player.transform.position);
         }
 
-        // Deal damage to player
-        player.TakeDamage(finalDamage);
+        // Deal damage to player, attributed to this enemy (per-attacker hit cooldown).
+        player.ServerApplyDamage(finalDamage, Object.Id);
         attackCooldownTimer = TickTimer.CreateFromSeconds(Runner, stats.attackCooldown);
 
     }

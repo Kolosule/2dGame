@@ -30,9 +30,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public string sessionName = "PvPvERoom";
     public int gameplaySceneIndex = 1;
 
-    [Header("Testing Mode")]
-    [Tooltip("Enable single player mode (no Photon needed)")]
-    public bool singlePlayerMode = true;
+    [Tooltip("Session player cap. Fusion refuses connections beyond this count.")]
+    public int maxPlayers = 20;
 
     // Reliable-data channel tag for a client sending its team choice to the host.
     private static readonly Fusion.Sockets.ReliableKey TeamChoiceKey =
@@ -51,8 +50,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         Fusion.Sockets.ReliableKey.FromInts(0x53545254, 0, 0, 0); // "STRT"
 
     private NetworkRunner runner;
+    private NetworkSceneManagerDefault sceneManager;
     private PooledNetworkObjectProvider objectProvider;
-    private bool isConnected = false;
     private bool gameStarting = false;
 
     // Server-only: PlayerId of the current designated host-client (lowest active id), or
@@ -77,6 +76,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // Pool high-churn networked prefabs (projectiles) instead of Instantiate/Destroy each shot.
         objectProvider = gameObject.AddComponent<PooledNetworkObjectProvider>();
 
+        // One scene manager for the lifetime of the runner. Created here (not per StartGame call)
+        // so a failed connect + retry doesn't stack duplicate components on this GameObject.
+        sceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>();
+
         // Register the single input source.
         var inputProvider = gameObject.AddComponent<NetworkInputProvider>();
         runner.AddCallbacks(inputProvider);
@@ -90,8 +93,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         var boot = NetworkBootMode.Resolve(
             Application.isBatchMode,
-            System.Environment.GetCommandLineArgs(),
-            singlePlayerMode);
+            System.Environment.GetCommandLineArgs());
 
         if (boot == NetworkBootKind.DedicatedServer)
         {
@@ -125,7 +127,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             GameMode = mode,
             SessionName = sessionName,
-            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>(),
+            PlayerCount = maxPlayers,
+            SceneManager = sceneManager,
             ObjectProvider = objectProvider
         };
 
@@ -133,7 +136,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (result.Ok)
         {
-            isConnected = true;
             HideMenu();
             ShowTeamSelection();
         }
@@ -150,7 +152,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             GameMode = GameMode.Server,
             SessionName = sessionName,
-            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>(),
+            PlayerCount = maxPlayers,
+            SceneManager = sceneManager,
             ObjectProvider = objectProvider
         };
 
@@ -170,7 +173,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             GameMode = GameMode.Client,
             SessionName = sessionName,
-            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>(),
+            PlayerCount = maxPlayers,
+            SceneManager = sceneManager,
             ObjectProvider = objectProvider
         };
 
@@ -178,7 +182,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (result.Ok)
         {
-            isConnected = true;
             HideMenu();
             ShowTeamSelection();
         }
@@ -435,7 +438,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
     {
-        isConnected = false;
+        // Pooled instances belong to the session that just died — drop them so a
+        // restarted session doesn't reuse destroyed objects.
+        if (objectProvider != null)
+            objectProvider.ClearPools();
 
         if (teamSelectionUI != null)
             teamSelectionUI.HideTeamSelection();
@@ -459,6 +465,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
     {
+        // The ONLY place that accepts/refuses connections (future ban list / lockout goes here).
+        // The player cap itself is enforced by Fusion via StartGameArgs.PlayerCount.
         request.Accept();
     }
 
