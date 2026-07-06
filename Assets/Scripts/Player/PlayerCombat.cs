@@ -210,6 +210,7 @@ public class PlayerCombat : NetworkBehaviour
                 Vector2 knockbackForce = new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward);
                 int finalDamage = ResolveMeleeDamage(hit.gameObject, hit.transform.position);
                 enemy.TakeDamage(finalDamage, knockbackForce, hit.transform.position);
+                RPC_HitFeedback(enemy.Object.Id, hit.transform.position, finalDamage);
                 continue;
             }
 
@@ -227,6 +228,7 @@ public class PlayerCombat : NetworkBehaviour
 
                 int finalDamage = ResolveMeleeDamage(hit.gameObject, hit.transform.position);
                 targetPlayer.ServerApplyDamage(finalDamage, Object.Id);
+                RPC_HitFeedback(targetPlayer.Object.Id, hit.transform.position, finalDamage);
 
                 Rigidbody2D targetRb = hit.GetComponent<Rigidbody2D>();
                 if (targetRb != null)
@@ -237,6 +239,21 @@ public class PlayerCombat : NetworkBehaviour
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Attacker-only hit feedback. Server calls this on the attacker's client after
+    /// a landed melee hit; it resolves the target locally and plays cosmetic FX.
+    /// No networked state — mirrors Projectile.RPC_Impact / Enemy.RPC_TakeDamage.
+    /// </summary>
+    [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+    private void RPC_HitFeedback(NetworkId targetId, Vector2 hitPoint, int damage)
+    {
+        if (HitFeedback.Instance == null) return;
+        GameObject targetGo = null;
+        if (Runner.TryFindObject(targetId, out NetworkObject targetObj) && targetObj != null)
+            targetGo = targetObj.gameObject;
+        HitFeedback.Instance.Play(targetGo, hitPoint, damage);
     }
 
     /// <summary>
