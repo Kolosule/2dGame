@@ -158,13 +158,12 @@ public class NetworkedHomeBase : NetworkBehaviour
     }
 
     /// <summary>
-    /// FIXED - RPC to request coin deposit. Called by client, executed on server.
-    /// Now receives NetworkObject directly instead of PlayerRef to avoid lookup issues.
+    /// RPC to request coin deposit. Called by client (manual deposit key / trigger enter),
+    /// executed on server. Receives the NetworkObject directly to avoid lookup issues.
     /// </summary>
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     private void RPC_RequestDeposit(NetworkObject playerNetObj)
     {
-
         // Validate the player NetworkObject
         if (playerNetObj == null || !playerNetObj.IsValid)
         {
@@ -172,50 +171,71 @@ public class NetworkedHomeBase : NetworkBehaviour
             return;
         }
 
-
-        // Get the inventory component
         NetworkedPlayerInventory inventory = playerNetObj.GetComponent<NetworkedPlayerInventory>();
-
-        if (inventory != null)
-        {
-
-            // Verify player is on correct team (server-side check)
-            if (!IsPlayerOnCorrectTeam(inventory))
-            {
-                Debug.LogWarning($"[SERVER] Player tried to deposit at wrong base!");
-                return;
-            }
-
-            // Get points from player's inventory
-            int points = inventory.ServerDepositCoins();
-
-            if (points > 0)
-            {
-
-                // Add points to team score through the TeamScoreManager
-                TeamScoreManager scoreManager = TeamScoreManager.Instance;
-                if (scoreManager != null)
-                {
-                    scoreManager.RPC_AddPoints(baseTeam, points);
-
-
-                    // Notify all clients to play effects
-                    RPC_OnDeposit(playerNetObj.transform.position, points);
-
-                    // Additive: credit the player's personal deposited-value total so buffs
-                    // progress. Team scoring above is untouched.
-                    PlayerBuffs buffs = playerNetObj.GetComponent<PlayerBuffs>();
-                    if (buffs != null) buffs.ServerAddDepositedValue(points);
-                }
-                else
-                {
-                    Debug.LogError("[SERVER] TeamScoreManager not found in scene!");
-                }
-            }
-        }
-        else
+        if (inventory == null)
         {
             Debug.LogError($"[SERVER] No NetworkedPlayerInventory component found on {playerNetObj.name}!");
+            return;
+        }
+
+        // Verify player is on correct team (server-side check)
+        if (!IsPlayerOnCorrectTeam(inventory))
+        {
+            Debug.LogWarning("[SERVER] Player tried to deposit at wrong base!");
+            return;
+        }
+
+        ServerDeposit(playerNetObj, inventory);
+    }
+
+    /// <summary>
+    /// SERVER: deposit this player's coins into the team score. Shared by the client-request
+    /// RPC and the server-side occupant sweep. Safe to call with an empty inventory
+    /// (ServerDepositCoins returns 0 and nothing happens).
+    /// </summary>
+    private void ServerDeposit(NetworkObject playerNetObj, NetworkedPlayerInventory inventory)
+    {
+        int points = inventory.ServerDepositCoins();
+        if (points <= 0) return;
+
+        TeamScoreManager scoreManager = TeamScoreManager.Instance;
+        if (scoreManager == null)
+        {
+            Debug.LogError("[SERVER] TeamScoreManager not found in scene!");
+            return;
+        }
+
+        scoreManager.RPC_AddPoints(baseTeam, points);
+
+        // Notify all clients to play effects
+        RPC_OnDeposit(playerNetObj.transform.position, points);
+
+        // Credit the player's personal deposited-value total so buffs progress.
+        PlayerBuffs buffs = playerNetObj.GetComponent<PlayerBuffs>();
+        if (buffs != null) buffs.ServerAddDepositedValue(points);
+    }
+
+    /// <summary>
+    /// SERVER: auto-deposit for anyone STANDING in their base when coins land on them
+    /// (the trigger-enter path only fires on entry). Occupants whose player object is
+    /// gone (disconnect) are pruned first so their PlayerRef doesn't linger forever.
+    /// Cheap: occupant sets are tiny and the sweep skips players with no coins.
+    /// </summary>
+    public override void FixedUpdateNetwork()
+    {
+        if (!HasStateAuthority || !autoDeposit || occupants.Count == 0) return;
+
+        occupants.RemoveWhere(p => !Runner.TryGetPlayerObject(p, out _));
+
+        foreach (PlayerRef occupant in occupants)
+        {
+            if (!Runner.TryGetPlayerObject(occupant, out NetworkObject playerObj)) continue;
+
+            NetworkedPlayerInventory inventory = playerObj.GetComponent<NetworkedPlayerInventory>();
+            if (inventory == null || inventory.CoinCount == 0) continue;
+            if (!IsPlayerOnCorrectTeam(inventory)) continue;
+
+            ServerDeposit(playerObj, inventory);
         }
     }
 
