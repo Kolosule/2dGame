@@ -60,6 +60,9 @@ public class Enemy : NetworkBehaviour
     // AI driver (authority only)
     private EnemyAI ai;
 
+    // Server-only backref to the spawner that created us, for its live-count bookkeeping.
+    private NetworkedEnemySpawner ownerSpawner;
+
     // Effective (ring-scaled) stats, resolved once on the authority in Spawned().
     private int effectiveMaxHealth;
     private int effectiveAttackDamage;
@@ -148,6 +151,23 @@ public class Enemy : NetworkBehaviour
         if (Team == global::Team.None) return;
         EnemyTeamComponent tc = teamComponent != null ? teamComponent : GetComponent<EnemyTeamComponent>();
         if (tc != null) tc.ApplyTeam(Team);
+    }
+
+    /// <summary>SERVER: called by the spawner's spawn callback so we can report our despawn.</summary>
+    public void ServerSetOwnerSpawner(NetworkedEnemySpawner spawner)
+    {
+        ownerSpawner = spawner;
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        // Event-driven count decrement (replaces the spawner's per-enemy polling coroutine).
+        // ownerSpawner is set on the server only; Unity's == also guards a destroyed spawner.
+        if (ownerSpawner != null)
+        {
+            ownerSpawner.NotifyEnemyDespawned();
+            ownerSpawner = null;
+        }
     }
 
     /// <summary>

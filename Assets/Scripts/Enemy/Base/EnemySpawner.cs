@@ -98,25 +98,20 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             enemy.ServerSetTeam(TeamUtil.Normalize(teamID));
         }
 
-        // Track enemy count
+        // Track enemy count; the Enemy reports back via NotifyEnemyDespawned when it dies
+        // (event-driven — replaces one polling coroutine per live enemy).
         CurrentEnemyCount++;
-
-        // Subscribe to enemy despawn to update count
-        StartCoroutine(WaitForEnemyDespawn(enemyNetObj));
+        if (enemy != null)
+        {
+            enemy.ServerSetOwnerSpawner(this);
+        }
     }
 
-    /// <summary>
-    /// Wait for enemy to be despawned and decrement counter
-    /// </summary>
-    private System.Collections.IEnumerator WaitForEnemyDespawn(NetworkObject enemy)
+    /// <summary>SERVER: called by a spawned Enemy from its Despawned() callback.</summary>
+    public void NotifyEnemyDespawned()
     {
-        // Wait until enemy is despawned or destroyed
-        yield return new WaitUntil(() => enemy == null || !enemy.IsValid);
-
-        if (HasStateAuthority)
-        {
-            CurrentEnemyCount--;
-        }
+        if (!HasStateAuthority) return;
+        CurrentEnemyCount = Mathf.Max(0, CurrentEnemyCount - 1);
     }
 
     // Visual debugging
