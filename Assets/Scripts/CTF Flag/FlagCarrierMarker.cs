@@ -2,8 +2,9 @@ using UnityEngine;
 
 /// <summary>
 /// Attach to player prefabs. Shows a floating icon above the player's head while
-/// they carry a flag, on every peer. Dash suppression is handled elsewhere via
-/// IsCarryingFlag(); this component is purely the head-icon visual.
+/// they carry a flag, on every peer. PURELY VISUAL: gameplay (dash/stealth gating)
+/// derives carrying-state from networked flag state via CTFGameManager.IsCarrying —
+/// never read IsCarryingFlag() from simulation code.
 /// </summary>
 public class FlagCarrierMarker : MonoBehaviour
 {

@@ -26,7 +26,6 @@ public class PlayerMovement : NetworkBehaviour
 
     // Component refs
     private Rigidbody2D rb;
-    private FlagCarrierMarker flagCarrierMarker;
     private PlayerStatModifiers mods;
     private float baseGravity = 5f;
 
@@ -46,7 +45,6 @@ public class PlayerMovement : NetworkBehaviour
     public override void Spawned()
     {
         rb = GetComponent<Rigidbody2D>();
-        flagCarrierMarker = GetComponent<FlagCarrierMarker>();
         mods = GetComponent<PlayerStatModifiers>();
         if (rb != null) baseGravity = rb.gravityScale;
 
@@ -108,7 +106,10 @@ public class PlayerMovement : NetworkBehaviour
         if (!stunned && pressed.IsSet((int)PlayerButton.Dash) && !Dashing &&
             DashCooldownTimer.ExpiredOrNotRunning(Runner))
         {
-            bool carrying = flagCarrierMarker != null && flagCarrierMarker.IsCarryingFlag();
+            // Carrying-state must come from networked flag state (resim-safe), not the
+            // render-path FlagCarrierMarker bool — see CTFGameManager.IsCarrying.
+            bool carrying = CTFGameManager.Instance != null &&
+                            CTFGameManager.Instance.IsCarrying(Object.InputAuthority);
             if (!carrying) StartDash();
         }
         if (released.IsSet((int)PlayerButton.Dash) && Dashing)
