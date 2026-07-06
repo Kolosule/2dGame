@@ -217,8 +217,10 @@ public class NetworkedCoinPickup : NetworkBehaviour
                 IsCollected = true;
                 RPC_OnCoinCollected(transform.position);
                 Runner.Despawn(Object);
+                return; // coin is gone
             }
-            return; // one player per tick is enough; coin is gone or inventory was full
+            // This player's inventory is full (maxCoins cap) — let another overlapping
+            // player collect it this tick instead of permanently blocking the coin.
         }
     }
 
