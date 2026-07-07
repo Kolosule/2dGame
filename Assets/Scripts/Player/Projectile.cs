@@ -89,6 +89,7 @@ public class Projectile : NetworkBehaviour
                 if (Runner.TryGetPlayerObject(Object.InputAuthority, out NetworkObject shooterObj))
                     attackerId = shooterObj.Id;
                 playerStats.ServerApplyDamage(Damage, attackerId);
+                RPC_HitFeedback(playerStats.Object.Id, other.transform.position, Damage);
                 if (stunPlayers)
                 {
                     PlayerMovement pm = other.GetComponent<PlayerMovement>();
@@ -105,6 +106,7 @@ public class Projectile : NetworkBehaviour
         {
             Vector2 dir = ((Vector2)other.transform.position - (Vector2)transform.position).normalized;
             enemy.TakeDamage(Damage, dir * 5f, other.transform.position);
+            RPC_HitFeedback(enemy.Object.Id, other.transform.position, Damage);
             Hit();
             return;
         }
@@ -130,5 +132,19 @@ public class Projectile : NetworkBehaviour
             GameObject fx = Instantiate(impactEffect, position, Quaternion.identity);
             Destroy(fx, 2f);
         }
+    }
+
+    /// <summary>
+    /// Attacker-only hit feedback, delivered to the shooter's client. Resolves the
+    /// target locally and plays cosmetic FX. No networked state.
+    /// </summary>
+    [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+    private void RPC_HitFeedback(NetworkId targetId, Vector2 hitPoint, int damage)
+    {
+        if (HitFeedback.Instance == null) return;
+        GameObject targetGo = null;
+        if (Runner.TryFindObject(targetId, out NetworkObject targetObj) && targetObj != null)
+            targetGo = targetObj.gameObject;
+        HitFeedback.Instance.Play(targetGo, hitPoint, damage);
     }
 }
