@@ -235,6 +235,7 @@ GameObject:
   - component: {fileID: 2004737409023527185}
   - component: {fileID: 149290342099161498}
   - component: {fileID: 7177406052163348810}
+  - component: {fileID: 1268178750110737226}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -583,12 +584,16 @@ MonoBehaviour:
   attackDuration: 0.3
   groundPoundDuration: 0.3
   shootDuration: 0.3
+  walkEnterSpeed: 0.15
+  walkStopSpeed: 0.05
+  riseSpeed: 0.1
+  fallSpeed: -0.1
+  minGroundedDwell: 0.06
   anim: {fileID: 8461757289261199447}
   weaponAnim: {fileID: 316185546467214530}
   audioSource: {fileID: 0}
   jumpClip: {fileID: 0}
   landClip: {fileID: 0}
-  _State: 0
 --- !u!114 &6955539971465329193
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -650,8 +655,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCameraFeelHandler
   dashKickMagnitude: 0.5
   dashKickDuration: 0.12
-  hitStopDuration: 0.07
-  hitStopPunch: 0.15
 --- !u!114 &7177406052163348810
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -666,8 +669,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCameraFeelHandler
   dashKickMagnitude: 0.5
   dashKickDuration: 0.12
-  hitStopDuration: 0.07
-  hitStopPunch: 0.15
+--- !u!114 &1268178750110737226
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 38278ac25ced55a46918411138c0ca3c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HitFlash
+  spriteRenderer: {fileID: 5315627363694764139}
+  flashDuration: 0.1
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0
