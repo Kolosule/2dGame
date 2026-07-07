@@ -3,6 +3,10 @@
 # Get latest from https://github.com/github/gitignore/blob/main/Unity.gitignore
 #
 .utmp/
+
+# Unity Version Control (Plastic SCM) local workspace state - per-machine, not shareable
+/.plastic/
+
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/

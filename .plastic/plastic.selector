@@ -1,4 +1,0 @@
-repository "2D Multiplayer Platformer/Unnamed Super Secret Project@3757264@cloud"
-  path "/"
-    br "/main"
-    co "/main"
