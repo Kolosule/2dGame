@@ -23,13 +23,21 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     [Tooltip("Radius around the death position to scatter dropped coins")]
     [SerializeField] private float dropScatterRadius = 1f;
 
+    /// <summary>Fires whenever CoinCount / TotalCoinValue change (Fusion render callback). HUD subscribes.</summary>
+    public event System.Action CoinsChanged;
+
     // Network property to sync coin count across all clients
-    [Networked]
+    [Networked, OnChangedRender(nameof(OnCoinsChanged))]
     public int CoinCount { get; private set; }
 
     // Network property to sync total coin value
-    [Networked]
+    [Networked, OnChangedRender(nameof(OnCoinsChanged))]
     public int TotalCoinValue { get; private set; }
+
+    private void OnCoinsChanged()
+    {
+        CoinsChanged?.Invoke();
+    }
 
     // Local list to store coin data (not networked, only on server)
     // Client uses CoinCount for display only

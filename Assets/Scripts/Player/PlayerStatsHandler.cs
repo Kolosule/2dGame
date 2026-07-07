@@ -1,4 +1,5 @@
-﻿using Fusion;
+﻿using System;
+using Fusion;
 using Fusion.Addons.Physics;
 using UnityEngine;
 using Game.Combat.Core;
@@ -31,6 +32,9 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     [Tooltip("Minimum seconds between consecutive hits (rapid-hit guard)")]
     [SerializeField] private float hitCooldown = 0.1f;
+
+    /// <summary>Fires whenever CurrentHealth changes (Fusion render callback). HUD subscribes.</summary>
+    public event Action HealthChanged;
 
     // Networked properties - FIXED: Use float for health
     [Networked, OnChangedRender(nameof(OnHealthChanged))]
@@ -86,6 +90,7 @@ public class PlayerStatsHandler : NetworkBehaviour
     private void OnHealthChanged()
     {
         UpdateHealthBar();
+        HealthChanged?.Invoke();
     }
 
     private void UpdateHealthBar()
