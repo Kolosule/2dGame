@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using NUnit.Framework;
 
 public class LobbyHostPolicyTests
@@ -31,20 +30,18 @@ public class LobbyHostPolicyTests
     [Test]
     public void CanStart_NoPlayers_False()
     {
-        Assert.IsFalse(LobbyHostPolicy.CanStart(new int[0], _ => true));
+        Assert.IsFalse(LobbyHostPolicy.CanStart(0));
     }
 
     [Test]
-    public void CanStart_AllChosen_True()
+    public void CanStart_OnePlayer_True()
     {
-        var chosen = new HashSet<int> { 1, 2, 5 };
-        Assert.IsTrue(LobbyHostPolicy.CanStart(new[] { 1, 2, 5 }, chosen.Contains));
+        Assert.IsTrue(LobbyHostPolicy.CanStart(1));
     }
 
     [Test]
-    public void CanStart_OneMissing_False()
+    public void CanStart_FullLobby_True()
     {
-        var chosen = new HashSet<int> { 1, 5 };
-        Assert.IsFalse(LobbyHostPolicy.CanStart(new[] { 1, 2, 5 }, chosen.Contains));
+        Assert.IsTrue(LobbyHostPolicy.CanStart(20));
     }
 }
