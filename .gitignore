@@ -7,6 +7,9 @@
 # Unity Version Control (Plastic SCM) local workspace state - per-machine, not shareable
 /.plastic/
 
+# Superpowers brainstorming/visual-companion scratch (per-session, not shareable)
+/.superpowers/
+
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
