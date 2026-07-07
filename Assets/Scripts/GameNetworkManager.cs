@@ -1,30 +1,25 @@
-﻿using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine;
 using Fusion;
 using Fusion.Addons.Physics;
 using Fusion.Sockets;
-using UnityEngine.SceneManagement;
 using System;
 using System.Collections.Generic;
 
 /// <summary>
-/// Menu + lobby controller. Players pick a team in the MainMenu; each choice is sent to the host
-/// (the host records its own directly, clients use Fusion reliable-data since no NetworkObject
-/// exists in the menu scene). Only the host has a Start button, and it is enabled only once every
-/// connected player has submitted a choice; the host clicks it to load the Gameplay scene, so the
-/// host's authoritative scene load never drags a client into gameplay before they have chosen. The
-/// collected choices live in LobbyTeamChoices, which the Gameplay-scene NetworkedSpawnManager reads
-/// on the host to spawn each player on the right team.
+/// Boot + transport + server-side lobby glue. Players land in a single 20-player lobby
+/// (session "PvPvERoom"); the server auto-assigns each joiner to the smaller team, tracks
+/// nicknames and team switches in LobbyServerState, and broadcasts a full LobbyState snapshot
+/// (LobbyProtocol) to every player after each lobby change. The designated host-client
+/// (lowest PlayerId — the first joiner) gets the Start button and may start whenever at least
+/// one player is connected. In host mode the host's own UI is fed the same snapshot through a
+/// local loopback, so both modes share one rendering path (LobbyScreenUI.ApplyLobbyState).
+/// Team/loadout results land in LobbyTeamChoices/LobbyLoadoutChoices for NetworkedSpawnManager.
 /// </summary>
 public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 {
     [Header("UI References")]
-    public Button hostButton;
-    public Button clientButton;
-    public GameObject menuPanel;
-
-    [Header("Team Selection")]
-    public TeamSelectionUI teamSelectionUI;
+    public MainMenuUI menuUI;
+    public LobbyScreenUI lobbyUI;
 
     [Header("Network Settings")]
     public string sessionName = "PvPvERoom";
@@ -33,30 +28,18 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     [Tooltip("Session player cap. Fusion refuses connections beyond this count.")]
     public int maxPlayers = 20;
 
-    // Reliable-data channel tag for a client sending its team choice to the host.
-    private static readonly Fusion.Sockets.ReliableKey TeamChoiceKey =
-        Fusion.Sockets.ReliableKey.FromInts(0x54454100, 0x4D, 0, 0); // "TEAM"
-
-    // Reliable-data channel tag for a client sending its buff loadout to the host.
-    private static readonly Fusion.Sockets.ReliableKey LoadoutKey =
-        Fusion.Sockets.ReliableKey.FromInts(0x4C4F4144, 0x55, 0, 0); // "LOAD"
-
-    // Reliable-data channel: server -> client per-client lobby status ([isHost, canStart]).
-    private static readonly Fusion.Sockets.ReliableKey LobbyStatusKey =
-        Fusion.Sockets.ReliableKey.FromInts(0x4C425953, 0, 0, 0); // "LBYS"
-
-    // Reliable-data channel: designated host-client -> server "start the match".
-    private static readonly Fusion.Sockets.ReliableKey StartMatchKey =
-        Fusion.Sockets.ReliableKey.FromInts(0x53545254, 0, 0, 0); // "STRT"
+    // Reliable-data channel tags. TEAM is a team-SWITCH request (teams are auto-assigned on join).
+    private static readonly ReliableKey TeamChoiceKey = ReliableKey.FromInts(0x54454100, 0x4D, 0, 0); // "TEAM"
+    private static readonly ReliableKey LoadoutKey = ReliableKey.FromInts(0x4C4F4144, 0x55, 0, 0);    // "LOAD"
+    private static readonly ReliableKey NameKey = ReliableKey.FromInts(0x4E414D45, 0, 0, 0);          // "NAME"
+    private static readonly ReliableKey RosterKey = ReliableKey.FromInts(0x524F5354, 0, 0, 0);        // "ROST"
+    private static readonly ReliableKey StartMatchKey = ReliableKey.FromInts(0x53545254, 0, 0, 0);    // "STRT"
 
     private NetworkRunner runner;
     private NetworkSceneManagerDefault sceneManager;
     private PooledNetworkObjectProvider objectProvider;
+    private LobbyServerState serverLobby = new LobbyServerState();
     private bool gameStarting = false;
-
-    // Server-only: PlayerId of the current designated host-client (lowest active id), or
-    // LobbyHostPolicy.NoHost when no players are connected.
-    private int currentHostId = LobbyHostPolicy.NoHost;
 
     void Start()
     {
@@ -65,11 +48,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         // Fusion steps Physics2D inside the network tick (required for NetworkRigidbody2D prediction).
         // ClientPhysicsSimulation defaults to Disabled, which means CLIENTS never call
-        // Physics.Simulate() and so never integrate their own rigidbody forward — NetworkRigidbody2D's
-        // _clientPrediction stays false, so the non-host's body only ever shows server snapshots, a
-        // full round-trip late (the "delayed position" bug). SimulateForward simulates physics on
-        // forward ticks (and SyncTransforms on resimulations), enabling client-side prediction of the
-        // local player's position.
+        // Physics.Simulate() and so never integrate their own rigidbody forward — SimulateForward
+        // enables client-side prediction of the local player's position.
         var simulatePhysics = gameObject.AddComponent<RunnerSimulatePhysics2D>();
         simulatePhysics.ClientPhysicsSimulation = ClientPhysicsSimulation.SimulateForward;
 
@@ -84,11 +64,12 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         var inputProvider = gameObject.AddComponent<NetworkInputProvider>();
         runner.AddCallbacks(inputProvider);
 
-        // Receive lobby callbacks (player join/leave, reliable team-choice data) on the host.
+        // Receive lobby callbacks (player join/leave, reliable lobby data).
         runner.AddCallbacks(this);
 
         LobbyTeamChoices.Clear();
         LobbyLoadoutChoices.Clear();
+        serverLobby = new LobbyServerState();
         gameStarting = false;
 
         var boot = NetworkBootMode.Resolve(
@@ -98,34 +79,22 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (boot == NetworkBootKind.DedicatedServer)
         {
             StartServer();
-            return; // headless server: no menu, no team-selection UI
+            return; // headless server: no menu UI
         }
 
-        if (hostButton != null)
-            hostButton.onClick.AddListener(StartHost);
-        else
-            Debug.LogError("❌ Host button not assigned!");
-
-        if (clientButton != null)
-            clientButton.onClick.AddListener(StartClient);
-        else
-            Debug.LogError("❌ Client button not assigned!");
-
-        if (teamSelectionUI == null)
-            Debug.LogError("❌ TeamSelectionUI not assigned!");
+        if (menuUI == null) Debug.LogError("❌ MainMenuUI not assigned!");
+        if (lobbyUI == null) Debug.LogError("❌ LobbyScreenUI not assigned!");
     }
 
-    async void StartHost()
+    // ============================
+    // Connection entry points (menuUI buttons call these)
+    // ============================
+
+    public async void StartHost()
     {
-        SetButtonsInteractable(false);
-
-        // CRITICAL FIX: Always use Host mode for multiplayer
-        // AutoHostOrClient creates separate sessions!
-        GameMode mode = GameMode.Host;  // ⭐ CHANGED THIS
-
         var args = new StartGameArgs()
         {
-            GameMode = mode,
+            GameMode = GameMode.Host, // AutoHostOrClient creates separate sessions — never use it here
             SessionName = sessionName,
             PlayerCount = maxPlayers,
             SceneManager = sceneManager,
@@ -136,13 +105,44 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (result.Ok)
         {
-            HideMenu();
-            ShowTeamSelection();
+            EnterLobbyUI();
         }
         else
         {
-            Debug.LogError($"❌ Failed to start: {result.ShutdownReason}");
-            SetButtonsInteractable(true);
+            Debug.LogError($"❌ Failed to start host: {result.ShutdownReason}");
+            if (menuUI != null)
+            {
+                menuUI.ShowStatus($"Failed to start host: {result.ShutdownReason}");
+                menuUI.SetBusy(false);
+            }
+        }
+    }
+
+    public async void StartClient()
+    {
+        var args = new StartGameArgs()
+        {
+            GameMode = GameMode.Client,
+            SessionName = sessionName,
+            PlayerCount = maxPlayers,
+            SceneManager = sceneManager,
+            ObjectProvider = objectProvider
+        };
+
+        var result = await runner.StartGame(args);
+
+        if (result.Ok)
+        {
+            EnterLobbyUI();
+        }
+        else
+        {
+            Debug.LogError($"❌ Failed to connect: {result.ShutdownReason}");
+            if (menuUI != null)
+            {
+                menuUI.ShowStatus($"Failed to connect: {result.ShutdownReason}");
+                menuUI.SetBusy(false);
+            }
         }
     }
 
@@ -165,80 +165,55 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             Debug.LogError($"❌ Server failed to start: {result.ShutdownReason}");
     }
 
-    async void StartClient()
+    private void EnterLobbyUI()
     {
-        SetButtonsInteractable(false);
-
-        var args = new StartGameArgs()
-        {
-            GameMode = GameMode.Client,
-            SessionName = sessionName,
-            PlayerCount = maxPlayers,
-            SceneManager = sceneManager,
-            ObjectProvider = objectProvider
-        };
-
-        var result = await runner.StartGame(args);
-
-        if (result.Ok)
-        {
-            HideMenu();
-            ShowTeamSelection();
-        }
-        else
-        {
-            Debug.LogError($"❌ Failed to connect: {result.ShutdownReason}");
-            SetButtonsInteractable(true);
-        }
+        if (menuUI != null) menuUI.Hide();
+        if (lobbyUI != null) lobbyUI.Show();
+        SendLocalNickname();
     }
-
-    void HideMenu()
-    {
-        if (menuPanel != null)
-        {
-            menuPanel.SetActive(false);
-        }
-    }
-
-    void ShowTeamSelection()
-    {
-        if (teamSelectionUI != null && runner != null)
-        {
-            teamSelectionUI.ShowTeamSelection(runner);
-        }
-        else
-        {
-            Debug.LogError("❌ Cannot show team selection!");
-        }
-    }
-
-    // ============================
-    // LOBBY: team choice + start gate
-    // ============================
 
     /// <summary>
-    /// Called by TeamSelectionUI when the local player picks a team. Records the choice on the host
-    /// (directly if we are the host, otherwise over reliable-data) and refreshes the host's Start
-    /// gate. Does NOT load the scene - the host loads it explicitly via RequestStartMatch once they
-    /// click Start (which is only enabled after every connected player has chosen).
+    /// Pushes the local player's nickname to the lobby. Host mode records directly and
+    /// re-broadcasts; clients send over reliable data. An empty nickname keeps the server's
+    /// "Player N" placeholder (nothing is sent — the decoder rejects empty payloads anyway).
     /// </summary>
-    public void SubmitLocalTeamChoice(int teamNumber)
+    private void SendLocalNickname()
     {
-        if (teamNumber != 1 && teamNumber != 2)
-        {
-            Debug.LogError($"❌ Invalid team number: {teamNumber}");
-            return;
-        }
-
-        if (runner == null || !runner.IsRunning)
-        {
-            Debug.LogError("❌ Cannot submit team choice - runner not running!");
-            return;
-        }
+        if (runner == null || !runner.IsRunning) return;
+        string nick = menuUI != null ? menuUI.Nickname : "";
 
         if (runner.IsServer)
         {
-            RecordChoice(runner.LocalPlayer, teamNumber);
+            if (runner.LocalPlayer != PlayerRef.None)
+            {
+                serverLobby.SetNickname(runner.LocalPlayer.PlayerId, nick);
+                BroadcastLobby(); // refresh even if unchanged so the just-shown UI gets a snapshot
+            }
+        }
+        else if (nick.Length > 0)
+        {
+            runner.SendReliableDataToServer(NameKey, LobbyProtocol.EncodeNickname(nick));
+        }
+    }
+
+    // ============================
+    // Lobby actions (lobbyUI buttons call these)
+    // ============================
+
+    /// <summary>Ask to move to the given team (1|2). Server-side it must actually change something.</summary>
+    public void RequestTeamSwitch(int teamNumber)
+    {
+        if (teamNumber != 1 && teamNumber != 2) return;
+        if (runner == null || !runner.IsRunning || gameStarting) return;
+
+        if (runner.IsServer)
+        {
+            if (runner.LocalPlayer == PlayerRef.None) return; // dedicated server is not a player
+            if (serverLobby.SwitchTeam(runner.LocalPlayer.PlayerId, teamNumber))
+            {
+                LobbyTeamChoices.Set(runner.LocalPlayer, teamNumber);
+                BroadcastLobby();
+            }
         }
         else
         {
@@ -247,22 +222,16 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     }
 
     /// <summary>
-    /// Called by TeamSelectionUI when the local player confirms their buff order. Records on the host
-    /// (directly if we are the host, else over reliable-data), parallel to SubmitLocalTeamChoice.
+    /// Called by LobbyScreenUI when the local player reorders their buffs. Records on the host
+    /// (directly if we are the host, else over reliable-data).
     /// </summary>
     public void SubmitLocalLoadoutChoice(byte[] order)
     {
         if (runner == null || !runner.IsRunning) return;
 
         // A zero-length reliable payload trips a Fusion assert on the real socket path
-        // (only reproduces on remote clients; the host's IsServer branch sends nothing).
-        // Treat null/empty as "no custom loadout" — the server keeps its default. An empty
-        // order usually means BuffLoadoutConfig is unassigned on TeamSelectionUI.
-        if (order == null || order.Length == 0)
-        {
-            Debug.LogWarning("SubmitLocalLoadoutChoice: empty loadout (is BuffLoadoutConfig assigned on TeamSelectionUI?) - using server default.");
-            return;
-        }
+        // (only reproduces on remote clients). Treat null/empty as "no custom loadout".
+        if (order == null || order.Length == 0) return;
 
         if (runner.IsServer)
             LobbyLoadoutChoices.Set(runner.LocalPlayer, order);
@@ -270,169 +239,98 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             runner.SendReliableDataToServer(LoadoutKey, order);
     }
 
-    /// <summary>Host-only: store a player's choice and refresh the host's Start button.</summary>
-    private void RecordChoice(PlayerRef player, int teamNumber)
-    {
-        if (!runner.IsServer)
-            return;
-
-        if (teamNumber != 1 && teamNumber != 2)
-        {
-            Debug.LogError($"❌ [HOST] Invalid team choice {teamNumber} from Player {player.PlayerId}");
-            return;
-        }
-
-        LobbyTeamChoices.Set(player, teamNumber);
-
-        RefreshStartGate();
-    }
-
     /// <summary>
-    /// Host-only: true once every connected player (the host included) has submitted a team choice.
-    /// There is no player-count minimum - a solo host who has chosen may start.
-    /// </summary>
-    private bool CanStartMatch()
-    {
-        if (runner == null || !runner.IsServer || gameStarting)
-            return false;
-
-        foreach (var player in runner.ActivePlayers)
-        {
-            if (!LobbyTeamChoices.Has(player))
-                return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Host-only: recompute whether the match may start and push that state to the host's Start
-    /// button. Called whenever lobby state changes (player joined/left, choice recorded). Never
-    /// loads the scene - the host triggers that explicitly via RequestStartMatch.
-    /// </summary>
-    private void RefreshStartGate()
-    {
-        if (runner == null || !runner.IsServer)
-            return;
-
-        // A real dedicated server has no local player; push status to the clients. A
-        // host-as-player (solo dev) keeps the old local-UI gate.
-        if (runner.LocalPlayer == PlayerRef.None)
-            RecomputeLobbyAndBroadcast();
-        else if (teamSelectionUI != null)
-            teamSelectionUI.SetStartAvailable(CanStartMatch());
-    }
-
-    /// <summary>
-    /// Dedicated-server only: recompute the host-client designation and start gate, then push a
-    /// per-client lobby-status reliable message to every connected player. Re-sent on any lobby
-    /// change (join, leave, choice recorded) so the UI stays correct.
-    /// </summary>
-    private void RecomputeLobbyAndBroadcast()
-    {
-        if (runner == null || !runner.IsServer || gameStarting)
-            return;
-
-        var ids = new List<int>();
-        foreach (var p in runner.ActivePlayers)
-            ids.Add(p.PlayerId);
-
-        currentHostId = LobbyHostPolicy.DesignateHostId(ids);
-        bool canStart = LobbyHostPolicy.CanStart(ids, HasChoiceForId);
-
-        foreach (var p in runner.ActivePlayers)
-        {
-            byte isHost = (byte)(p.PlayerId == currentHostId ? 1 : 0);
-            byte start = (byte)(canStart ? 1 : 0);
-            runner.SendReliableDataToPlayer(p, LobbyStatusKey, new byte[] { isHost, start });
-        }
-    }
-
-    /// <summary>Server-only: has the active player with this PlayerId submitted a team choice?</summary>
-    private bool HasChoiceForId(int id)
-    {
-        foreach (var p in runner.ActivePlayers)
-            if (p.PlayerId == id)
-                return LobbyTeamChoices.Has(p);
-        return false;
-    }
-
-    /// <summary>
-    /// Called when the local player clicks the Start button. In the solo-dev host path, starts
-    /// directly. In the dedicated-server path, sends a reliable message to the server to start.
+    /// Called when the local player clicks Start. Host mode starts directly; on a dedicated
+    /// server the designated host-client asks the server, which re-validates.
     /// </summary>
     public void RequestStartMatch()
     {
-        if (runner == null || !runner.IsRunning)
-            return;
+        if (runner == null || !runner.IsRunning || gameStarting) return;
 
         if (runner.IsServer)
         {
-            // Solo-dev host path: start directly.
-            if (!CanStartMatch()) return;
+            if (!LobbyHostPolicy.CanStart(serverLobby.PlayerCount)) return;
             gameStarting = true;
             LoadGameplayScene();
         }
         else
         {
-            // Dedicated-server path: ask the server to start (it re-validates the gate).
             runner.SendReliableDataToServer(StartMatchKey, new byte[] { 1 });
         }
     }
 
+    // ============================
+    // Server-side lobby state + broadcast
+    // ============================
+
+    /// <summary>
+    /// Server-only: add the player to the lobby roster with a balanced auto-assigned team and
+    /// mirror it into LobbyTeamChoices (read by NetworkedSpawnManager). Runs for mid-match
+    /// late joiners too, so they spawn on a balanced team without a lobby round-trip.
+    /// </summary>
+    private void ServerHandleJoin(PlayerRef player)
+    {
+        int team = serverLobby.PlayerJoined(player.PlayerId);
+        LobbyTeamChoices.Set(player, team);
+        if (!gameStarting) BroadcastLobby();
+    }
+
+    /// <summary>
+    /// Server-only: encode one snapshot and send it to every remote player; a host-as-player
+    /// applies it to its own LobbyScreenUI directly (same snapshot, no wire trip).
+    /// </summary>
+    private void BroadcastLobby()
+    {
+        if (runner == null || !runner.IsServer) return;
+
+        var snap = serverLobby.BuildSnapshot(maxPlayers);
+        byte[] payload = LobbyProtocol.EncodeLobbyState(snap);
+
+        foreach (var p in runner.ActivePlayers)
+        {
+            if (p == runner.LocalPlayer) continue; // local loopback below instead
+            runner.SendReliableDataToPlayer(p, RosterKey, payload);
+        }
+
+        if (runner.LocalPlayer != PlayerRef.None && lobbyUI != null)
+            lobbyUI.ApplyLobbyState(snap, runner.LocalPlayer.PlayerId);
+    }
+
     private async void LoadGameplayScene()
     {
-        if (teamSelectionUI != null)
-            teamSelectionUI.HideTeamSelection();
-
+        if (lobbyUI != null) lobbyUI.Hide();
         await runner.LoadScene(SceneRef.FromIndex(gameplaySceneIndex));
     }
 
     void OnDestroy()
     {
-        if (runner != null)
-        {
-            runner.Shutdown();
-        }
+        if (runner != null) runner.Shutdown();
     }
 
     void OnApplicationQuit()
     {
-        if (runner != null)
-        {
-            runner.Shutdown();
-        }
+        if (runner != null) runner.Shutdown();
     }
 
-    void SetButtonsInteractable(bool interactable)
-    {
-        if (hostButton != null)
-            hostButton.interactable = interactable;
-        if (clientButton != null)
-            clientButton.interactable = interactable;
-    }
-
+    // ============================
     // Fusion callbacks
+    // ============================
+
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
-        // CRITICAL: DO NOT SPAWN PLAYER HERE
-        // Let NetworkedSpawnManager in the Gameplay scene handle it.
-
-        // A late joiner hasn't chosen yet, so re-disable the host's Start button until they pick.
-        if (runner.IsServer && !gameStarting)
-            RefreshStartGate();
+        // DO NOT SPAWN PLAYER HERE — NetworkedSpawnManager in the Gameplay scene handles it.
+        if (runner.IsServer)
+            ServerHandleJoin(player);
     }
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
-
-        // Drop their lobby choice and re-evaluate the start gate (e.g. a leaver who hadn't chosen
-        // should no longer block the others).
-        if (runner.IsServer && !gameStarting)
+        if (runner.IsServer)
         {
+            serverLobby.PlayerLeft(player.PlayerId);
             LobbyTeamChoices.Remove(player);
             LobbyLoadoutChoices.Remove(player);
-            RefreshStartGate();
+            if (!gameStarting) BroadcastLobby();
         }
     }
 
@@ -447,25 +345,22 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // doesn't inherit stale (destroyed) coin references or a bogus live count.
         CoinRegistry.Clear();
 
-        if (teamSelectionUI != null)
-            teamSelectionUI.HideTeamSelection();
+        if (lobbyUI != null) lobbyUI.Hide();
+        if (menuUI != null)
+        {
+            menuUI.Show();
+            menuUI.ShowStatus($"Disconnected: {shutdownReason}");
+        }
 
-        if (menuPanel != null)
-            menuPanel.SetActive(true);
-
-        SetButtonsInteractable(true);
         LobbyTeamChoices.Clear();
         LobbyLoadoutChoices.Clear();
+        serverLobby = new LobbyServerState();
         gameStarting = false;
     }
 
-    public void OnConnectedToServer(NetworkRunner runner)
-    {
-    }
+    public void OnConnectedToServer(NetworkRunner runner) { }
 
-    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
-    {
-    }
+    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
 
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
     {
@@ -477,27 +372,41 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason)
     {
         Debug.LogError($"❌ Connection failed: {reason}");
+        if (menuUI != null)
+        {
+            menuUI.ShowStatus($"Connection failed: {reason}");
+            menuUI.SetBusy(false);
+        }
     }
 
-    // Empty required callbacks
     public void OnInput(NetworkRunner runner, NetworkInput input) { }
     public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
     public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList) { }
     public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
     public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
+
     public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data)
     {
         if (runner.IsServer)
         {
             if (key == TeamChoiceKey)
             {
-                if (data.Count < 1 || data.Array == null)
+                if (gameStarting || data.Count < 1 || data.Array == null) return;
+                int team = data.Array[data.Offset];
+                if (serverLobby.SwitchTeam(player.PlayerId, team))
                 {
-                    Debug.LogError($"❌ [HOST] Empty team-choice payload from Player {player.PlayerId}");
-                    return;
+                    LobbyTeamChoices.Set(player, team);
+                    BroadcastLobby();
                 }
-                int teamNumber = data.Array[data.Offset];
-                RecordChoice(player, teamNumber);
+                return;
+            }
+
+            if (key == NameKey)
+            {
+                if (data.Array == null) return;
+                if (!LobbyProtocol.TryDecodeNickname(data.Array, data.Offset, data.Count, out string name)) return;
+                if (serverLobby.SetNickname(player.PlayerId, name) && !gameStarting)
+                    BroadcastLobby();
                 return;
             }
 
@@ -505,15 +414,17 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             {
                 if (data.Count < 1 || data.Array == null) return;
                 var order = new byte[data.Count];
-                System.Array.Copy(data.Array, data.Offset, order, 0, data.Count);
+                Array.Copy(data.Array, data.Offset, order, 0, data.Count);
                 LobbyLoadoutChoices.Set(player, order);
                 return;
             }
 
             if (key == StartMatchKey)
             {
-                // Only the designated host-client may start, and only once everyone has chosen.
-                if (player.PlayerId == currentHostId && CanStartMatch())
+                // Only the designated host-client may start, and only when the gate allows it.
+                if (!gameStarting
+                    && player.PlayerId == serverLobby.CurrentHostId()
+                    && LobbyHostPolicy.CanStart(serverLobby.PlayerCount))
                 {
                     gameStarting = true;
                     LoadGameplayScene();
@@ -525,15 +436,18 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         // ---- Client ----
-        if (key == LobbyStatusKey && data.Count >= 2 && data.Array != null)
+        if (key == RosterKey && data.Array != null)
         {
-            bool isHost = data.Array[data.Offset] == 1;
-            bool canStart = data.Array[data.Offset + 1] == 1;
-            if (teamSelectionUI != null)
-                teamSelectionUI.SetHostControls(isHost, canStart);
+            if (LobbyProtocol.TryDecodeLobbyState(data.Array, data.Offset, data.Count, out var snap)
+                && lobbyUI != null)
+            {
+                lobbyUI.ApplyLobbyState(snap, runner.LocalPlayer.PlayerId);
+            }
         }
     }
+
     public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
+
     public void OnSceneLoadDone(NetworkRunner runner)
     {
         // A real dedicated server (no local player) should not render or play audio. -nographics
@@ -547,20 +461,17 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
                 listener.enabled = false;
         }
     }
-    public void OnSceneLoadStart(NetworkRunner runner)
-    {
-    }
+
+    public void OnSceneLoadStart(NetworkRunner runner) { }
     public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
 }
 
 /// <summary>
-/// Per-player team choices collected by the host during the lobby, keyed by PlayerRef. Lives on the
-/// host only (the server is authoritative over team assignment) and survives the menu -> gameplay
-/// scene load. NetworkedSpawnManager reads this on the host to spawn each player on their chosen
-/// team. This is NOT the old host-only TeamSelectionData fallback (which conflated every player with
-/// the host's single local pick) - every entry here is a specific player's own submitted choice.
+/// Per-player team assignments collected during the lobby (auto-assigned on join, updated on
+/// switch), keyed by PlayerRef. Lives on the host/server only and survives the menu -> gameplay
+/// scene load. NetworkedSpawnManager reads this to spawn each player on the right team.
 /// </summary>
 public static class LobbyTeamChoices
 {
@@ -575,9 +486,9 @@ public static class LobbyTeamChoices
 }
 
 /// <summary>
-/// Per-player buff loadout (priority order as BuffId bytes) collected by the host during the lobby,
-/// parallel to LobbyTeamChoices. Read by NetworkedSpawnManager on the host to initialise each
-/// player's PlayerBuffs. A missing entry falls back to the BuffLoadoutConfig default order.
+/// Per-player buff loadout (priority order as BuffId bytes) collected during the lobby, parallel
+/// to LobbyTeamChoices. Read by NetworkedSpawnManager on the host to initialise each player's
+/// PlayerBuffs. A missing entry falls back to the BuffLoadoutConfig default order.
 /// </summary>
 public static class LobbyLoadoutChoices
 {

@@ -1,0 +1,82 @@
+using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+
+/// <summary>
+/// MainMenu entry screen: nickname + Join/Host + a status line for connect progress and errors.
+/// Purely presentational — GameNetworkManager owns the runner and calls back into Show/ShowStatus
+/// on failure or shutdown. The nickname persists in PlayerPrefs across sessions.
+/// </summary>
+public class MainMenuUI : MonoBehaviour
+{
+    [Header("UI References")]
+    [SerializeField] private GameObject menuPanel;
+    [SerializeField] private TMP_InputField nicknameInput;
+    [SerializeField] private Button joinButton;
+    [SerializeField] private Button hostButton;
+    [SerializeField] private TMP_Text statusText;
+
+    [Header("Wiring")]
+    [SerializeField] private GameNetworkManager networkManager;
+
+    private const string NicknamePref = "lobby.nickname";
+
+    /// <summary>Sanitized nickname from the input field ("" when empty — server keeps the placeholder).</summary>
+    public string Nickname =>
+        LobbyProtocol.SanitizeNickname(nicknameInput != null ? nicknameInput.text : "");
+
+    private void Start()
+    {
+        if (nicknameInput != null)
+        {
+            nicknameInput.characterLimit = LobbyProtocol.MaxNicknameChars;
+            nicknameInput.text = PlayerPrefs.GetString(NicknamePref, "");
+        }
+
+        if (joinButton != null) joinButton.onClick.AddListener(() => Connect(asHost: false));
+        else Debug.LogError("❌ MainMenuUI: Join button not assigned!");
+
+        if (hostButton != null) hostButton.onClick.AddListener(() => Connect(asHost: true));
+        else Debug.LogError("❌ MainMenuUI: Host button not assigned!");
+
+        ShowStatus("");
+    }
+
+    private void Connect(bool asHost)
+    {
+        if (networkManager == null)
+        {
+            Debug.LogError("❌ MainMenuUI: networkManager not assigned!");
+            return;
+        }
+
+        PlayerPrefs.SetString(NicknamePref, Nickname);
+        PlayerPrefs.Save();
+        SetBusy(true);
+        ShowStatus(asHost ? "Starting host..." : "Connecting...");
+        if (asHost) networkManager.StartHost();
+        else networkManager.StartClient();
+    }
+
+    public void Show()
+    {
+        if (menuPanel != null) menuPanel.SetActive(true);
+        SetBusy(false);
+    }
+
+    public void Hide()
+    {
+        if (menuPanel != null) menuPanel.SetActive(false);
+    }
+
+    public void ShowStatus(string message)
+    {
+        if (statusText != null) statusText.text = message;
+    }
+
+    public void SetBusy(bool busy)
+    {
+        if (joinButton != null) joinButton.interactable = !busy;
+        if (hostButton != null) hostButton.interactable = !busy;
+    }
+}
