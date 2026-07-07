@@ -1,6 +1,7 @@
 using UnityEngine;
 using Fusion;
 using Game.Buffs.Core;
+using Game.Hud.Core;
 
 /// <summary>
 /// Per-player, server-authoritative buff state. Tiers are DERIVED from TotalDepositedValue +
@@ -13,12 +14,33 @@ public class PlayerBuffs : NetworkBehaviour
 
     [Networked, Capacity(8)] private NetworkArray<byte> LoadoutOrder { get; }
     [Networked] private int LoadoutLength { get; set; }
-    [Networked] public int TotalDepositedValue { get; private set; }
-    [Networked] public NetworkBool IsStealthed { get; private set; }
+    [Networked, OnChangedRender(nameof(OnBuffsChanged))] public int TotalDepositedValue { get; private set; }
+    [Networked, OnChangedRender(nameof(OnStealthChanged))] public NetworkBool IsStealthed { get; private set; }
     [Networked] private TickTimer StealthDurationTimer { get; set; }
     [Networked] private TickTimer StealthCooldownTimer { get; set; }
 
     public int TotalDeposited => TotalDepositedValue;
+
+    /// <summary>Fires when TotalDepositedValue changes (tiers re-derive). HUD subscribes.</summary>
+    public event System.Action BuffsChanged;
+
+    /// <summary>Fires when the networked stealth-active flag flips. HUD subscribes.</summary>
+    public event System.Action StealthStateChanged;
+
+    private void OnBuffsChanged() => BuffsChanged?.Invoke();
+    private void OnStealthChanged() => StealthStateChanged?.Invoke();
+
+    /// <summary>
+    /// Radial fill for the stealth icon: 1 = ready, 0 = just used, ramping up while it recharges.
+    /// While stealth is ACTIVE the ability is unavailable, so report 0 (not ready).
+    /// </summary>
+    public float StealthCooldownFill01()
+    {
+        if (IsStealthed) return 0f;
+        float total = CurrentStealthCooldown();
+        float remaining = StealthCooldownTimer.RemainingTime(Runner) ?? 0f;
+        return CooldownFill.Fill01(remaining, total);
+    }
 
     public override void Spawned()
     {
