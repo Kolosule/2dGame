@@ -23,13 +23,16 @@ always-interested. **Phase 2b does nothing until you add `Poolable` to the proje
    definitions in the same folder," something was placed wrong — the AoI scripts must be in
    `Assets/Scripts/AreaOfInterest/` (plain `Assembly-CSharp`), not under `Assets/Scripts/Net/`.
 
-2. **Run the Phase 1 EditMode tests:** `Window → General → Test Runner → EditMode → Run All`.
-   Expected: **12 green** —
+2. **Run the lobby EditMode tests:** `Window → General → Test Runner → EditMode → Run All`.
+   Expected: **28 green** in the Net suite —
    - `NetworkBootModeTests` (5): batch-mode → DedicatedServer, `-dedicatedServer` arg →
-     DedicatedServer, interactive+singlePlayer → SinglePlayerHost, interactive → Client,
-     null args → Client.
+     DedicatedServer, interactive → Client, unrelated/null args → Client.
    - `LobbyHostPolicyTests` (7): host = lowest id / empty → NoHost / re-designation; CanStart
-     empty=false, all-chosen=true, one-missing=false.
+     0 players=false, 1 player=true, 20 players=true.
+   - `LobbyProtocolTests` (9): nickname sanitize + round-trip, snapshot round-trip
+     (empty + full 20-player roster), truncated/bad-team/trailing-byte rejection.
+   - `LobbyServerStateTests` (7): balanced auto-assign (tie → team 1), rejoin keeps team,
+     switch validation, nickname sanitize, host re-resolution, snapshot contents.
 
 3. **Confirm Build Settings scenes:** `File → Build Settings` — MainMenu at index **0**,
    Gameplay at index **1** (the gameplay scene index `GameNetworkManager.gameplaySceneIndex`
@@ -73,8 +76,7 @@ In the **Gameplay scene**:
 The boot resolver treats `-batchmode` (or an explicit `-dedicatedServer` arg) as the dedicated
 server. Expected in `server.log`: `✅ Dedicated server started — waiting for players.`
 
-**Clients.** Set `GameNetworkManager.singlePlayerMode = false` on the MainMenu's manager, then
-either:
+**Clients.** In the menu, type a nickname and click **Join**. Either:
 - **Editor + builds:** Play in the Editor as one client, run extra player builds as more
   clients (all use the same `sessionName`, default `"PvPvERoom"`), **or**
 - **Multiplayer Play Mode (MPPM):** `Window → Multiplayer Play Mode`, enable 2–3 virtual
@@ -82,9 +84,9 @@ either:
   process for the dedicated topology. For a quick lobby-logic smoke test without a server you
   can use the solo-host path below.)
 
-**Solo-dev smoke (no dedicated server):** set `singlePlayerMode = true` → boot resolves to
-`SinglePlayerHost` (`GameMode.Host`); the host player gets the Start button directly. Useful for
-quick single-machine checks; does **not** exercise the dedicated-server path.
+**Solo-dev smoke (no dedicated server):** click **Host** in the menu (`GameMode.Host`); the
+host player lands in the lobby with the Start button directly. Useful for quick single-machine
+checks; does **not** exercise the dedicated-server path.
 
 To approach 20 players, launch ~20 client builds (or fewer + MPPM) against one headless server.
 
@@ -96,14 +98,25 @@ Run the headless server + at least **3** clients.
 
 - [ ] **Server is not a player.** Only the headless process is the server; no client window
       acts as host. `server.log` shows players joining, no spawn before the match starts.
+- [ ] **Roster is live.** Each joining client appears in a team column with its nickname
+      within ~a second, on **every** client's screen; the header counts up ("Players: 3/20").
+      A client with an empty nickname shows as "Player N".
+- [ ] **Balanced auto-assign.** Joiners alternate columns (smaller team gets the newcomer);
+      nobody has to pick anything.
+- [ ] **Team switch.** Clicking "Join Team 2" moves your row to the other column on all
+      screens; your switch buttons flip which side is enabled.
 - [ ] **Host-client designation.** Exactly one client — the **lowest PlayerId** (first to
-      join) — shows the Start button. The others never show it.
-- [ ] **Start gate.** The host-client's Start button stays disabled until **every** connected
-      client has picked a team, then becomes interactable on the host-client only.
+      join) — shows the ★ marker and the Start button. The others never show it.
+- [ ] **Start gate.** The Start button is enabled from the moment ≥1 player is in the lobby —
+      an AFK client cannot block the match.
 - [ ] **Host re-designation.** With nobody having started yet, disconnect the host-client in
-      the lobby. The **next-lowest** client should now show the Start button.
+      the lobby. The **next-lowest** client's screen should now show ★ + Start.
 - [ ] **Start → load.** Host-client clicks Start → the Gameplay scene loads on **all** clients
-      and the server; every player spawns on the team they chose.
+      and the server; every player spawns on their roster team.
+- [ ] **Mid-match late join.** A client joining after Start spawns straight into gameplay on
+      the smaller team.
+- [ ] **Disconnect surface.** Kill the server while a client sits in the lobby → that client
+      returns to the menu with a "Disconnected: ..." status line.
 - [ ] **Server build hygiene.** `server.log` has no repeated `AudioListener` warnings and no
       camera errors (cameras/audio are disabled on the server after scene load).
 - [ ] **Gameplay parity.** Player-vs-player **physical collision** (body-blocking) and the full
@@ -173,7 +186,7 @@ players etc. stay un-pooled. (Pooling does nothing until the prefab is marked.)
 `muzzleFlashPrefab` on the player prefab's `PlayerCombat` (leaving it null is fine — the
 code-generated tracer still fires). Tune `tracerColor/Length/Width/Duration` to taste.
 
-Run the headless server + a real client (`singlePlayerMode = false`). On the client:
+Run the headless server + a real client (joined via the **Join** button). On the client:
 
 - [ ] **Instant feedback.** Firing shows the muzzle/tracer the moment you press shoot — no
       round-trip delay (before this, the projectile only appeared after ~½ RTT).
@@ -181,7 +194,7 @@ Run the headless server + a real client (`singlePlayerMode = false`). On the cli
       damage/stun exactly as before; the cosmetic tracer is brief and doesn't linger beside it.
 - [ ] **No duplicates.** Rapid fire / lag does not spawn multiple tracers per shot (the
       `Runner.IsForward` guard holds under resimulation).
-- [ ] **Host-as-player unaffected.** In solo-dev host mode (`singlePlayerMode = true`) there is no
+- [ ] **Host-as-player unaffected.** In solo-dev host mode (**Host** button) there is no
       double projectile — the cosmetic is skipped (`!HasStateAuthority`) and the real projectile is
       already instant.
 - [ ] **Tracer renders in a build.** If the tracer is invisible in a player build, add
@@ -201,7 +214,7 @@ Run the headless server + a real client (`singlePlayerMode = false`). On the cli
 | Far enemy *players* never appear even when close | radius too small, or AoI region not being added | confirm `ReplicationFeatures = 2` and that `PlayerController.FixedUpdateNetwork` runs on the server |
 | Recycled projectile deals no damage / dies on spawn | `Projectile.hasHit` not reset on reuse | confirm `Spawned()` starts with `hasHit = false;` |
 | Players stop spawning after enabling pooling | provider wrongly pooling the player prefab | only the projectile prefab should have `Poolable`; non-poolable prefabs fall through to base |
-| No muzzle/tracer on fire | testing on the wrong peer | use a real client (`singlePlayerMode = false`); the cosmetic is skipped on the server/host by design |
+| No muzzle/tracer on fire | testing on the wrong peer | use a real client (**Join** button); the cosmetic is skipped on the server/host by design |
 | Two projectiles visible per shot | cosmetic lingering next to the real one | lower `tracerDuration`/`muzzleFlashLifetime`; confirm it's a client (host-as-player skips the cosmetic) |
 
 ---
@@ -218,5 +231,5 @@ Run the headless server + a real client (`singlePlayerMode = false`). On the cli
 - **Traveling ghost projectile not built.** Phase 3 gives an instant muzzle/tracer but the real
   projectile still appears ~½ RTT later. If that travel delay still feels bad after testing, a full
   cosmetic ghost projectile is the next lever (deliberately skipped — it risks double-vision).
-- **Three cosmetic stale doc-comments** from Phase 1 (`RefreshStartGate` "Host-only",
-  `SetStartAvailable` "no-op for clients") are deferred cleanup.
+- ~~Three cosmetic stale doc-comments from Phase 1~~ — resolved: the menu/lobby revamp
+  (2026-07-06) removed `RefreshStartGate`/`SetStartAvailable` entirely (snapshot-driven UI).
