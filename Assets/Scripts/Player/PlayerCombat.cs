@@ -213,7 +213,7 @@ public class PlayerCombat : NetworkBehaviour
         // (AttackAim < 0 while grounded falls through to the side box, matching old behaviour.)
 
         Vector2 offset = (Vector2)point.position - (Vector2)transform.position;
-        bool facingRightNow = transform.localScale.x >= 0f;
+        bool facingRightNow = playerMovement != null ? playerMovement.IsFacingRight() : transform.localScale.x >= 0f;
         if (facingRightNow != (bool)AttackFacingRight) offset.x = -offset.x;
         center = (Vector2)transform.position + offset;
     }
