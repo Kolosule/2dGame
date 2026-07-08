@@ -115,7 +115,7 @@ public class PlayerCombat : NetworkBehaviour
             phase = CurrentSwingPhase(); // now Startup (or Active if startupTicks is 0)
         }
 
-        if (phase == SwingPhaseKind.Active || phase == SwingPhaseKind.Startup)
+        if (phase == SwingPhaseKind.Active)
         {
             SimulateSwingTick(phase);
         }
@@ -223,7 +223,8 @@ public class PlayerCombat : NetworkBehaviour
     /// players. Shared by the normal swing and the dash-strike (Quicker Dash tier 3).
     /// When <paramref name="alreadyHit"/> is non-null, each collider is processed at most once
     /// (used by the dash-strike to limit damage to one hit per target per dash).
-    /// Normal Attack() calls pass null → behaviour is byte-identical to before.
+    /// The normal swing passes the per-swing <c>swingStruck</c> dedup set so each target is hit
+    /// at most once per swing; the dash-strike passes <c>dashStruck</c>.
     /// </summary>
     private void ApplyMeleeHits(Vector2 center, Vector2 area, bool spawnHitMarkers,
                                 HashSet<Collider2D> alreadyHit = null)

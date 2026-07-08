@@ -168,7 +168,9 @@ public class PlayerMovement : NetworkBehaviour
         }
 
         // ---- Fast-fall (spec 1.5): down pressed at/past the apex snaps to fast-fall speed ----
+        // Down+melee is a ground pound (PlayerCombat), which takes precedence over fast-fall (spec 1.5).
         if (!stunned && !Dashing && pressed.IsSet((int)PlayerButton.Down) &&
+            !(input.VerticalAim < 0 && pressed.IsSet((int)PlayerButton.Melee)) &&
             MovementMath.ShouldStartFastFall(grounded, true, rb.linearVelocity.y,
                                              stats.apexThreshold, FastFalling))
         {

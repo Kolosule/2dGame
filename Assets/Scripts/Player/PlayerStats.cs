@@ -29,7 +29,9 @@ public class PlayerStats : ScriptableObject
     public float apexGravityMult = 0.5f;
     [Tooltip("Vertical speed band around the jump apex that gets the apex-hang gravity")]
     public float apexThreshold = 1.5f;
+    [Tooltip("Clamped by maxFallSpeed each tick — keep <= maxFallSpeed or it will be capped.")]
     public float fastFallSpeed = 18f;
+    [Tooltip("Terminal downward speed; also caps fastFallSpeed and any downward impulse from the next tick on.")]
     public float maxFallSpeed = 20f;
 
     [Header("Combat")]
