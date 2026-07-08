@@ -1,5 +1,6 @@
 using UnityEngine;
 using Fusion;
+using Game.PlayerMovement.Core;
 
 /// <summary>
 /// Tick-based, networked player movement. Driven by PlayerController.FixedUpdateNetwork.
@@ -82,7 +83,18 @@ public class PlayerMovement : NetworkBehaviour
         }
         else
         {
-            rb.linearVelocity = new Vector2(input.Horizontal * stats.walkSpeed, rb.linearVelocity.y);
+            var p = new MoveParams
+            {
+                WalkSpeed = stats.walkSpeed,
+                AccelPerTick = stats.walkSpeed /
+                    System.Math.Max(1, grounded ? stats.groundAccelTicks : stats.airAccelTicks),
+                DecelPerTick = stats.walkSpeed /
+                    System.Math.Max(1, grounded ? stats.groundDecelTicks : stats.airDecelTicks),
+                MomentumDecayPerTick =
+                    (grounded ? stats.momentumDecayGround : stats.momentumDecayAir) * Runner.DeltaTime,
+            };
+            float newVx = MovementMath.StepHorizontalVelocity(rb.linearVelocity.x, input.Horizontal, p);
+            rb.linearVelocity = new Vector2(newVx, rb.linearVelocity.y);
         }
 
         // ---- Facing ----
@@ -119,7 +131,14 @@ public class PlayerMovement : NetworkBehaviour
         if (!stunned && pressed.IsSet((int)PlayerButton.Jump))
         {
             JumpBufferCounter = jumpBufferTicks;
-            if (Dashing) EndDash(); // jump cancels dash
+            if (Dashing)
+            {
+                // Dash-jump (spec 1.3): cancel the dash and carry a fraction of dash speed
+                // into the jump. DashDir is networked and still valid after EndDash.
+                EndDash();
+                rb.linearVelocity = new Vector2(
+                    DashDir * stats.dashSpeed * stats.dashJumpCarryFactor, rb.linearVelocity.y);
+            }
         }
         else if (JumpBufferCounter > 0)
         {
