@@ -82,4 +82,88 @@ public class MovementMathTests
         float vx = MovementMath.StepHorizontalVelocity(5f, 1, Ground());
         Assert.AreEqual(5f, vx, 1e-4f);
     }
+
+    // ---- Gravity / fast-fall (apexThreshold 1.5, apexMult 0.5, fallMult 1.7) ----
+
+    [Test]
+    public void Gravity_Grounded_Is_Neutral()
+    {
+        Assert.AreEqual(1f, MovementMath.SelectGravityMultiplier(
+            grounded: true, vy: 0f, apexThreshold: 1.5f,
+            jumping: false, jumpCut: false, fastFalling: false,
+            apexMultiplier: 0.5f, fallMultiplier: 1.7f), 1e-4f);
+    }
+
+    [Test]
+    public void Gravity_Rising_Is_Neutral()
+    {
+        Assert.AreEqual(1f, MovementMath.SelectGravityMultiplier(
+            false, 8f, 1.5f, true, false, false, 0.5f, 1.7f), 1e-4f);
+    }
+
+    [Test]
+    public void Gravity_Rising_After_JumpCut_Uses_FallMultiplier()
+    {
+        Assert.AreEqual(1.7f, MovementMath.SelectGravityMultiplier(
+            false, 8f, 1.5f, true, true, false, 0.5f, 1.7f), 1e-4f);
+    }
+
+    [Test]
+    public void Gravity_Apex_Window_While_Jumping_Hangs()
+    {
+        Assert.AreEqual(0.5f, MovementMath.SelectGravityMultiplier(
+            false, 0.5f, 1.5f, true, false, false, 0.5f, 1.7f), 1e-4f);
+        Assert.AreEqual(0.5f, MovementMath.SelectGravityMultiplier(
+            false, -1.4f, 1.5f, true, false, false, 0.5f, 1.7f), 1e-4f);
+    }
+
+    [Test]
+    public void Gravity_Apex_Window_Not_Jumping_Falls()
+    {
+        // Walking off a ledge (vy ~0, Jumping false) must NOT hang.
+        Assert.AreEqual(1.7f, MovementMath.SelectGravityMultiplier(
+            false, 0f, 1.5f, false, false, false, 0.5f, 1.7f), 1e-4f);
+    }
+
+    [Test]
+    public void Gravity_Apex_Window_FastFalling_Falls()
+    {
+        Assert.AreEqual(1.7f, MovementMath.SelectGravityMultiplier(
+            false, -1f, 1.5f, true, false, true, 0.5f, 1.7f), 1e-4f);
+    }
+
+    [Test]
+    public void Gravity_Below_Apex_Window_Falls()
+    {
+        Assert.AreEqual(1.7f, MovementMath.SelectGravityMultiplier(
+            false, -3f, 1.5f, true, false, false, 0.5f, 1.7f), 1e-4f);
+    }
+
+    [Test]
+    public void FastFall_Starts_Airborne_Past_Apex_On_Down()
+    {
+        Assert.IsTrue(MovementMath.ShouldStartFastFall(
+            grounded: false, downPressed: true, vy: 0.5f, apexThreshold: 1.5f, alreadyFastFalling: false));
+    }
+
+    [Test]
+    public void FastFall_Does_Not_Start_While_Rising_Fast()
+    {
+        Assert.IsFalse(MovementMath.ShouldStartFastFall(false, true, 8f, 1.5f, false));
+    }
+
+    [Test]
+    public void FastFall_Does_Not_Start_Grounded_Or_Twice()
+    {
+        Assert.IsFalse(MovementMath.ShouldStartFastFall(true, true, 0f, 1.5f, false));
+        Assert.IsFalse(MovementMath.ShouldStartFastFall(false, true, -5f, 1.5f, true));
+    }
+
+    [Test]
+    public void ClampFallSpeed_Limits_Downward_Only()
+    {
+        Assert.AreEqual(-20f, MovementMath.ClampFallSpeed(-35f, 20f), 1e-4f);
+        Assert.AreEqual(-5f, MovementMath.ClampFallSpeed(-5f, 20f), 1e-4f);
+        Assert.AreEqual(12f, MovementMath.ClampFallSpeed(12f, 20f), 1e-4f);
+    }
 }

@@ -46,5 +46,35 @@ namespace Game.PlayerMovement.Core
             if (System.Math.Abs(delta) <= maxDelta) return target;
             return current + (delta > 0f ? maxDelta : -maxDelta);
         }
+
+        /// <summary>
+        /// Gravity-scale multiplier for the jump arc (spec 1.4). Rising = neutral; small |vy| near
+        /// the top of an actual jump = apex hang; everything else = heavier fall. A jump-cut or
+        /// fast-fall disqualifies the hang; walking off a ledge (jumping=false) never hangs.
+        /// </summary>
+        public static float SelectGravityMultiplier(
+            bool grounded, float vy, float apexThreshold,
+            bool jumping, bool jumpCut, bool fastFalling,
+            float apexMultiplier, float fallMultiplier)
+        {
+            if (grounded) return 1f;
+            if (vy > apexThreshold) return jumpCut ? fallMultiplier : 1f;
+            bool apexEligible = jumping && !jumpCut && !fastFalling && vy > -apexThreshold;
+            return apexEligible ? apexMultiplier : fallMultiplier;
+        }
+
+        /// <summary>Fast-fall trigger (spec 1.5): airborne, down pressed (edge), at/past the apex,
+        /// not already fast-falling.</summary>
+        public static bool ShouldStartFastFall(
+            bool grounded, bool downPressed, float vy, float apexThreshold, bool alreadyFastFalling)
+        {
+            return !grounded && downPressed && !alreadyFastFalling && vy <= apexThreshold;
+        }
+
+        /// <summary>Terminal velocity: clamps downward speed only.</summary>
+        public static float ClampFallSpeed(float vy, float maxFallSpeed)
+        {
+            return vy < -maxFallSpeed ? -maxFallSpeed : vy;
+        }
     }
 }
