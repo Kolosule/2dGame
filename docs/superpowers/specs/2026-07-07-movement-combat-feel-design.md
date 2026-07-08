@@ -31,9 +31,8 @@ Grounded state comes from the existing `groundCheck` overlap. Stun behaviour is 
 
 When `|vx| > walkSpeed` (reachable only via dash carry-over today), the movement code never clamps it instantly:
 
-- Input in the direction of travel: excess speed preserved, bleeding off at `momentumDecay` (default **8 u/s²** — "very minor" decay per user decision).
-- No input: excess decays at the applicable decel rate or `momentumDecay`, whichever is gentler.
-- Input against travel: brake at the normal decel/accel rates (counter-input is always effective).
+- Input in the direction of travel, or no input: the excess above `walkSpeed` decays at `momentumDecay` (default **8 u/s²** — "very minor" decay per user decision). The within-walkSpeed portion follows the normal accel/decel model.
+- Input against travel: brake at the normal accel/decel rates on the full velocity (counter-input is always effective).
 
 This single rule produces dash-slides, dash-jump momentum, and (future) knockback carry-over with no special cases.
 
@@ -85,7 +84,7 @@ Total ≈ 18 ticks ≈ current 0.3 s `attackCooldown`, so attack *rate* is rough
 New `[Networked]` fields on `PlayerCombat`:
 
 - `AttackStartTick` (int, 0 = no swing in progress)
-- `AttackAim` (latched `verticalAim` at press) and latched facing — the hitbox choice (up/down/side) and direction are locked at commit; the swing never flips mid-animation.
+- `AttackAim` (int, latched `verticalAim` at press) and `AttackFacingRight` (bool, latched facing at press) — the hitbox choice (up/down/side) and direction are locked at commit; the swing never flips mid-animation.
 
 Current phase is **derived** each tick from `Runner.Tick - AttackStartTick` (pure function, resim-proof). Pure helper `SwingPhase` maps elapsed ticks → `None / Startup / Active / Recovery`.
 
