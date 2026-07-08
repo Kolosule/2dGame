@@ -1,7 +1,7 @@
 # Movement & Combat Feel Pass — Design
 
 **Date:** 2026-07-07
-**Status:** Approved (brainstormed with user)
+**Status:** Implemented (branch feat/movement-combat-feel); compile-gate green, EditMode + in-editor multi-peer verify pending
 **Scope:** Ground/air acceleration model, dash momentum carry-over, asymmetric jump gravity + apex hang + fast-fall, melee attack phases (startup/active/recovery), coin-carrier aura.
 
 ## Context
