@@ -12,8 +12,8 @@ using Fusion;
 public class TeamScoreManager : NetworkBehaviour
 {
     [Header("Score Tracking")]
-    [Networked] public int Team1Score { get; set; }
-    [Networked] public int Team2Score { get; set; }
+    [Networked, OnChangedRender(nameof(OnScoresChanged))] public int Team1Score { get; set; }
+    [Networked, OnChangedRender(nameof(OnScoresChanged))] public int Team2Score { get; set; }
 
     [Header("Milestone Thresholds")]
     [Tooltip("Score needed to unlock damage buff (removes 0.5x territory debuff)")]
@@ -23,14 +23,23 @@ public class TeamScoreManager : NetworkBehaviour
     [SerializeField] private int defenseBuffThreshold = 100;
 
     [Header("Buff Status")]
-    [Networked] public bool Team1DamageBuff { get; set; }
-    [Networked] public bool Team2DamageBuff { get; set; }
-    [Networked] public bool Team1DefenseBuff { get; set; }
-    [Networked] public bool Team2DefenseBuff { get; set; }
+    [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public bool Team1DamageBuff { get; set; }
+    [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public bool Team2DamageBuff { get; set; }
+    [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public bool Team1DefenseBuff { get; set; }
+    [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public bool Team2DefenseBuff { get; set; }
 
     // Events that fire when milestones are reached (optional, for effects/UI)
     public UnityEvent<string> onDamageBuffUnlocked;
     public UnityEvent<string> onDefenseBuffUnlocked;
+
+    /// <summary>Fires when Team1Score / Team2Score change. HUD subscribes.</summary>
+    public event System.Action ScoresChanged;
+
+    /// <summary>Fires when any team damage/defense buff flag changes. HUD subscribes.</summary>
+    public event System.Action TeamBuffsChanged;
+
+    private void OnScoresChanged() => ScoresChanged?.Invoke();
+    private void OnTeamBuffsChanged() => TeamBuffsChanged?.Invoke();
 
     // Singleton instance
     private static TeamScoreManager instance;
