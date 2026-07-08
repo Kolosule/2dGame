@@ -38,4 +38,9 @@ public class PlayerStats : ScriptableObject
     public float attackCooldown = 0.3f;
     public float maxHealth = 100f;
 
+    [Header("Melee Swing Phases (ticks)")]
+    public int attackStartupTicks = 3;
+    public int attackActiveTicks = 5;
+    public int attackRecoveryTicks = 10;
+
 }

@@ -28,6 +28,7 @@ public class PlayerMovement : NetworkBehaviour
     // Component refs
     private Rigidbody2D rb;
     private PlayerStatModifiers mods;
+    private PlayerCombat combat;
     private float baseGravity = 5f;
 
     // Networked simulation state
@@ -48,6 +49,7 @@ public class PlayerMovement : NetworkBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         mods = GetComponent<PlayerStatModifiers>();
+        combat = GetComponent<PlayerCombat>();
         if (rb != null) baseGravity = rb.gravityScale;
 
         if (HasStateAuthority)
@@ -122,7 +124,8 @@ public class PlayerMovement : NetworkBehaviour
 
         // ---- Dash start / cancel ----
         if (!stunned && pressed.IsSet((int)PlayerButton.Dash) && !Dashing &&
-            DashCooldownTimer.ExpiredOrNotRunning(Runner))
+            DashCooldownTimer.ExpiredOrNotRunning(Runner) &&
+            (combat == null || !combat.IsSwingCommitted))
         {
             // Carrying-state must come from networked flag state (resim-safe), not the
             // render-path FlagCarrierMarker bool — see CTFGameManager.IsCarrying.
@@ -242,6 +245,7 @@ public class PlayerMovement : NetworkBehaviour
     // ---- Public accessors (used by other scripts) ----
     public bool IsDashing() => Dashing;
     public bool IsStunned() => !StunTimer.ExpiredOrNotRunning(Runner);
+    public bool IsFacingRight() => FacingRight;
 
     /// <summary>
     /// Single source of truth for grounded state, computed from the groundCheck
