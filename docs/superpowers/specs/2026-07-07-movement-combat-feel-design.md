@@ -31,7 +31,7 @@ Grounded state comes from the existing `groundCheck` overlap. Stun behaviour is 
 
 When `|vx| > walkSpeed` (reachable only via dash carry-over today), the movement code never clamps it instantly:
 
-- Input in the direction of travel, or no input: the excess above `walkSpeed` decays at `momentumDecay` (default **8 u/s²** — "very minor" decay per user decision). The within-walkSpeed portion follows the normal accel/decel model.
+- Input in the direction of travel, or no input: the excess above `walkSpeed` decays at `momentumDecayAir` (default **8 u/s²** — "very minor" decay per user decision, airborne) or `momentumDecayGround` (default **40 u/s²** — a full-dash ground exit slides ≈0.25 s instead of 1.25 s). The within-walkSpeed portion follows the normal accel/decel model.
 - Input against travel: brake at the normal accel/decel rates on the full velocity (counter-input is always effective).
 
 This single rule produces dash-slides, dash-jump momentum, and (future) knockback carry-over with no special cases.
