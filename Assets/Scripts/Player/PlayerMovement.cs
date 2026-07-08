@@ -37,6 +37,7 @@ public class PlayerMovement : NetworkBehaviour
     [Networked] private NetworkBool Jumping { get; set; }
     [Networked] private NetworkBool JumpCut { get; set; }
     [Networked] private NetworkBool Dashing { get; set; }
+    [Networked] private NetworkBool FastFalling { get; set; }
     [Networked] private float DashDir { get; set; }
     [Networked] private NetworkBool FacingRight { get; set; }
     [Networked] private TickTimer DashDurationTimer { get; set; }
@@ -69,8 +70,13 @@ public class PlayerMovement : NetworkBehaviour
         if (Dashing && DashDurationTimer.ExpiredOrNotRunning(Runner))
             EndDash();
 
-        // Gravity is a pure function of dash state (resimulation-safe).
-        rb.gravityScale = Dashing ? 0f : baseGravity;
+        // Gravity is a pure function of networked state + velocity (resimulation-safe).
+        if (grounded) FastFalling = false;
+        float gravityMult = MovementMath.SelectGravityMultiplier(
+            grounded, rb.linearVelocity.y, stats.apexThreshold,
+            Jumping, JumpCut, FastFalling,
+            stats.apexGravityMult, stats.fallGravityMult);
+        rb.gravityScale = Dashing ? 0f : baseGravity * gravityMult;
 
         // ---- Horizontal velocity ----
         if (Dashing)
@@ -157,6 +163,20 @@ public class PlayerMovement : NetworkBehaviour
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.y * jumpCutMultiplier);
             JumpCut = true;
         }
+
+        // ---- Fast-fall (spec 1.5): down pressed at/past the apex snaps to fast-fall speed ----
+        if (!stunned && !Dashing && pressed.IsSet((int)PlayerButton.Down) &&
+            MovementMath.ShouldStartFastFall(grounded, true, rb.linearVelocity.y,
+                                             stats.apexThreshold, FastFalling))
+        {
+            FastFalling = true;
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, -stats.fastFallSpeed);
+        }
+
+        // ---- Terminal velocity ----
+        rb.linearVelocity = new Vector2(
+            rb.linearVelocity.x,
+            MovementMath.ClampFallSpeed(rb.linearVelocity.y, stats.maxFallSpeed));
     }
 
     private void DoJump(bool grounded)

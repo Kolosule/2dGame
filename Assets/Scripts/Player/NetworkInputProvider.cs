@@ -84,6 +84,12 @@ public class NetworkInputProvider : MonoBehaviour, INetworkRunnerCallbacks
         data.Buttons.Set((int)PlayerButton.Shoot,   shoot);
         data.Buttons.Set((int)PlayerButton.Stealth, stealth);
 
+        // Down (held state; edge detection happens in PlayerController via PreviousButtons).
+        // No tap latch needed: fast-fall is a hold-style input, not a tap.
+        bool down = (keyboard != null && (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed))
+                    || (gamepad != null && gamepad.leftStick.ReadValue().y < -0.5f);
+        data.Buttons.Set((int)PlayerButton.Down, down);
+
         // Aim world point (for projectiles); PlayerCombat turns this into a direction
         // relative to its spawn point at sim time. If the camera or mouse is momentarily
         // unavailable, reuse the last valid point rather than sending (0,0).

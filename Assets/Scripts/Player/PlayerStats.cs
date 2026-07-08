@@ -24,6 +24,14 @@ public class PlayerStats : ScriptableObject
     [Header("Dash-Jump")]
     [Range(0f, 1f)] public float dashJumpCarryFactor = 0.65f;
 
+    [Header("Jump Arc")]
+    public float fallGravityMult = 1.7f;
+    public float apexGravityMult = 0.5f;
+    [Tooltip("Vertical speed band around the jump apex that gets the apex-hang gravity")]
+    public float apexThreshold = 1.5f;
+    public float fastFallSpeed = 18f;
+    public float maxFallSpeed = 20f;
+
     [Header("Combat")]
     public float attackDamage = 1f;
     public float attackForce = 5f;
