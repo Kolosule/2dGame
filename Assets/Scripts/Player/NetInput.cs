@@ -9,6 +9,7 @@ public enum PlayerButton
     Melee = 2,
     Shoot = 3,
     Stealth = 4,
+    Down = 5,     // held while pressing down (fast-fall edge detection via PreviousButtons)
 }
 
 /// <summary>All per-tick player input, collected in NetworkInputProvider.OnInput

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Fusion;
+using Game.Combat.Core;
 
 /// <summary>
 /// Tick-based, networked combat. Driven by PlayerController.FixedUpdateNetwork.
@@ -78,6 +79,16 @@ public class PlayerCombat : NetworkBehaviour
     [Networked] private TickTimer AttackCooldownTimer { get; set; }
     [Networked] private TickTimer ShootCooldownTimer { get; set; }
 
+    // Swing state (spec 2.2): the swing is its start tick + latched aim/facing; the phase is
+    // derived per tick via SwingPhase.Resolve, so it predicts and resimulates correctly.
+    [Networked] private int AttackStartTick { get; set; }
+    [Networked] private int AttackAim { get; set; }
+    [Networked] private NetworkBool AttackFacingRight { get; set; }
+    [Networked] private NetworkBool AttackIsPound { get; set; }
+
+    // Per-swing hit dedup: server-only, non-networked (same pattern as dashStruck).
+    private readonly HashSet<Collider2D> swingStruck = new HashSet<Collider2D>();
+
     void Awake()
     {
         playerAnimator = GetComponent<PlayerAnimator>();
@@ -94,10 +105,19 @@ public class PlayerCombat : NetworkBehaviour
         verticalAim = input.VerticalAim;
         lastAimWorldPoint = input.AimWorldPoint;
 
-        if (pressed.IsSet((int)PlayerButton.Melee) && AttackCooldownTimer.ExpiredOrNotRunning(Runner))
+        SwingPhaseKind phase = CurrentSwingPhase();
+
+        if (pressed.IsSet((int)PlayerButton.Melee) && phase == SwingPhaseKind.None &&
+            AttackCooldownTimer.ExpiredOrNotRunning(Runner))
         {
             AttackCooldownTimer = TickTimer.CreateFromSeconds(Runner, stats.attackCooldown);
-            Attack();
+            BeginSwing();
+            phase = CurrentSwingPhase(); // now Startup (or Active if startupTicks is 0)
+        }
+
+        if (phase == SwingPhaseKind.Active)
+        {
+            SimulateSwingTick(phase);
         }
 
         if (pressed.IsSet((int)PlayerButton.Shoot))
@@ -120,59 +140,82 @@ public class PlayerCombat : NetworkBehaviour
         wasDashing = dashing;
     }
 
-    private void Attack()
+    private SwingPhaseKind CurrentSwingPhase()
     {
-        Transform attackTransform = null;
-        Vector2 attackArea = Vector2.zero;
-        bool isGroundPound = false;
+        return SwingPhase.Resolve(Runner.Tick, AttackStartTick,
+            stats.attackStartupTicks, stats.attackActiveTicks, stats.attackRecoveryTicks);
+    }
 
-        if (verticalAim > 0 && upAttackPoint != null)
-        {
-            attackTransform = upAttackPoint;
-            attackArea = upAttackArea;
-        }
-        else if (verticalAim < 0 && downAttackPoint != null)
-        {
-            bool isGrounded = groundCheck != null &&
-                              Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-            if (!isGrounded)
-            {
-                attackTransform = downAttackPoint;
-                attackArea = downAttackArea;
-                isGroundPound = true;
-                if (useGroundPound)
-                    rb.linearVelocity = new Vector2(rb.linearVelocity.x, -groundPoundForce);
-            }
-            else
-            {
-                attackTransform = sideAttackPoint;
-                attackArea = sideAttackArea;
-            }
-        }
-        else
-        {
-            attackTransform = sideAttackPoint;
-            attackArea = sideAttackArea;
-        }
+    /// <summary>True while a swing owns the player's offense (Startup/Active/Recovery).
+    /// PlayerMovement reads this to block dash starts (spec 2.3).</summary>
+    public bool IsSwingCommitted => CurrentSwingPhase() != SwingPhaseKind.None;
 
-        if (attackTransform == null) return;
+    /// <summary>Latch a new swing: start tick + aim/facing/pound-ness frozen at commit
+    /// (spec 2.2 — the swing never flips mid-animation). Runs on state authority and the
+    /// predicting input authority, like the old Attack().</summary>
+    private void BeginSwing()
+    {
+        AttackStartTick = Runner.Tick;
+        AttackAim = verticalAim;
+        AttackFacingRight = playerMovement != null ? playerMovement.IsFacingRight()
+                                                   : transform.localScale.x >= 0f;
 
-        // Latch the animation as networked state (replicates to every client). A mid-air
-        // down attack is a ground pound and gets its own latched state. The latch runs on the
-        // state authority (authoritative) and the local input authority (predicted), so the
-        // local player's swing animates on this tick instead of after a server round-trip.
+        bool isGrounded = groundCheck != null &&
+                          Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+        AttackIsPound = verticalAim < 0 && !isGrounded && downAttackPoint != null;
+
+        swingStruck.Clear();
+
         if (playerAnimator != null)
         {
-            if (isGroundPound)
-                playerAnimator.TriggerGroundPound();
-            else
-                playerAnimator.TriggerAttack();
+            if (AttackIsPound) playerAnimator.TriggerGroundPound();
+            else playerAnimator.TriggerAttack();
+        }
+    }
+
+    /// <summary>Per-tick swing behaviour. Pound impulse fires exactly once on the first Active
+    /// tick (predicted + authoritative, like the old press-time write). Hit detection runs on
+    /// every Active tick, server-only, at most one hit per target per swing (swingStruck).</summary>
+    private void SimulateSwingTick(SwingPhaseKind phase)
+    {
+        if (useGroundPound && AttackIsPound &&
+            SwingPhase.IsFirstActiveTick(Runner.Tick, AttackStartTick, stats.attackStartupTicks))
+        {
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, -groundPoundForce);
         }
 
-        // Damage + hit detection only on the server (avoids double-apply across clients).
+        if (phase != SwingPhaseKind.Active) return;
         if (!HasStateAuthority) return;
+        if (sideAttackPoint == null) return; // parity with old Attack()'s null guard
 
-        ApplyMeleeHits(attackTransform.position, attackArea, spawnHitMarkers: true);
+        ResolveSwingBox(out Vector2 center, out Vector2 area);
+        ApplyMeleeHits(center, area, spawnHitMarkers: true, swingStruck);
+    }
+
+    /// <summary>Hitbox from the LATCHED aim/facing. The attack-point children flip with
+    /// localScale (current facing); if facing changed mid-swing, mirror the offset back
+    /// to the facing latched at commit.</summary>
+    private void ResolveSwingBox(out Vector2 center, out Vector2 area)
+    {
+        Transform point = sideAttackPoint;
+        area = sideAttackArea;
+
+        if (AttackAim > 0 && upAttackPoint != null)
+        {
+            point = upAttackPoint;
+            area = upAttackArea;
+        }
+        else if (AttackIsPound)
+        {
+            point = downAttackPoint;
+            area = downAttackArea;
+        }
+        // (AttackAim < 0 while grounded falls through to the side box, matching old behaviour.)
+
+        Vector2 offset = (Vector2)point.position - (Vector2)transform.position;
+        bool facingRightNow = playerMovement != null ? playerMovement.IsFacingRight() : transform.localScale.x >= 0f;
+        if (facingRightNow != (bool)AttackFacingRight) offset.x = -offset.x;
+        center = (Vector2)transform.position + offset;
     }
 
     /// <summary>
@@ -180,7 +223,8 @@ public class PlayerCombat : NetworkBehaviour
     /// players. Shared by the normal swing and the dash-strike (Quicker Dash tier 3).
     /// When <paramref name="alreadyHit"/> is non-null, each collider is processed at most once
     /// (used by the dash-strike to limit damage to one hit per target per dash).
-    /// Normal Attack() calls pass null → behaviour is byte-identical to before.
+    /// The normal swing passes the per-swing <c>swingStruck</c> dedup set so each target is hit
+    /// at most once per swing; the dash-strike passes <c>dashStruck</c>.
     /// </summary>
     private void ApplyMeleeHits(Vector2 center, Vector2 area, bool spawnHitMarkers,
                                 HashSet<Collider2D> alreadyHit = null)

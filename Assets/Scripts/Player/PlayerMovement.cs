@@ -1,5 +1,6 @@
 using UnityEngine;
 using Fusion;
+using Game.PlayerMovement.Core;
 
 /// <summary>
 /// Tick-based, networked player movement. Driven by PlayerController.FixedUpdateNetwork.
@@ -27,6 +28,7 @@ public class PlayerMovement : NetworkBehaviour
     // Component refs
     private Rigidbody2D rb;
     private PlayerStatModifiers mods;
+    private PlayerCombat combat;
     private float baseGravity = 5f;
 
     // Networked simulation state
@@ -36,6 +38,7 @@ public class PlayerMovement : NetworkBehaviour
     [Networked] private NetworkBool Jumping { get; set; }
     [Networked] private NetworkBool JumpCut { get; set; }
     [Networked] private NetworkBool Dashing { get; set; }
+    [Networked] private NetworkBool FastFalling { get; set; }
     [Networked] private float DashDir { get; set; }
     [Networked] private NetworkBool FacingRight { get; set; }
     [Networked] private TickTimer DashDurationTimer { get; set; }
@@ -46,6 +49,7 @@ public class PlayerMovement : NetworkBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         mods = GetComponent<PlayerStatModifiers>();
+        combat = GetComponent<PlayerCombat>();
         if (rb != null) baseGravity = rb.gravityScale;
 
         if (HasStateAuthority)
@@ -68,8 +72,13 @@ public class PlayerMovement : NetworkBehaviour
         if (Dashing && DashDurationTimer.ExpiredOrNotRunning(Runner))
             EndDash();
 
-        // Gravity is a pure function of dash state (resimulation-safe).
-        rb.gravityScale = Dashing ? 0f : baseGravity;
+        // Gravity is a pure function of networked state + velocity (resimulation-safe).
+        if (grounded) FastFalling = false;
+        float gravityMult = MovementMath.SelectGravityMultiplier(
+            grounded, rb.linearVelocity.y, stats.apexThreshold,
+            Jumping, JumpCut, FastFalling,
+            stats.apexGravityMult, stats.fallGravityMult);
+        rb.gravityScale = Dashing ? 0f : baseGravity * gravityMult;
 
         // ---- Horizontal velocity ----
         if (Dashing)
@@ -82,7 +91,18 @@ public class PlayerMovement : NetworkBehaviour
         }
         else
         {
-            rb.linearVelocity = new Vector2(input.Horizontal * stats.walkSpeed, rb.linearVelocity.y);
+            var p = new MoveParams
+            {
+                WalkSpeed = stats.walkSpeed,
+                AccelPerTick = stats.walkSpeed /
+                    System.Math.Max(1, grounded ? stats.groundAccelTicks : stats.airAccelTicks),
+                DecelPerTick = stats.walkSpeed /
+                    System.Math.Max(1, grounded ? stats.groundDecelTicks : stats.airDecelTicks),
+                MomentumDecayPerTick =
+                    (grounded ? stats.momentumDecayGround : stats.momentumDecayAir) * Runner.DeltaTime,
+            };
+            float newVx = MovementMath.StepHorizontalVelocity(rb.linearVelocity.x, input.Horizontal, p);
+            rb.linearVelocity = new Vector2(newVx, rb.linearVelocity.y);
         }
 
         // ---- Facing ----
@@ -104,7 +124,8 @@ public class PlayerMovement : NetworkBehaviour
 
         // ---- Dash start / cancel ----
         if (!stunned && pressed.IsSet((int)PlayerButton.Dash) && !Dashing &&
-            DashCooldownTimer.ExpiredOrNotRunning(Runner))
+            DashCooldownTimer.ExpiredOrNotRunning(Runner) &&
+            (combat == null || !combat.IsSwingCommitted))
         {
             // Carrying-state must come from networked flag state (resim-safe), not the
             // render-path FlagCarrierMarker bool — see CTFGameManager.IsCarrying.
@@ -119,7 +140,14 @@ public class PlayerMovement : NetworkBehaviour
         if (!stunned && pressed.IsSet((int)PlayerButton.Jump))
         {
             JumpBufferCounter = jumpBufferTicks;
-            if (Dashing) EndDash(); // jump cancels dash
+            if (Dashing)
+            {
+                // Dash-jump (spec 1.3): cancel the dash and carry a fraction of dash speed
+                // into the jump. DashDir is networked and still valid after EndDash.
+                EndDash();
+                rb.linearVelocity = new Vector2(
+                    DashDir * stats.dashSpeed * stats.dashJumpCarryFactor, rb.linearVelocity.y);
+            }
         }
         else if (JumpBufferCounter > 0)
         {
@@ -138,6 +166,22 @@ public class PlayerMovement : NetworkBehaviour
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.y * jumpCutMultiplier);
             JumpCut = true;
         }
+
+        // ---- Fast-fall (spec 1.5): down pressed at/past the apex snaps to fast-fall speed ----
+        // Down+melee is a ground pound (PlayerCombat), which takes precedence over fast-fall (spec 1.5).
+        if (!stunned && !Dashing && pressed.IsSet((int)PlayerButton.Down) &&
+            !(input.VerticalAim < 0 && pressed.IsSet((int)PlayerButton.Melee)) &&
+            MovementMath.ShouldStartFastFall(grounded, true, rb.linearVelocity.y,
+                                             stats.apexThreshold, FastFalling))
+        {
+            FastFalling = true;
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, -stats.fastFallSpeed);
+        }
+
+        // ---- Terminal velocity ----
+        rb.linearVelocity = new Vector2(
+            rb.linearVelocity.x,
+            MovementMath.ClampFallSpeed(rb.linearVelocity.y, stats.maxFallSpeed));
     }
 
     private void DoJump(bool grounded)
@@ -203,6 +247,7 @@ public class PlayerMovement : NetworkBehaviour
     // ---- Public accessors (used by other scripts) ----
     public bool IsDashing() => Dashing;
     public bool IsStunned() => !StunTimer.ExpiredOrNotRunning(Runner);
+    public bool IsFacingRight() => FacingRight;
 
     /// <summary>
     /// Single source of truth for grounded state, computed from the groundCheck
