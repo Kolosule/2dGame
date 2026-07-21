@@ -39,6 +39,9 @@ constellations pinned to fixed map locations. No parallax, no networking, no cus
 - Verify in the Frame Debugger that the sky adds only a handful of SRP batches.
 - If the additive material renders black in a build, add `Legacy Shaders/Particles/Additive` to
   Project Settings > Graphics > Always Included Shaders.
+- The starfield mesh is generated at edit time / on Play. After a scene reopen or domain reload in
+  the editor it may appear empty until you right-click the StarfieldGenerator > Regenerate (or
+  enter Play).
 
 ## Guarantees
 

@@ -25,7 +25,9 @@ public static class SkyTextureBaker
         string node   = WriteRadial("node_glow",    128, 1.6f, Color.white, 128);
         string nebula = WriteRadial("nebula_cloud", 256, 1.1f, Color.white, 32);
         AssetDatabase.Refresh();
-        foreach (string p in new[] { star, node, nebula }) ImportAsSprite(p);
+        ImportAsSprite(star, 128);
+        ImportAsSprite(node, 128);
+        ImportAsSprite(nebula, 32);
         AssetDatabase.SaveAssets();
         return new[] { star, node, nebula };
     }
@@ -59,12 +61,14 @@ public static class SkyTextureBaker
         return path;
     }
 
-    private static void ImportAsSprite(string path)
+    /// <summary>Imports the PNG at <paramref name="path"/> as a sprite with the given pixels-per-unit.</summary>
+    private static void ImportAsSprite(string path, int ppu)
     {
         var imp = (TextureImporter)AssetImporter.GetAtPath(path);
         if (imp == null) return;
         imp.textureType = TextureImporterType.Sprite;
         imp.spriteImportMode = SpriteImportMode.Single;
+        imp.spritePixelsPerUnit = ppu;
         imp.alphaIsTransparency = true;
         imp.mipmapEnabled = false;
         imp.wrapMode = TextureWrapMode.Clamp;

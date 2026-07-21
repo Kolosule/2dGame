@@ -99,7 +99,7 @@ public class ConstellationPlacerEditor : EditorWindow
         line.numCapVertices = 2;
         line.sortingLayerName = "Background";
         line.sortingOrder = 10;
-        if (additive != null) line.material = additive;
+        if (additive != null) line.sharedMaterial = additive;
         var warm = new Color(1f, 0.85f, 0.55f, 0.35f);
         line.startColor = line.endColor = warm;
         for (int i = 0; i < nodePositions.Length; i++)

@@ -21,6 +21,14 @@ public static class SkySceneBuilder
 
         Material additive = GetOrCreateMaterial("SkyAdditive", "Legacy Shaders/Particles/Additive");
         Material alpha    = GetOrCreateMaterial("SkyAlpha",    "Sprites/Default");
+        Material stars    = GetOrCreateMaterial("SkyStars",   "Legacy Shaders/Particles/Additive");
+        if (additive == null || alpha == null || stars == null)
+        {
+            Debug.LogError("[Sky] Required shader(s) missing; aborting Build.");
+            return;
+        }
+        var starTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sky/Textures/star_dot.png");
+        if (stars != null && starTex != null) stars.mainTexture = starTex;
 
         var existing = GameObject.Find("SkyRoot");
         if (existing != null) Object.DestroyImmediate(existing);
@@ -42,7 +50,7 @@ public static class SkySceneBuilder
         var star = new GameObject("Starfield", typeof(MeshFilter), typeof(MeshRenderer));
         star.transform.SetParent(root.transform, false);
         var smr = star.GetComponent<MeshRenderer>();
-        smr.sharedMaterial = additive;
+        smr.sharedMaterial = stars;
         smr.sortingLayerName = SortingLayerNameOrDefault();
         smr.sortingOrder = 5;
         var gen = star.AddComponent<StarfieldGenerator>();
@@ -52,7 +60,7 @@ public static class SkySceneBuilder
         Sprite node = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sky/Textures/node_glow.png");
         Directory.CreateDirectory(PrefabDir);
         BuildExample(root, additive, node, "Triangle", new[]
-            { new Vector2(-6, 6), new Vector2(-2, 9), new Vector2(-9, 10), new Vector2(-6, 6) });
+            { new Vector2(-6, 6), new Vector2(-2, 9), new Vector2(-9, 10) });
         BuildExample(root, additive, node, "Dipper", new[]
             { new Vector2(8, 4), new Vector2(10, 5), new Vector2(12, 4.5f), new Vector2(13, 6),
               new Vector2(13, 8), new Vector2(11, 9) });
@@ -73,6 +81,8 @@ public static class SkySceneBuilder
         Object.DestroyImmediate(c);
         var inst = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
         inst.transform.SetParent(root.transform, true);
+        foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
+            r.sortingLayerName = SortingLayerNameOrDefault();
     }
 
     private static Material GetOrCreateMaterial(string name, string shader)
