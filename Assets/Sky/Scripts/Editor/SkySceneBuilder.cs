@@ -28,7 +28,14 @@ public static class SkySceneBuilder
             return;
         }
         var starTex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Sky/Textures/star_dot.png");
-        if (stars != null && starTex != null) stars.mainTexture = starTex;
+        if (starTex != null)
+        {
+            stars.mainTexture = starTex;
+            // Persist the texture reference so SkyStars.mat keeps it after a project reopen,
+            // not just for this authoring session.
+            EditorUtility.SetDirty(stars);
+            AssetDatabase.SaveAssets();
+        }
 
         var existing = GameObject.Find("SkyRoot");
         if (existing != null) Object.DestroyImmediate(existing);
