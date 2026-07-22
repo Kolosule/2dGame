@@ -21,16 +21,21 @@ public class StarfieldGenerator : MonoBehaviour
     [SerializeField] private int seed = 12345;
 
     [Header("Appearance")]
-    [SerializeField] private float minSize = 0.03f;
-    [SerializeField] private float maxSize = 0.09f;
+    [SerializeField] private float minSize = 0.5f;
+    [SerializeField] private float maxSize = 1.2f;
     [Tooltip("Upper bound on per-star alpha. Keep dim so stars don't compete with gameplay.")]
-    [SerializeField, Range(0f, 1f)] private float maxBrightness = 0.7f;
+    [SerializeField, Range(0f, 1f)] private float maxBrightness = 1f;
     [Tooltip("Cool-white star tint.")]
-    [SerializeField] private Color starColor = new Color(0.80f, 0.85f, 1.0f, 1f);
+    [SerializeField] private Color starColor = new Color(0.85f, 0.90f, 1.0f, 1f);
 
     private void Awake()
     {
-        if (GetComponent<MeshFilter>().sharedMesh == null) Rebuild();
+        // Always rebuild from the serialized fields at load time. The scene may embed a stale baked
+        // mesh from a prior authoring session; if we trusted it (only rebuilding when null) then
+        // changing minSize/maxSize/etc. in the Inspector would have NO effect at runtime — the game
+        // would keep rendering the old baked quads. Rebuilding here (2000 quads, sub-millisecond)
+        // makes the Inspector values the single source of truth: change them, save the scene, play.
+        Rebuild();
     }
 
     /// <summary>Regenerates the star mesh from the current inspector values.</summary>
