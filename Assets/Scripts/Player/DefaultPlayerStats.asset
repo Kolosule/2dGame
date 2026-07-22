@@ -14,11 +14,26 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerStats
   walkSpeed: 15
   jumpForce: 25
-  maxAirJumps: 1
-  dashSpeed: 50
+  maxAirJumps: 0
+  dashSpeed: 40
   dashTime: 0.12
   dashCooldown: 0.75
+  groundAccelTicks: 4
+  groundDecelTicks: 3
+  airAccelTicks: 10
+  airDecelTicks: 18
+  momentumDecayAir: 80
+  momentumDecayGround: 80
+  dashJumpCarryFactor: 0.493
+  fallGravityMult: 1.7
+  apexGravityMult: 0.5
+  apexThreshold: 1.5
+  fastFallSpeed: 18
+  maxFallSpeed: 20
   attackDamage: 25
   attackForce: 10
   attackCooldown: 0.1
   maxHealth: 100
+  attackStartupTicks: 3
+  attackActiveTicks: 5
+  attackRecoveryTicks: 10

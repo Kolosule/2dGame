@@ -407,7 +407,7 @@ MonoBehaviour:
   projectileDamage: 15
   projectileSpeed: 40
   projectileScale: 1
-  projectileCooldown: 1
+  projectileCooldown: 2
   muzzleFlashPrefab: {fileID: 0}
   muzzleFlashLifetime: 0.2
   tracerColor: {r: 1, g: 0.9, b: 0.3, a: 1}
@@ -434,7 +434,7 @@ MonoBehaviour:
   stats: {fileID: 11400000, guid: 210721b53ee27ce4d99595054d7e3477, type: 2}
   healthBar: {fileID: 0}
   spawnImmunityDuration: 1.5
-  respawnDelay: 3
+  respawnDelay: 2
   hitCooldown: 0.1
   _CurrentHealth: 0
   _IsDead: 0
