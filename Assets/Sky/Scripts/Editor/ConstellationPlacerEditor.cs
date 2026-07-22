@@ -59,19 +59,32 @@ public class ConstellationPlacerEditor : EditorWindow
     {
         if (!placing) return;
         Event e = Event.current;
+
+        // Placement: Ctrl+left-click drops a node. Consume the event so the SceneView doesn't also
+        // treat it as a selection click, then refresh the scene once to show the new preview.
         if (e.type == EventType.MouseDown && e.button == 0 && e.control)
         {
             Ray r = HandleUtility.GUIPointToWorldRay(e.mousePosition);
             Vector3 p = r.origin; p.z = 0f;
             pending.Add(new Vector2(p.x, p.y));
             e.Use();
-            Repaint();
+            view.Repaint();
+            return;
         }
+
+        // Preview drawing MUST be gated to the Repaint event and use NON-interactive draw calls.
+        // The earlier code called Handles.DotHandleCap(0, ...) — an *interactive* handle — on every
+        // scene GUI event with a hardcoded control id of 0. That corrupted the SceneView's control
+        // bookkeeping and drove it into a continuous repaint loop that pegged the main thread, so
+        // Unity would hang with "waiting for Unity's code to finish executing" while placing. Pure
+        // drawing (DrawSolidDisc/DrawLine) on Repaint only allocates no controls and cannot loop.
+        if (e.type != EventType.Repaint) return;
+
         Handles.color = Color.cyan;
         for (int i = 0; i < pending.Count; i++)
         {
-            Handles.DotHandleCap(0, pending[i], Quaternion.identity, 0.1f, EventType.Repaint);
-            if (i > 0) Handles.DrawLine(pending[i - 1], pending[i]);
+            Handles.DrawSolidDisc((Vector3)pending[i], Vector3.forward, 0.1f);
+            if (i > 0) Handles.DrawLine((Vector3)pending[i - 1], (Vector3)pending[i]);
         }
     }
 

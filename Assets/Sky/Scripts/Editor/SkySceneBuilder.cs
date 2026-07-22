@@ -48,7 +48,7 @@ public static class SkySceneBuilder
         var nsr = nebula.AddComponent<SpriteRenderer>();
         nsr.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sky/Textures/nebula_cloud.png");
         nsr.sharedMaterial = alpha;
-        nsr.color = new Color(0.4f, 0.5f, 0.8f, 0.12f);
+        nsr.color = new Color(0.16f, 0.13f, 0.22f, 0.1f);
         nsr.sortingLayerName = SortingLayerNameOrDefault();
         nsr.sortingOrder = 0;
         nebula.transform.localScale = Vector3.one * 40f;
