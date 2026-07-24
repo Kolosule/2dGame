@@ -11,6 +11,10 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
     [SerializeField] private TextMeshProUGUI team1ScoreText;
     [SerializeField] private TextMeshProUGUI team2ScoreText;
 
+    [Tooltip("Label prefixed before each team's score, e.g. \"BLUE\" / \"RED\".")]
+    [SerializeField] private string team1Label = "BLUE";
+    [SerializeField] private string team2Label = "RED";
+
     [Tooltip("Badge shown only when THIS player's team has an active team buff.")]
     [SerializeField] private GameObject teamBuffBadge;
 
@@ -51,8 +55,8 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
     private void RepaintScores()
     {
         if (scoreManager == null) return;
-        if (team1ScoreText != null) team1ScoreText.text = scoreManager.Team1Score.ToString();
-        if (team2ScoreText != null) team2ScoreText.text = scoreManager.Team2Score.ToString();
+        if (team1ScoreText != null) team1ScoreText.text = $"{team1Label}  {scoreManager.Team1Score}";
+        if (team2ScoreText != null) team2ScoreText.text = $"{team2Label}  {scoreManager.Team2Score}";
     }
 
     private void RepaintBadge()
