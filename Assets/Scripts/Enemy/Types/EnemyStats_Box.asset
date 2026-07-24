@@ -16,9 +16,9 @@ MonoBehaviour:
   maxHealth: 20
   attackDamage: 3
   attackCooldown: 1.05
-  attackTelegraphDuration: 0.45
-  knockbackMultiplier: 1.6
-  moveSpeed: 3
+  attackTelegraphDuration: 0.4
+  knockbackMultiplier: 1.5
+  moveSpeed: 5
   canFly: 0
   detectionRange: 6
   attackRange: 1.5

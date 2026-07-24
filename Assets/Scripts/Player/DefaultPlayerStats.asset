@@ -32,7 +32,7 @@ MonoBehaviour:
   maxFallSpeed: 20
   attackDamage: 25
   attackForce: 10
-  attackCooldown: 0.1
+  attackCooldown: 0.2
   maxHealth: 100
   attackStartupTicks: 3
   attackActiveTicks: 5
