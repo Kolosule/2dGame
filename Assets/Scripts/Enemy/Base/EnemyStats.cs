@@ -14,6 +14,11 @@ public class EnemyStats : ScriptableObject
     [Header("Movement")]
     public float moveSpeed = 3f;
 
+    [Tooltip("If true, the enemy flies: MoveToward drives both X and Y velocity toward the " +
+             "target and skips the ground/jump logic. Requires Rigidbody2D gravityScale = 0 " +
+             "on the prefab.")]
+    public bool canFly = false;
+
     [Header("AI Ranges")]
     [Tooltip("How far the enemy senses players.")]
     public float detectionRange = 10f;

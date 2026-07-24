@@ -184,7 +184,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3dc0964189d94de40890f7bd3a35a6b5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
-  stats: {fileID: 11400000, guid: 52e1b76a97b3db2469333e95486eaf98, type: 2}
+  stats: {fileID: 11400000, guid: 65825405b1e94f288fc6d36e166eefa7, type: 2}
   coinPrefab: {fileID: 5136239110909564780, guid: b914b9a97b825e44b8d33e985a4f427a, type: 3}
   coinsToDropMin: 1
   coinsToDropMax: 1
