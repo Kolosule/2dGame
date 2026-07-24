@@ -15,12 +15,14 @@ MonoBehaviour:
   enemyName: Box
   maxHealth: 20
   attackDamage: 3
-  attackCooldown: 1.2
-  moveSpeed: 2.5
+  attackCooldown: 1.05
+  attackTelegraphDuration: 0.45
+  knockbackMultiplier: 1.6
+  moveSpeed: 3
   canFly: 0
   detectionRange: 6
   attackRange: 1.5
   leashRadius: 10
   wanderRadius: 4
   level: 1
-  enemyTeam:
+  enemyTeam: 

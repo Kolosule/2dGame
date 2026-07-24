@@ -11,6 +11,14 @@ public class EnemyStats : ScriptableObject
     public int attackDamage = 1;
     public float attackCooldown = 1f; // Time between attacks in seconds
 
+    [Tooltip("Windup shown before an attack lands (seconds). Shorter = faster attacks and a " +
+             "tighter reaction window once the enemy is in range.")]
+    public float attackTelegraphDuration = 0.5f;
+
+    [Tooltip("Scales the knockback this enemy takes from player hits. >1 = flies back further, " +
+             "so a well-timed hit can knock it out of an attack.")]
+    public float knockbackMultiplier = 1f;
+
     [Header("Movement")]
     public float moveSpeed = 3f;
 

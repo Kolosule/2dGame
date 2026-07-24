@@ -13,14 +13,16 @@ MonoBehaviour:
   m_Name: EnemyStats_Flyer
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Flyer
-  maxHealth: 28
-  attackDamage: 6
-  attackCooldown: 1
-  moveSpeed: 6.5
+  maxHealth: 100
+  attackDamage: 50
+  attackCooldown: 0.8
+  attackTelegraphDuration: 0.24
+  knockbackMultiplier: 2.6
+  moveSpeed: 18
   canFly: 1
   detectionRange: 18
   attackRange: 1.5
   leashRadius: 32
   wanderRadius: 3
   level: 1
-  enemyTeam:
+  enemyTeam: 

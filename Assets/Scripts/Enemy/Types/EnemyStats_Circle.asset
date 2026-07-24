@@ -13,9 +13,11 @@ MonoBehaviour:
   m_Name: EnemyStats_Circle
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Circle
-  maxHealth: 30
+  maxHealth: 50
   attackDamage: 5
-  attackCooldown: 1
+  attackCooldown: 0.8
+  attackTelegraphDuration: 0.28
+  knockbackMultiplier: 2.3
   moveSpeed: 6
   canFly: 0
   detectionRange: 16
@@ -23,4 +25,4 @@ MonoBehaviour:
   leashRadius: 30
   wanderRadius: 1
   level: 1
-  enemyTeam:
+  enemyTeam: 

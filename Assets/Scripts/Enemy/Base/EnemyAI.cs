@@ -153,6 +153,7 @@ public class EnemyAI : MonoBehaviour
             leashRadius = stats.leashRadius;
             wanderRadius = Mathf.Min(stats.wanderRadius, stats.leashRadius);
             canFly = stats.canFly;
+            attackTelegraphDuration = stats.attackTelegraphDuration;
         }
         currentState = State.Guard;
         hasWanderTarget = false;
