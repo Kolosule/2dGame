@@ -10,16 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 18c09048ad1f4234dab66666de18c739, type: 3}
-  m_Name: EnemyStats_4
+  m_Name: EnemyStats_Flyer
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
-  enemyName: Green
-  maxHealth: 200
+  enemyName: Flyer
+  maxHealth: 100
   attackDamage: 50
-  attackCooldown: 1
+  attackCooldown: 0.8
+  attackTelegraphDuration: 0.12
+  knockbackMultiplier: 1.5
   moveSpeed: 20
-  detectionRange: 30
+  canFly: 1
+  detectionRange: 18
   attackRange: 1.5
-  leashRadius: 35
-  wanderRadius: 20
-  level: 4
+  leashRadius: 32
+  wanderRadius: 3
+  level: 1
   enemyTeam: 

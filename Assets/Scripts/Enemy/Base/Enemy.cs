@@ -210,11 +210,13 @@ public class Enemy : NetworkBehaviour
         // Apply damage
         CurrentHealth -= amount;
 
-        // Apply knockback
+        // Apply knockback, scaled by this archetype's knockback multiplier (bigger = easier
+        // to knock out of an attack, which is how a well-timed hit interrupts the telegraph).
         if (rb != null)
         {
+            float knockbackMultiplier = stats != null ? stats.knockbackMultiplier : 1f;
             rb.linearVelocity = Vector2.zero; // Reset current velocity
-            rb.AddForce(knockbackForce, ForceMode2D.Impulse);
+            rb.AddForce(knockbackForce * knockbackMultiplier, ForceMode2D.Impulse);
 
             // Set knockback state with duration (0.3s) — pauses AI movement
             knockbackTimer = TickTimer.CreateFromSeconds(Runner, 0.3f);

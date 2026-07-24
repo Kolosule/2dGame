@@ -10,16 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 18c09048ad1f4234dab66666de18c739, type: 3}
-  m_Name: EnemyStats_1
+  m_Name: EnemyStats_Octagon
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
-  enemyName: Red
-  maxHealth: 25
-  attackDamage: 5
-  attackCooldown: 1
-  moveSpeed: 5
-  detectionRange: 15
+  enemyName: Octagon
+  maxHealth: 75
+  attackDamage: 4
+  attackCooldown: 0.95
+  attackTelegraphDuration: 0.19
+  knockbackMultiplier: 1.5
+  moveSpeed: 10
+  canFly: 0
+  detectionRange: 9
   attackRange: 1.5
-  leashRadius: 35
-  wanderRadius: 15
+  leashRadius: 16
+  wanderRadius: 6
   level: 1
   enemyTeam: 

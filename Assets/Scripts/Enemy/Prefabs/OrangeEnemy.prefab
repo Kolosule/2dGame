@@ -89,7 +89,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
+  m_Sprite: {fileID: -712631045867808456, guid: b670ab75dde984907b8570040daa08c5, type: 3}
   m_Color: {r: 1, g: 0.72413087, b: 0, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -99,8 +99,8 @@ SpriteRenderer:
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
---- !u!61 &4812146198577751789
-BoxCollider2D:
+--- !u!60 &4812146198577751789
+PolygonCollider2D:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -134,17 +134,16 @@ BoxCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_SpriteTilingProperty:
-    border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 1, y: 1}
-    newSize: {x: 1, y: 1}
-    adaptiveTilingThreshold: 0.5
-    drawMode: 0
-    adaptiveTiling: 0
-  m_AutoTiling: 0
-  m_Size: {x: 1, y: 1}
-  m_EdgeRadius: 0
+  m_Points:
+    serializedVersion: 2
+    m_Paths:
+    - - {x: 0.5, y: 0}
+      - {x: 0.25, y: 0.433}
+      - {x: -0.25, y: 0.433}
+      - {x: -0.5, y: 0}
+      - {x: -0.25, y: -0.433}
+      - {x: 0.25, y: -0.433}
+  m_UseDelaunayMesh: 0
 --- !u!50 &8413437108784317526
 Rigidbody2D:
   serializedVersion: 5
@@ -184,7 +183,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3dc0964189d94de40890f7bd3a35a6b5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
-  stats: {fileID: 11400000, guid: 4dd6850bce08b664ca4971fd1e79eea2, type: 2}
+  stats: {fileID: 11400000, guid: fc2373875fcf4ec59918f3d9107933d5, type: 2}
   coinPrefab: {fileID: -934654579490886913, guid: f3cda0812fd9ef74b9123ee76a91116d, type: 3}
   coinsToDropMin: 1
   coinsToDropMax: 1

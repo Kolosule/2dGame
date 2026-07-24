@@ -36,6 +36,7 @@ public class EnemyAI : MonoBehaviour
     private float attackRange;
     private float leashRadius;
     private float wanderRadius;
+    private bool canFly;
     private bool initialized;
 
     private State currentState = State.Guard;
@@ -151,6 +152,8 @@ public class EnemyAI : MonoBehaviour
             attackRange = stats.attackRange;
             leashRadius = stats.leashRadius;
             wanderRadius = Mathf.Min(stats.wanderRadius, stats.leashRadius);
+            canFly = stats.canFly;
+            attackTelegraphDuration = stats.attackTelegraphDuration;
         }
         currentState = State.Guard;
         hasWanderTarget = false;
@@ -220,7 +223,7 @@ public class EnemyAI : MonoBehaviour
         // Pausing between wander points.
         if (!wanderPauseTimer.ExpiredOrNotRunning(enemyComponent.Runner))
         {
-            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+            StopMovement();
             return;
         }
 
@@ -247,7 +250,7 @@ public class EnemyAI : MonoBehaviour
         {
             hasWanderTarget = false;
             wanderPauseTimer = TickTimer.CreateFromSeconds(enemyComponent.Runner, wanderPauseDuration);
-            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+            StopMovement();
         }
     }
 
@@ -384,7 +387,7 @@ public class EnemyAI : MonoBehaviour
 
         if (freezeDuringTelegraph)
         {
-            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+            StopMovement();
         }
     }
 
@@ -411,7 +414,7 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
-        rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+        StopMovement();
 
         PlayerStatsHandler player = currentPlayer.GetComponent<PlayerStatsHandler>();
         if (player != null && enemyComponent != null)
@@ -429,7 +432,7 @@ public class EnemyAI : MonoBehaviour
         // Horizontal arrival (same reason as Wander: Y is gravity-owned).
         if (Mathf.Abs(rb.position.x - home.x) < ArriveThreshold)
         {
-            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+            StopMovement();
             hasWanderTarget = false;
             currentState = State.Guard;
             return;
@@ -442,9 +445,22 @@ public class EnemyAI : MonoBehaviour
     private void MoveToward(Vector2 target)
     {
         Vector2 direction = (target - rb.position).normalized;
-        rb.linearVelocity = new Vector2(direction.x * moveSpeed, rb.linearVelocity.y);
+        rb.linearVelocity = EnemyAIMovement.SteeringVelocity(
+            rb.position, target, moveSpeed, rb.linearVelocity.y, canFly);
         SetFacing(direction.x);
+
+        // Flying enemies pursue freely in 2D; ground/jump logic doesn't apply to them.
+        if (canFly) return;
         HandleMovementJump(direction.x);
+    }
+
+    /// <summary>
+    /// Halts movement. Grounded enemies keep their gravity-owned Y velocity; flyers stop on
+    /// both axes (gravityScale 0 won't bleed off residual Y).
+    /// </summary>
+    private void StopMovement()
+    {
+        rb.linearVelocity = EnemyAIMovement.StopVelocity(rb.linearVelocity.y, canFly);
     }
 
     // ---- Jump -----------------------------------------------------------

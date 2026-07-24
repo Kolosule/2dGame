@@ -11,8 +11,21 @@ public class EnemyStats : ScriptableObject
     public int attackDamage = 1;
     public float attackCooldown = 1f; // Time between attacks in seconds
 
+    [Tooltip("Windup shown before an attack lands (seconds). Shorter = faster attacks and a " +
+             "tighter reaction window once the enemy is in range.")]
+    public float attackTelegraphDuration = 0.5f;
+
+    [Tooltip("Scales the knockback this enemy takes from player hits. >1 = flies back further, " +
+             "so a well-timed hit can knock it out of an attack.")]
+    public float knockbackMultiplier = 1f;
+
     [Header("Movement")]
     public float moveSpeed = 3f;
+
+    [Tooltip("If true, the enemy flies: MoveToward drives both X and Y velocity toward the " +
+             "target and skips the ground/jump logic. Requires Rigidbody2D gravityScale = 0 " +
+             "on the prefab.")]
+    public bool canFly = false;
 
     [Header("AI Ranges")]
     [Tooltip("How far the enemy senses players.")]
