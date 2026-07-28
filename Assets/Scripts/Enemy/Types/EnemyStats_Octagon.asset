@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: EnemyStats_Octagon
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Octagon
-  maxHealth: 75
-  attackDamage: 4
+  maxHealth: 50
+  attackDamage: 25
   attackCooldown: 0.95
   attackTelegraphDuration: 0.19
   knockbackMultiplier: 1.5
