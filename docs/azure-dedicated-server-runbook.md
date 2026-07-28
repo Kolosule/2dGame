@@ -51,6 +51,32 @@ That guide covers verifying the server topology; this one covers **running it on
 
 ---
 
+## ⚠️ Required first: pin the Photon region (cross-region players)
+
+**Do this before building anything if you have players outside US-West (e.g. AU/JP).**
+
+Photon Fusion sessions are **region-scoped**. `PhotonAppSettings.asset` currently has
+`FixedRegion:` **blank**, which means every peer runs **Best Region** selection and joins its own
+lowest-ping regional master. With a single US-hosted server that silently breaks discovery:
+
+- The Azure **West US** server registers `PvPvERoom` in Photon's **US-West (`usw`)** master.
+- NorCal / Seattle clients also ping-select `usw` → they find the match. ✅
+- **AU / JP clients ping-select their *own* local region → they never see the session at all.** ❌
+
+To make one US server discoverable by everyone, pin **both the server build and the client build**
+to the same region. For a West US VM that region is **`usw`** (US West, San José):
+
+1. In Unity: **Fusion → Realtime Settings** (opens `PhotonAppSettings.asset`).
+2. Set **Fixed Region** to `usw`.
+3. Rebuild **and redistribute both** the dedicated-server build *and* the player build — a region
+   pin only takes effect in builds made after the change.
+
+> Region tokens: `usw` = US West (San José, matches Azure West US), `us` = US **East** (don't use
+> for a West US VM). AU/JP players then connect to `usw` at the ~120–170 ms noted at the bottom —
+> that latency is only reachable *because* they're now pinned to the same master.
+
+---
+
 ## 2. Part A — Build the Linux Dedicated Server (Unity, editor-side)
 
 I can't run the Unity build from here, so do this in the editor:
@@ -266,7 +292,8 @@ this if you're done for good.)
 |---|---|---|
 | `server.log` never prints the ✅ line | Not booting as server | Confirm the run command includes `-batchmode` (or `-dedicatedServer`); check `systemctl status gameserver` |
 | Binary won't execute (`No such file`/lib error) | Missing base libs or not executable | `chmod +x`; `sudo apt-get install -y libc6 ca-certificates` |
-| Clients can't find the match | Wrong Photon App ID / region mismatch, or server not running | Server and clients must share the same Photon App ID; check `journalctl -u gameserver` |
+| Clients can't find the match | Wrong Photon App ID, **region mismatch** (Best Region on, no `usw` pin), or server not running | Server and clients must share the same Photon App ID **and the same `FixedRegion`** (see "pin the Photon region" above); check `journalctl -u gameserver` |
+| Only local (US) players find the match; AU/JP can't | `FixedRegion` blank → Best Region routes each peer to a different master | Pin `FixedRegion = usw` and rebuild **both** server and client |
 | SSH times out after a weekend | VM deallocated (expected) | `az vm start` first; the static IP is unchanged |
 | Bill higher than expected | VM left running / merely "stopped" | `az vm deallocate`; verify status reads "VM deallocated" |
 | Need the current IP | — | `az vm show -d -g game-rg -n game-server --query publicIps -o tsv` |
@@ -277,7 +304,9 @@ this if you're done for good.)
 ## Notes
 
 - **AU/JP latency** is inherent to a single US-West server and the NorCal-majority choice — not a
-  misconfiguration. A second region only makes sense if that group grows.
+  misconfiguration. A second region only makes sense if that group grows. Note this ~120–170 ms is
+  only *reachable* once AU/JP clients are pinned to `usw` (see "pin the Photon region"); without the
+  pin they land on a different master and can't join at all.
 - **FX-series vs F8s v2:** FX has the higher clock, but for one 20-player match F8s v2 already has
   far more headroom than the tick loop needs. Upgrade only if the profiler ever shows the server
   frame budget tightening.

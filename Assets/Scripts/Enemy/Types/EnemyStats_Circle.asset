@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: EnemyStats_Circle
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Circle
-  maxHealth: 50
-  attackDamage: 5
+  maxHealth: 75
+  attackDamage: 34
   attackCooldown: 0.8
   attackTelegraphDuration: 0.14
   knockbackMultiplier: 1.5
