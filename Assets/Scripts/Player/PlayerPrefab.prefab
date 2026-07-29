@@ -396,9 +396,6 @@ MonoBehaviour:
   sideAttackArea: {x: 2, y: 3}
   upAttackArea: {x: 1, y: 2}
   downAttackArea: {x: 1, y: -2}
-  hitMarkerPrefab: {fileID: 6354563029965422019, guid: b4f6a2b3656ed5b4eb44fb019e40ccb8, type: 3}
-  hitMarkerColor: {r: 1, g: 1, b: 1, a: 1}
-  hitMarkerDuration: 0.3
   useGroundPound: 1
   groundPoundForce: 20
   groundPoundImpactEffect: {fileID: 0}

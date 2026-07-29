@@ -30,11 +30,6 @@ public class PlayerCombat : NetworkBehaviour
     [SerializeField] private Vector2 upAttackArea = new Vector2(1f, 1f);
     [SerializeField] private Vector2 downAttackArea = new Vector2(1f, 1f);
 
-    [Header("Hit Marker")]
-    [SerializeField] private GameObject hitMarkerPrefab;
-    [SerializeField] private Color hitMarkerColor = Color.white;
-    [SerializeField] private float hitMarkerDuration = 0.3f;
-
     [Header("Ground Pound")]
     [SerializeField] private bool useGroundPound = true;
     [SerializeField] private float groundPoundForce = 20f;
@@ -135,7 +130,7 @@ public class PlayerCombat : NetworkBehaviour
         if (HasStateAuthority && dashing && mods != null && mods.DashDealsDamage && sideAttackPoint != null)
         {
             if (!wasDashing) dashStruck.Clear();
-            ApplyMeleeHits(sideAttackPoint.position, sideAttackArea, spawnHitMarkers: false, dashStruck);
+            ApplyMeleeHits(sideAttackPoint.position, sideAttackArea, dashStruck);
         }
         wasDashing = dashing;
     }
@@ -189,7 +184,7 @@ public class PlayerCombat : NetworkBehaviour
         if (sideAttackPoint == null) return; // parity with old Attack()'s null guard
 
         ResolveSwingBox(out Vector2 center, out Vector2 area);
-        ApplyMeleeHits(center, area, spawnHitMarkers: true, swingStruck);
+        ApplyMeleeHits(center, area, swingStruck);
     }
 
     /// <summary>Hitbox from the LATCHED aim/facing. The attack-point children flip with
@@ -226,7 +221,7 @@ public class PlayerCombat : NetworkBehaviour
     /// The normal swing passes the per-swing <c>swingStruck</c> dedup set so each target is hit
     /// at most once per swing; the dash-strike passes <c>dashStruck</c>.
     /// </summary>
-    private void ApplyMeleeHits(Vector2 center, Vector2 area, bool spawnHitMarkers,
+    private void ApplyMeleeHits(Vector2 center, Vector2 area,
                                 HashSet<Collider2D> alreadyHit = null)
     {
         Collider2D[] objectsHit = Physics2D.OverlapBoxAll(center, area, 0f, attackableLayer);
@@ -237,14 +232,6 @@ public class PlayerCombat : NetworkBehaviour
             {
                 if (alreadyHit.Contains(hit)) continue;
                 alreadyHit.Add(hit);
-            }
-
-            if (spawnHitMarkers && hitMarkerPrefab != null)
-            {
-                GameObject marker = Instantiate(hitMarkerPrefab, hit.transform.position, Quaternion.identity);
-                SpriteRenderer sr = marker.GetComponent<SpriteRenderer>();
-                if (sr != null) sr.color = hitMarkerColor;
-                Destroy(marker, hitMarkerDuration);
             }
 
             Enemy enemy = hit.GetComponent<Enemy>();
