@@ -134,6 +134,30 @@ dedicated-server path.
 
 To approach 20 players, launch ~20 client builds (or fewer + MPPM) against one headless server.
 
+### C4. Is *this* machine the server, or just a client? (how to tell)
+
+The role is decided once at startup in `GameNetworkManager.Start()` →
+[`NetworkBootMode.Resolve(Application.isBatchMode, commandLineArgs)`](../../../Assets/Scripts/Net/NetworkBootMode.cs):
+**batch mode _or_ a `-dedicatedServer` arg → dedicated server** (`GameMode.Server`, no menu);
+anything else → an interactive **client** build that shows the menu, where you then pick **Host**
+(this machine becomes server + player) or **Join** (pure client). So a single local box can end up
+in any of three roles — here's how to tell which:
+
+| This process booted as… | How you can tell |
+|---|---|
+| **Dedicated server** (headless — local `-batchmode`/`-dedicatedServer`, or the Azure host) | No window, no menu, never spawns a player. `server.log` prints `✅ Dedicated server started — waiting for players.` At runtime `Runner.GameMode == Server` and, the decisive tell, `Runner.IsServer && Runner.LocalPlayer == PlayerRef.None` (the server owns **no** local player — this is exactly the guard at `GameNetworkManager.cs:456`). |
+| **Local machine as server + player** (solo-dev **Host** button) | You clicked **Host**; you have your own player and the **Start** button immediately. `Runner.GameMode == Host`; `Runner.IsServer` is **true** but `Runner.LocalPlayer != PlayerRef.None` (a Host owns a player, a dedicated server doesn't). |
+| **Local machine as a pure client** (**Join** button) | You clicked **Join**; you see the lobby but only the ★ host-client gets Start. `Runner.GameMode == Client`; `Runner.IsServer` is **false**. The server is some *other* process (a local headless build or the Azure host). |
+
+> **`Runner.IsServer` alone can't tell dedicated from Host** — it's true for both (both hold state
+> authority). The clean discriminator is `LocalPlayer == PlayerRef.None` (dedicated) vs. a real
+> `LocalPlayer` (Host), or just read `Runner.GameMode`.
+>
+> **The Editor is never in batch mode**, so Play-in-Editor always boots to the menu as a *client*
+> — it can only "be the server" via the **Host** button (solo-dev), never the true dedicated path.
+> To exercise the real dedicated topology from one machine, run the headless build (§C2) or point at
+> Azure (§C1) and **Join**.
+
 ---
 
 ## D. Phase 1 verification — dedicated server + lobby
