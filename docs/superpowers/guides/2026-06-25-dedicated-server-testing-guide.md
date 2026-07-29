@@ -1,42 +1,67 @@
-# Testing Guide — Dedicated Server Responsiveness (Phases 1, 2a, 2b, 3)
+# Dedicated Server — Implementation & Verification Guide
 
-This is the **Unity-Editor-side** work that the agent could not run (no Unity CLI in the
-authoring environment): one-time setup, then the verification procedures for Phase 1 (dedicated
-server + lobby, §D), Phase 2a (Area of Interest, §B + §E), Phase 2b (projectile pooling, §F), and
-Phase 3 (cosmetic shoot prediction, §G).
+> **Last refreshed 2026-07-28** to match the current game (shape-based enemies, deposit-earned
+> buffs, rebuilt event-driven HUD, snapshot lobby, client-local sky) and the **live Azure host**.
 
-Each phase ships on its own branch/PR — verify whichever you have merged or checked out. Do the
-setup before the matching verification. **Phase 2a will visibly break the game if its scene wiring
-(Section B) is skipped** — enabling AoI culls anything not in a player's region or marked
+This is the **Unity-Editor-side** work the agent can't run (no Unity CLI in the authoring
+environment): one-time setup, then the verification procedures for the dedicated-server topology
+and the responsiveness phases — Phase 1 (dedicated server + lobby, §D), Phase 2a (Area of Interest,
+§B + §E), Phase 2b (projectile pooling, §F), and Phase 3 (cosmetic shoot prediction, §G) — plus
+current-game checks that must survive the server topology (§H).
+
+**Where this fits:**
+- **This guide** — verify the server topology and gameplay behave correctly (run locally with MPPM
+  or against the real host).
+- **[Azure runbook](../../azure-dedicated-server-runbook.md)** — build the Linux Dedicated Server,
+  provision the VM, deploy, and run it on Azure for the monthly weekend session (live at
+  `20.59.20.112`, systemd `gameserver`).
+
+Do the setup before the matching verification. **Phase 2a will visibly break the game if its scene
+wiring (§B) is skipped** — enabling AoI culls anything not in a player's region or marked
 always-interested. **Phase 2b does nothing until you add `Poolable` to the projectile prefab (§F).**
 
 ---
 
 ## A. One-time setup
 
-1. **Open the project in Unity** so it imports the new scripts and generates their `.meta`
-   files:
-   - `Assets/Scripts/AreaOfInterest/AlwaysInterestedMarker.cs`
-   - `Assets/Scripts/AreaOfInterest/AreaOfInterestRegistrar.cs`
-   - (Phase 1's `Assets/Scripts/Net/*` already have `.meta` from the merged PR #45.)
-   Watch the Console for compile errors. Expected: **none**. If you see "two assembly
-   definitions in the same folder," something was placed wrong — the AoI scripts must be in
-   `Assets/Scripts/AreaOfInterest/` (plain `Assembly-CSharp`), not under `Assets/Scripts/Net/`.
+1. **Open the project in Unity** so it imports any new scripts and generates their `.meta` files.
+   Watch the Console for compile errors — expected: **none**. If you see "two assembly definitions in
+   the same folder," something was placed wrong: the AoI scripts must be in
+   `Assets/Scripts/AreaOfInterest/` and pooling in `Assets/Scripts/Pooling/` (plain `Assembly-CSharp`),
+   not under `Assets/Scripts/Net/` (the engine-free `Game.Net` asmdef).
 
-2. **Run the lobby EditMode tests:** `Window → General → Test Runner → EditMode → Run All`.
-   Expected: **28 green** in the Net suite —
-   - `NetworkBootModeTests` (5): batch-mode → DedicatedServer, `-dedicatedServer` arg →
-     DedicatedServer, interactive → Client, unrelated/null args → Client.
-   - `LobbyHostPolicyTests` (7): host = lowest id / empty → NoHost / re-designation; CanStart
-     0 players=false, 1 player=true, 20 players=true.
-   - `LobbyProtocolTests` (9): nickname sanitize + round-trip, snapshot round-trip
-     (empty + full 20-player roster), truncated/bad-team/trailing-byte rejection.
-   - `LobbyServerStateTests` (7): balanced auto-assign (tie → team 1), rejoin keeps team,
-     switch validation, nickname sanitize, host re-resolution, snapshot contents.
+2. **Run the full EditMode suite:** `Window → General → Test Runner → EditMode → Run All`.
+   Expected: **152 green** across 8 suites. What each covers:
+   - **Net (28)** — the dedicated-server + lobby logic:
+     - `NetworkBootModeTests` (5): batch-mode → DedicatedServer, `-dedicatedServer` arg →
+       DedicatedServer, interactive → Client, unrelated/null args → Client.
+     - `LobbyHostPolicyTests` (7): host = lowest id / empty → NoHost / re-designation; CanStart
+       0 players=false, 1 player=true, 20 players=true.
+     - `LobbyProtocolTests` (9): nickname sanitize + round-trip, snapshot round-trip
+       (empty + full 20-player roster), truncated/bad-team/trailing-byte rejection.
+     - `LobbyServerStateTests` (7): balanced auto-assign (tie → team 1), rejoin keeps team,
+       switch validation, nickname sanitize, host re-resolution, snapshot contents.
+   - **PlayerMovement (21)** — `MovementMathTests`: accel/decel, dash momentum, apex gravity.
+   - **Combat (25)** — `SwingPhaseTests`, `HitCooldownLedgerTests`, `FlashCurveTests`,
+     `DamageNumberMotionTests` (melee phase timing, per-target hit cooldown, hit-landed FX curves).
+   - **PlayerAnimation (14)** — `PlayerLocomotionResolverTests`: locally-derived locomotion +
+     hysteresis.
+   - **Buffs (18)** — `BuffUnlockTests`: deposit-earned tier thresholds and unlock ordering.
+   - **Hud (23)** — `AuraTiersTests`, `BuffTierVisualTests`, `CooldownFillTests`,
+     `HealthSegmentsTests`: the rebuilt event-driven HUD's pure display math.
+   - **EnemyAI (16)** — `DifficultyRingConfigTests`, `EnemyAILeashTests`, `EnemyAIMovementTests`:
+     center-scaled difficulty rings + zone-leashed wander.
+   - **Sky (7)** — `PulseMathTests`, `StarfieldMathTests`: client-local nebula pulse + starfield
+     placement (no networking).
 
-3. **Confirm Build Settings scenes:** `File → Build Settings` — MainMenu at index **0**,
-   Gameplay at index **1** (the gameplay scene index `GameNetworkManager.gameplaySceneIndex`
-   defaults to 1).
+3. **Confirm Build Settings scenes:** `File → Build Settings` — `MainMenu.unity` at index **0**,
+   `Gameplay.unity` at index **1** (`GameNetworkManager.gameplaySceneIndex` defaults to 1). The
+   dedicated-server boot skips the menu automatically, but the indices still need to be correct.
+
+4. **Confirm the Photon region pin.** `Fusion → Realtime Settings` → **Fixed Region** must read
+   **`usw`** (already committed in `PhotonAppSettings.asset`). Server and client builds must share it,
+   or cross-region players silently can't discover the session — see the runbook's "pin the Photon
+   region" section. A region change only lands in builds made *after* it.
 
 ---
 
@@ -67,26 +92,45 @@ In the **Gameplay scene**:
 
 ## C. How to run a dedicated server + clients
 
-**Dedicated server (headless).** Build a player (`File → Build`), then from a terminal:
+There are three run contexts. Pick by what you're verifying.
+
+### C1. Against the real Azure host (closest to production)
+
+The live server is already running under systemd on Azure (`20.59.20.112`, session `PvPvERoom`,
+region `usw`). If it's deallocated, bring it up first:
+
+```bash
+az vm start -g game-rg -n game-server
+```
+
+Then just launch **normal player builds** (or Play in the Editor as a client), enter a nickname,
+and **Join** — clients find the session by name through Photon, no IP needed. Full build/deploy/
+weekend-start details live in the **[Azure runbook](../../azure-dedicated-server-runbook.md)**. Use
+this path to confirm real latency feel and cross-region discovery; use C2/C3 for fast local iteration.
+
+### C2. Local headless server (dedicated topology, no cloud)
+
+Build a player (`File → Build`), then from a terminal launch it headless as the server:
 
 ```bash
 "<YourBuild>.exe" -batchmode -nographics -logFile ./server.log
 ```
 
 The boot resolver treats `-batchmode` (or an explicit `-dedicatedServer` arg) as the dedicated
-server. Expected in `server.log`: `✅ Dedicated server started — waiting for players.`
+server. Expected in `server.log`: `✅ Dedicated server started — waiting for players.` Then join with
+Editor Play and/or extra player builds (all use the same `sessionName`, default `"PvPvERoom"`).
 
-**Clients.** In the menu, type a nickname and click **Join**. Either:
-- **Editor + builds:** Play in the Editor as one client, run extra player builds as more
-  clients (all use the same `sessionName`, default `"PvPvERoom"`), **or**
-- **Multiplayer Play Mode (MPPM):** `Window → Multiplayer Play Mode`, enable 2–3 virtual
-  players. (Note: MPPM virtual players are all clients; you still need the headless server
-  process for the dedicated topology. For a quick lobby-logic smoke test without a server you
-  can use the solo-host path below.)
+> For an actual Linux Dedicated Server build (the artifact Azure runs), the project now has a
+> **Dedicated Server / Linux** build target/profile committed. See the runbook's Part A — the same
+> `-batchmode` boot path applies.
 
-**Solo-dev smoke (no dedicated server):** click **Host** in the menu (`GameMode.Host`); the
-host player lands in the lobby with the Start button directly. Useful for quick single-machine
-checks; does **not** exercise the dedicated-server path.
+### C3. Multiplayer Play Mode (fastest, for lobby/logic smoke)
+
+`Window → Multiplayer Play Mode`, enable 2–3 virtual players. MPPM virtual players are all
+**clients**; you still need a headless server process (C1 or C2) for the real dedicated topology. For
+a quick lobby-logic check without any server, click **Host** in the menu (`GameMode.Host`) — the host
+player lands in the lobby with the Start button directly. This does **not** exercise the
+dedicated-server path.
 
 To approach 20 players, launch ~20 client builds (or fewer + MPPM) against one headless server.
 
@@ -128,8 +172,8 @@ Run the headless server + at least **3** clients.
 
 ## E. Phase 2a verification — Area of Interest
 
-Pre-req: Section B wiring done; `NetworkProjectConfig` `ReplicationFeatures = 2` (already
-committed). Run the headless server + as many spread-out clients as you can.
+Pre-req: §B wiring done; `NetworkProjectConfig` `ReplicationFeatures = 2` (already committed). Run
+the headless server + as many spread-out clients as you can.
 
 **Measuring bandwidth.** Use Fusion's runtime stats overlay (add a `FusionStats` component / the
 Fusion realtime-stats canvas) or call `Runner.TryGetFusionStatistics(...)`. Compare **inbound
@@ -202,24 +246,77 @@ Run the headless server + a real client (joined via the **Join** button). On the
 
 ---
 
-## H. Troubleshooting
+## H. Current-game checks on the server topology
+
+These systems shipped after the responsiveness phases. They mostly worked in the old solo-host
+build; the point here is that they still behave correctly **when the server owns state and no client
+is the host**. Run the headless server + ≥2 clients.
+
+**Shape-based enemies (Box / Octagon / Circle / Flyer).** Four `EnemyStats` archetypes
+(`Assets/Scripts/Enemy/Types/EnemyStats_*.asset`) applied to 7 color prefabs; one shared `EnemyAI`
+with data-driven `canFly` flight; center-scaled difficulty + zone leashing.
+- [ ] Enemies spawn and act **only on the server**; clients see them replicated (no client-side
+      spawn). Positions track smoothly on non-host clients.
+- [ ] **Flyer** archetypes actually fly (ignore ground) while Box/Circle/Octagon stay grounded —
+      the `canFly` flag is honored the same on server and every client.
+- [ ] Difficulty scales toward the center of the map and enemies leash to their zone; a distant
+      enemy is AoI-culled and reappears as you approach (no pop-in mid-screen).
+- [ ] Enemy attack damage/knockback (the timing-based combat pass) applies server-authoritatively
+      and is felt identically on all clients.
+
+**Deposit-earned buffs (`Assets/Scripts/Buffs`).** Tiered buffs unlocked by depositing coins.
+- [ ] Depositing crosses a tier threshold → the buff unlocks and its effect applies, driven by the
+      **server** (not the local depositing client only). Other clients see the buffed player's
+      carrier aura tier update.
+- [ ] Rejoining / late-joining players see correct buff/aura tiers (state comes from the server,
+      not a local counter).
+
+**Rebuilt HUD (`Assets/Scripts/Hud`, event-driven).** Health segments, coins, team score, buff
+icons, cooldown fills.
+- [ ] Health/Coins/TeamScore/BuffIcon displays update from network events on **every** client,
+      including one that joined mid-match — no polling gaps, no values frozen at spawn defaults.
+- [ ] Team score is correct on the far side of the map (depends on §B always-interested wiring).
+
+**Client-local sky (`Assets/Sky`).** Nebula + starfield + placed constellations, no networking.
+- [ ] The sky renders on **clients only** — it must NOT spawn/spam on the headless server
+      (`server.log` shows no sky/shader/AudioListener churn from it).
+- [ ] It needs no `AlwaysInterestedMarker` and no replication; each client renders its own. Confirm
+      it looks identical across clients despite never being networked.
+
+**Movement / combat feel.** Accel model, dash momentum, apex gravity, melee swing phases.
+- [ ] On a non-host client, movement and dashes feel responsive (client physics prediction is on —
+      see the responsiveness design). No rubber-banding that the old host build didn't have.
+
+---
+
+## I. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Distant flag state / score / arrow disappears | `AlwaysInterestedMarker` missing on that object, or no `AreaOfInterestRegistrar` in the scene | Section B wiring |
+| Distant flag state / score / arrow disappears | `AlwaysInterestedMarker` missing on that object, or no `AreaOfInterestRegistrar` in the scene | §B wiring |
 | Carried flag/arrow desyncs only for far players | carrier not getting dynamic interest — registrar absent | ensure one `AreaOfInterestRegistrar` exists; it logs nothing, so confirm the component is present |
 | Everything beyond the screen edge vanishes | `areaOfInterestRadius` too small | raise it on the player prefab (try 30–35) |
 | Whole world vanishes for all clients | AoI enabled but no regions/markers registered (e.g. registrar never initialized) | confirm `NetworkedSpawnManager` runs on the server and the registrar is in the Gameplay scene |
+| Clients can't find the match | Wrong Photon App ID, or **region mismatch** (a build made before the `usw` pin) | server and clients must share the same App ID **and** `FixedRegion = usw`; rebuild both (see §A.4 / runbook) |
+| Only local (US) players find the match; AU/JP can't | one peer on an unpinned/Best-Region build | pin `FixedRegion = usw`, rebuild **both** server and client |
 | "Two assembly definitions in the same folder" compile error | new scripts placed under `Assets/Scripts/Net/` (the engine-free `Game.Net` asmdef) | move them out (AoI → `AreaOfInterest/`, pooling → `Pooling/`) |
 | Far enemy *players* never appear even when close | radius too small, or AoI region not being added | confirm `ReplicationFeatures = 2` and that `PlayerController.FixedUpdateNetwork` runs on the server |
+| Enemies visible/moving on the server log, or spawned twice | enemy spawn not gated to server authority | enemies must spawn on the server only; clients receive them replicated |
+| Flyer enemies fall / grounded enemies float | `canFly` not read consistently from the `EnemyStats` archetype | confirm the prefab points at the right `EnemyStats_*` asset; flight is data-driven, not per-prefab code |
+| HUD values frozen at spawn defaults on a client | HUD not subscribed to the network events (polling holdover) | confirm the display components in `Assets/Scripts/Hud` bind to the event source, not a one-shot read |
+| Sky churns the server log / spawns headless | sky components not client-gated | the sky is client-local — it must not run on the dedicated server |
 | Recycled projectile deals no damage / dies on spawn | `Projectile.hasHit` not reset on reuse | confirm `Spawned()` starts with `hasHit = false;` |
 | Players stop spawning after enabling pooling | provider wrongly pooling the player prefab | only the projectile prefab should have `Poolable`; non-poolable prefabs fall through to base |
 | No muzzle/tracer on fire | testing on the wrong peer | use a real client (**Join** button); the cosmetic is skipped on the server/host by design |
 | Two projectiles visible per shot | cosmetic lingering next to the real one | lower `tracerDuration`/`muzzleFlashLifetime`; confirm it's a client (host-as-player skips the cosmetic) |
 
+For anything about **building / deploying / running on Azure** (build fails, `scp`/systemd, VM
+capacity, weekend start-stop, cost), see the [Azure runbook](../../azure-dedicated-server-runbook.md)'s
+own troubleshooting table.
+
 ---
 
-## I. Known follow-ups (not blocking these tests)
+## J. Known follow-ups (not blocking these tests)
 
 - **Capture leaves the captor always-interested.** Capture ends the match without going through
   drop/return, so the captor stays in the always-interested set. Harmless for a single-capture
@@ -231,5 +328,3 @@ Run the headless server + a real client (joined via the **Join** button). On the
 - **Traveling ghost projectile not built.** Phase 3 gives an instant muzzle/tracer but the real
   projectile still appears ~½ RTT later. If that travel delay still feels bad after testing, a full
   cosmetic ghost projectile is the next lever (deliberately skipped — it risks double-vision).
-- ~~Three cosmetic stale doc-comments from Phase 1~~ — resolved: the menu/lobby revamp
-  (2026-07-06) removed `RefreshStartGate`/`SetStartAvailable` entirely (snapshot-driven UI).
