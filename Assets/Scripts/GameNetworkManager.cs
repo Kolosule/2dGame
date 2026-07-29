@@ -505,6 +505,12 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         menuUI = FindFirstObjectByType<MainMenuUI>(FindObjectsInactive.Include);
         lobbyUI = FindFirstObjectByType<LobbyScreenUI>(FindObjectsInactive.Include);
 
+        // The reloaded scene's UI holds serialized refs to the duplicate GameNetworkManager that
+        // the dup-guard just destroyed; re-point them at this persistent instance or their buttons
+        // call into a destroyed object and do nothing.
+        if (menuUI != null) menuUI.SetNetworkManager(this);
+        if (lobbyUI != null) lobbyUI.SetNetworkManager(this);
+
         if (menuUI != null) menuUI.Hide();   // skip the Join/Host screen — we are still connected
         if (lobbyUI != null) lobbyUI.Show();
 

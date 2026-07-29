@@ -106,7 +106,7 @@ public class MatchPhaseHud : MonoBehaviour
 
     private void OnReturnToLobbyClicked()
     {
-        if (bound != null) bound.RPC_RequestReturnToLobby();
+        if (bound != null) bound.RequestReturnToLobby();
     }
 
     private void HideAll()

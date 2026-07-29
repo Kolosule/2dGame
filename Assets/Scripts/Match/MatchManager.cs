@@ -123,7 +123,22 @@ public class MatchManager : NetworkBehaviour
         EnterPhase(MatchPhase.PostMatch);
     }
 
-    /// <summary>Host-only early advance from the results screen. Auto-advance still fires otherwise.</summary>
+    /// <summary>
+    /// Host-triggered early advance from the results screen (the HUD button, shown only to the
+    /// designated host). Mirrors GameNetworkManager.RequestStartMatch's split: in host mode the
+    /// local peer IS the state authority and advances directly (a host-invoked RPC's info.Source
+    /// does not survive the host check, so we must not round-trip); a dedicated-server host-client
+    /// has no state authority and routes through the server-validated RPC. Auto-advance still fires
+    /// regardless.
+    /// </summary>
+    public void RequestReturnToLobby()
+    {
+        if (Phase != MatchPhase.PostMatch) return;
+        if (HasStateAuthority) EnterPhase(MatchPhase.Intermission);
+        else RPC_RequestReturnToLobby();
+    }
+
+    /// <summary>Dedicated-server path: a host-client asks the server to advance; server host-validates.</summary>
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_RequestReturnToLobby(RpcInfo info = default)
     {
