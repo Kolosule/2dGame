@@ -36,6 +36,12 @@ public class NetworkInputProvider : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnInput(NetworkRunner runner, NetworkInput input)
     {
+        if (MatchManager.Instance != null && !MatchManager.Instance.InputEnabled)
+        {
+            input.Set(new NetInput());
+            return;
+        }
+
         var data = new NetInput();
 
         var keyboard = Keyboard.current;

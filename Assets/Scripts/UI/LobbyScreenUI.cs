@@ -67,6 +67,17 @@ public class LobbyScreenUI : MonoBehaviour
         RefreshLoadoutLabels();
     }
 
+    /// <summary>
+    /// Re-point this screen at the persistent GameNetworkManager after a return-to-lobby scene
+    /// reload. The reloaded scene's serialized reference points at the duplicate GNM that the
+    /// singleton dup-guard destroys, so without this the buttons call into a destroyed object and
+    /// do nothing. The onClick lambdas read this field at click time, so updating it is enough.
+    /// </summary>
+    public void SetNetworkManager(GameNetworkManager gnm)
+    {
+        networkManager = gnm;
+    }
+
     public void Show()
     {
         if (lobbyPanel != null) lobbyPanel.SetActive(true);

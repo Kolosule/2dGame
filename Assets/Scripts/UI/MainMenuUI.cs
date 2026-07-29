@@ -58,6 +58,15 @@ public class MainMenuUI : MonoBehaviour
         else networkManager.StartClient();
     }
 
+    /// <summary>
+    /// Re-point at the persistent GameNetworkManager after a return-to-lobby scene reload (the
+    /// reloaded scene's serialized ref points at the duplicate GNM the dup-guard destroys).
+    /// </summary>
+    public void SetNetworkManager(GameNetworkManager gnm)
+    {
+        networkManager = gnm;
+    }
+
     public void Show()
     {
         if (menuPanel != null) menuPanel.SetActive(true);
