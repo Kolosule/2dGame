@@ -41,6 +41,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private LobbyServerState serverLobby = new LobbyServerState();
     private bool gameStarting = false;
 
+    // Last roster snapshot decoded on a client. Cached so the return-to-lobby scene load can
+    // re-apply it if the broadcast arrived before lobbyUI was re-acquired (avoids empty roster).
+    private LobbyStateSnapshot pendingLobbySnapshot;
+
     public static GameNetworkManager Instance { get; private set; }
     public int menuSceneIndex = 0;
 
@@ -467,10 +471,11 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // ---- Client ----
         if (key == RosterKey && data.Array != null)
         {
-            if (LobbyProtocol.TryDecodeLobbyState(data.Array, data.Offset, data.Count, out var snap)
-                && lobbyUI != null)
+            if (LobbyProtocol.TryDecodeLobbyState(data.Array, data.Offset, data.Count, out var snap))
             {
-                lobbyUI.ApplyLobbyState(snap, runner.LocalPlayer.PlayerId);
+                pendingLobbySnapshot = snap;
+                if (lobbyUI != null)
+                    lobbyUI.ApplyLobbyState(snap, runner.LocalPlayer.PlayerId);
             }
         }
     }
@@ -502,6 +507,11 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (menuUI != null) menuUI.Hide();   // skip the Join/Host screen — we are still connected
         if (lobbyUI != null) lobbyUI.Show();
+
+        // Re-apply the last roster snapshot in case it arrived before we re-acquired lobbyUI on
+        // this return-to-lobby scene load (otherwise the returning client shows an empty roster).
+        if (lobbyUI != null && pendingLobbySnapshot != null)
+            lobbyUI.ApplyLobbyState(pendingLobbySnapshot, runner.LocalPlayer.PlayerId);
 
         // Server re-broadcasts the persisted roster so every client's lobby repopulates.
         if (runner.IsServer) BroadcastLobby();
