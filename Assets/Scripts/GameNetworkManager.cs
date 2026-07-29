@@ -41,8 +41,24 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private LobbyServerState serverLobby = new LobbyServerState();
     private bool gameStarting = false;
 
+    public static GameNetworkManager Instance { get; private set; }
+    public int menuSceneIndex = 0;
+
+    void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            // A second GameNetworkManager rode in with a reloaded menu scene. Kill it; the
+            // DontDestroyOnLoad original owns the runner and the lobby state.
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+    }
+
     void Start()
     {
+        if (Instance != this) return;
         DontDestroyOnLoad(gameObject);
         runner = gameObject.AddComponent<NetworkRunner>();
 
@@ -302,8 +318,21 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         await runner.LoadScene(SceneRef.FromIndex(gameplaySceneIndex));
     }
 
+    /// <summary>
+    /// Server-only. Ends the match by reloading the MainMenu scene and re-showing the persisted
+    /// lobby. Resets the gameStarting latch so the host can Start the next match. Called by
+    /// MatchManager when entering Intermission.
+    /// </summary>
+    public void BeginReturnToLobby()
+    {
+        if (runner == null || !runner.IsServer) return;
+        gameStarting = false;
+        _ = runner.LoadScene(SceneRef.FromIndex(menuSceneIndex));
+    }
+
     void OnDestroy()
     {
+        if (Instance == this) Instance = null;
         if (runner != null) runner.Shutdown();
     }
 
@@ -460,6 +489,22 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             foreach (var listener in FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
                 listener.enabled = false;
         }
+
+        // Only care about arriving back in the menu scene (the return-to-lobby path). The gameplay
+        // load has a different build index and is handled by the gameplay-side managers.
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex != menuSceneIndex)
+            return;
+
+        // The persistent GameNetworkManager's serialized menu/lobby refs died with the previous
+        // menu scene instance; re-acquire the new ones.
+        menuUI = FindFirstObjectByType<MainMenuUI>(FindObjectsInactive.Include);
+        lobbyUI = FindFirstObjectByType<LobbyScreenUI>(FindObjectsInactive.Include);
+
+        if (menuUI != null) menuUI.Hide();   // skip the Join/Host screen — we are still connected
+        if (lobbyUI != null) lobbyUI.Show();
+
+        // Server re-broadcasts the persisted roster so every client's lobby repopulates.
+        if (runner.IsServer) BroadcastLobby();
     }
 
     public void OnSceneLoadStart(NetworkRunner runner) { }

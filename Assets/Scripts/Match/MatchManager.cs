@@ -77,7 +77,7 @@ public class MatchManager : NetworkBehaviour
                 if (PhaseTimer.Expired(Runner)) ResolveByTimer();
                 break;
             case MatchPhase.PostMatch:
-                // Auto-advance is added in Task 4.
+                if (PhaseTimer.Expired(Runner)) EnterPhase(MatchPhase.Intermission);
                 break;
             case MatchPhase.Intermission:
                 break;
@@ -109,6 +109,8 @@ public class MatchManager : NetworkBehaviour
                 break;
             case MatchPhase.Intermission:
                 PhaseTimer = TickTimer.None;
+                if (GameNetworkManager.Instance != null)
+                    GameNetworkManager.Instance.BeginReturnToLobby();
                 break;
         }
     }
@@ -119,6 +121,26 @@ public class MatchManager : NetworkBehaviour
         if (!HasStateAuthority || Phase != MatchPhase.Live) return;
         Winner = (byte)TeamUtil.ToNumber(winningTeam);
         EnterPhase(MatchPhase.PostMatch);
+    }
+
+    /// <summary>Host-only early advance from the results screen. Auto-advance still fires otherwise.</summary>
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_RequestReturnToLobby(RpcInfo info = default)
+    {
+        if (!HasStateAuthority || Phase != MatchPhase.PostMatch) return;
+        if (!IsHost(info.Source)) return;
+        EnterPhase(MatchPhase.Intermission);
+    }
+
+    /// <summary>True on the peer whose local player is the designated host (lowest active PlayerId).</summary>
+    public bool LocalPlayerIsHost() => Runner != null && IsHost(Runner.LocalPlayer);
+
+    private bool IsHost(PlayerRef p)
+    {
+        if (Runner == null || p == PlayerRef.None) return false;
+        var ids = new System.Collections.Generic.List<int>();
+        foreach (var active in Runner.ActivePlayers) ids.Add(active.PlayerId);
+        return LobbyHostPolicy.DesignateHostId(ids) == p.PlayerId;
     }
 
     /// <summary>Server-only. Live timer ran out with no capture: higher coin score wins, tie = draw.</summary>
