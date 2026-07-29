@@ -74,7 +74,7 @@ public class MatchManager : NetworkBehaviour
                 if (PhaseTimer.Expired(Runner)) EnterPhase(MatchPhase.Live);
                 break;
             case MatchPhase.Live:
-                // Timer-expiry resolution is added in Task 3.
+                if (PhaseTimer.Expired(Runner)) ResolveByTimer();
                 break;
             case MatchPhase.PostMatch:
                 // Auto-advance is added in Task 4.
@@ -113,11 +113,21 @@ public class MatchManager : NetworkBehaviour
         }
     }
 
-    /// <summary>Server-only. A team captured the enemy flag. Filled in Task 3.</summary>
+    /// <summary>Server-only. A team carried the enemy flag home during Live — instant win.</summary>
     public void ReportCapture(Team winningTeam)
     {
         if (!HasStateAuthority || Phase != MatchPhase.Live) return;
-        // Body added in Task 3.
+        Winner = (byte)TeamUtil.ToNumber(winningTeam);
+        EnterPhase(MatchPhase.PostMatch);
+    }
+
+    /// <summary>Server-only. Live timer ran out with no capture: higher coin score wins, tie = draw.</summary>
+    private void ResolveByTimer()
+    {
+        int t1 = TeamScoreManager.Instance != null ? TeamScoreManager.Instance.Team1Score : 0;
+        int t2 = TeamScoreManager.Instance != null ? TeamScoreManager.Instance.Team2Score : 0;
+        Winner = (byte)MatchResolver.ResolveTimerWinner(t1, t2);
+        EnterPhase(MatchPhase.PostMatch);
     }
 
     private void OnPhaseChanged() => PhaseChanged?.Invoke();

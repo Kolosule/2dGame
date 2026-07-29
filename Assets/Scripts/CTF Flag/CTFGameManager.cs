@@ -24,19 +24,9 @@ public class CTFGameManager : NetworkBehaviour
     [Tooltip("Text element for notifications")]
     [SerializeField] private TextMeshProUGUI notificationText;
 
-    [Tooltip("Panel for game over screen")]
-    [SerializeField] private GameObject gameOverPanel;
-
-    [Tooltip("Text for winner announcement")]
-    [SerializeField] private TextMeshProUGUI winnerText;
-
     [Header("Settings")]
     [Tooltip("Time in seconds to show notifications")]
     [SerializeField] private float notificationDuration = 3f;
-
-    // Networked properties with OnChanged callbacks
-    [Networked, OnChangedRender(nameof(OnGameOverChanged))]
-    public bool GameIsOver { get; set; }
 
     // Cached flag references so other systems (e.g. PlayerStatsHandler death drop) don't
     // have to do a scene-wide Find.
@@ -55,10 +45,6 @@ public class CTFGameManager : NetworkBehaviour
             return;
         }
         Instance = this;
-
-        // Hide game over panel initially
-        if (gameOverPanel != null)
-            gameOverPanel.SetActive(false);
     }
 
     public override void Spawned()
@@ -70,8 +56,6 @@ public class CTFGameManager : NetworkBehaviour
         {
             FindFlags();
         }
-
-        OnGameOverChanged();
     }
 
     private void OnDestroy()
@@ -111,18 +95,19 @@ public class CTFGameManager : NetworkBehaviour
     /// </summary>
     public void OnCarrierEnteredBase(PlayerRef carrier, Team baseTeam)
     {
-        if (!HasStateAuthority || GameIsOver) return;
+        if (!HasStateAuthority) return;
+        if (MatchManager.Instance == null || !MatchManager.Instance.IsLive) return;
         if (team1Flag == null || team2Flag == null) return;
 
         if (baseTeam == Team.Team1 &&
             team2Flag.IsCarriedBy(carrier) && team1Flag.State == Flag.FlagState.AtHome)
         {
-            EndGame(1);
+            MatchManager.Instance.ReportCapture(Team.Team1);
         }
         else if (baseTeam == Team.Team2 &&
             team1Flag.IsCarriedBy(carrier) && team2Flag.State == Flag.FlagState.AtHome)
         {
-            EndGame(2);
+            MatchManager.Instance.ReportCapture(Team.Team2);
         }
     }
 
@@ -134,7 +119,8 @@ public class CTFGameManager : NetworkBehaviour
     /// </summary>
     public void OnFlagReturnedHome()
     {
-        if (!HasStateAuthority || GameIsOver) return;
+        if (!HasStateAuthority) return;
+        if (MatchManager.Instance != null && !MatchManager.Instance.IsLive) return;
 
         if (homeBases == null || homeBases.Length == 0)
             homeBases = FindObjectsByType<NetworkedHomeBase>(FindObjectsSortMode.None);
@@ -143,14 +129,6 @@ public class CTFGameManager : NetworkBehaviour
         {
             if (baseZone != null) baseZone.ReevaluateOccupants();
         }
-    }
-
-    private void EndGame(int winningTeam)
-    {
-        if (!HasStateAuthority || GameIsOver) return;
-
-        GameIsOver = true;
-        AnnounceWinnerRpc(winningTeam);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -165,27 +143,6 @@ public class CTFGameManager : NetworkBehaviour
         }
     }
 
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void AnnounceWinnerRpc(int winningTeam)
-    {
-        if (winnerText != null)
-        {
-            winnerText.text = $"Team {winningTeam} Wins!";
-        }
-
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.SetActive(true);
-        }
-
-        // Show final notification
-        if (notificationText != null)
-        {
-            notificationText.text = $"Game Over! Team {winningTeam} Wins!";
-            notificationText.gameObject.SetActive(true);
-        }
-    }
-
     private void HideNotification()
     {
         if (notificationText != null)
@@ -194,19 +151,12 @@ public class CTFGameManager : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Show the game-over panel when GameIsOver flips true (driven by OnChangedRender on all
-    /// clients, plus an explicit call from Spawned for late joiners).
-    /// </summary>
-    private void OnGameOverChanged()
-    {
-        if (GameIsOver && gameOverPanel != null)
-            gameOverPanel.SetActive(true);
-    }
-
     #region Public Getters
 
-    public bool IsGameOver() => GameIsOver;
+    public bool IsGameOver() =>
+        MatchManager.Instance != null &&
+        (MatchManager.Instance.Phase == MatchPhase.PostMatch ||
+         MatchManager.Instance.Phase == MatchPhase.Intermission);
 
     /// <summary>
     /// Is this player currently carrying either flag? Derived purely from the flags'
