@@ -119,6 +119,34 @@ public class PlayerBuffs : NetworkBehaviour
                                       allUnlocked: SuddenDeathMaxesTiers);
     }
 
+    /// <summary>Top tier any buff can reach, from the shared loadout config (0 if unconfigured).</summary>
+    public int MaxTier => config != null ? config.MaxTier : 0;
+
+    /// <summary>
+    /// HUD fill 0..1 toward the deposit that next raises this buff's tier. 1 means "nothing left
+    /// to earn" — already at the top of the curve, or Sudden Death has maxed everything.
+    /// Read-only derivation from the same networked state TierOf uses.
+    /// </summary>
+    public float NextUnlockProgress01(BuffId id)
+    {
+        if (config == null || SuddenDeathMaxesTiers) return 1f;
+        int pos = PositionOf(id);
+        if (pos < 0) return 1f;
+        return BuffProgress.ToNextTier01(config.Thresholds, TotalDepositedValue, pos, config.BuffCount);
+    }
+
+    /// <summary>
+    /// Total deposited value at which this buff next tiers up; 0 when it can rise no further
+    /// (top of the curve, not equipped, or Sudden Death).
+    /// </summary>
+    public int NextUnlockThreshold(BuffId id)
+    {
+        if (config == null || SuddenDeathMaxesTiers) return 0;
+        int pos = PositionOf(id);
+        if (pos < 0) return 0;
+        return BuffProgress.NextThresholdFor(config.Thresholds, TotalDepositedValue, pos, config.BuffCount);
+    }
+
     /// <summary>
     /// Sudden Death forces every tier to MaxTier. Derived from MatchManager's [Networked] Phase,
     /// so it resolves identically on clients and during resimulation. Deliberately adds no

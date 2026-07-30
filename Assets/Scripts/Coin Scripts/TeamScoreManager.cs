@@ -252,6 +252,31 @@ public class TeamScoreManager : NetworkBehaviour
                                        allUnlocked: SuddenDeathMaxesTiers);
     }
 
+    /// <summary>Vanguard's top tier, so the HUD can size its pip row without hard-coding 2.</summary>
+    public int VanguardMaxTier => vanguardMaxTier;
+
+    public int ScoreOf(Team team) =>
+        team == Team.Team1 ? Team1Score : (team == Team.Team2 ? Team2Score : 0);
+
+    public int RosterSizeOf(Team team) =>
+        team == Team.Team1 ? Team1RosterSize : (team == Team.Team2 ? Team2RosterSize : 0);
+
+    /// <summary>
+    /// The team's deposited value PER PLAYER — the unit Vanguard thresholds are authored in, and
+    /// therefore the only number the HUD should ever compare against them. The raw team score is
+    /// not comparable across roster sizes.
+    /// </summary>
+    public int PerPlayerAverageOf(Team team) =>
+        TeamBuffUnlock.PerPlayerAverage(ScoreOf(team), RosterSizeOf(team));
+
+    /// <summary>Per-player average at which this team's Vanguard next tiers up; 0 when maxed.</summary>
+    public int NextVanguardAverage(Team team) =>
+        BuffProgress.NextThresholdFor(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
+
+    /// <summary>HUD fill 0..1 toward the next Vanguard milestone; 1 when maxed.</summary>
+    public float VanguardProgress01(Team team) =>
+        BuffProgress.ToNextTier01(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
+
     /// <summary>
     /// Sudden Death forces Vanguard to its top tier, matching PlayerBuffs.TierOf on the individual
     /// side. Derived from MatchManager's [Networked] Phase, so it resolves identically on clients
