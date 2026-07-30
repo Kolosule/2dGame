@@ -19,6 +19,11 @@ public class MatchPhaseHud : MonoBehaviour
     [SerializeField] private GameObject matchTimerRoot;
     [SerializeField] private TMP_Text matchTimerText;
 
+    [Header("Sudden Death banner")]
+    [Tooltip("Shown for the whole SuddenDeath phase. The buff row and Team Power strip need no " +
+             "special case — they derive maxed tiers from Phase like everything else.")]
+    [SerializeField] private GameObject suddenDeathRoot;
+
     [Header("Results panel")]
     [SerializeField] private GameObject resultsPanel;
     [SerializeField] private TMP_Text winnerText;
@@ -62,6 +67,7 @@ public class MatchPhaseHud : MonoBehaviour
                     countdownText.text = Mathf.CeilToInt(Mathf.Max(0f, remaining ?? 0f)).ToString();
                 break;
             case MatchPhase.Live:
+            case MatchPhase.SuddenDeath:
                 if (matchTimerRoot != null) matchTimerRoot.SetActive(remaining.HasValue);
                 if (remaining.HasValue && matchTimerText != null)
                     matchTimerText.text = FormatClock(remaining.Value);
@@ -86,7 +92,11 @@ public class MatchPhaseHud : MonoBehaviour
             countdownText.text = "Get ready…";
 
         if (matchTimerRoot != null)
-            matchTimerRoot.SetActive(phase == MatchPhase.Live && bound.PhaseTimeRemaining.HasValue);
+            matchTimerRoot.SetActive(
+                (phase == MatchPhase.Live || phase == MatchPhase.SuddenDeath) &&
+                bound.PhaseTimeRemaining.HasValue);
+
+        if (suddenDeathRoot != null) suddenDeathRoot.SetActive(phase == MatchPhase.SuddenDeath);
 
         bool results = phase == MatchPhase.PostMatch || phase == MatchPhase.Intermission;
         if (resultsPanel != null) resultsPanel.SetActive(results);
@@ -113,6 +123,7 @@ public class MatchPhaseHud : MonoBehaviour
     {
         if (countdownRoot != null) countdownRoot.SetActive(false);
         if (matchTimerRoot != null) matchTimerRoot.SetActive(false);
+        if (suddenDeathRoot != null) suddenDeathRoot.SetActive(false);
         if (resultsPanel != null) resultsPanel.SetActive(false);
     }
 

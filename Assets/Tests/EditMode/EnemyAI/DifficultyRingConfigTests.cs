@@ -56,4 +56,29 @@ public class DifficultyRingConfigTests
         Assert.AreEqual(1f, ring.damageMult);
         Assert.AreEqual(1f, ring.speedMult);
     }
+
+    [Test]
+    public void GetRing_ReturnsTheCoinDropBonusOfTheMatchedBand()
+    {
+        var config = ScriptableObject.CreateInstance<DifficultyRingConfig>();
+        config.rings = new[]
+        {
+            new RingTier { maxDistanceFromCenter = 10f, healthMult = 3f, damageMult = 3f, speedMult = 1f, coinDropBonus = 2 },
+            new RingTier { maxDistanceFromCenter = 25f, healthMult = 2f, damageMult = 2f, speedMult = 1f, coinDropBonus = 1 },
+            new RingTier { maxDistanceFromCenter = 60f, healthMult = 1f, damageMult = 1f, speedMult = 1f, coinDropBonus = 0 },
+        };
+
+        Assert.AreEqual(2, config.GetRing(5f).coinDropBonus, "inner band");
+        Assert.AreEqual(1, config.GetRing(20f).coinDropBonus, "middle band");
+        Assert.AreEqual(0, config.GetRing(50f).coinDropBonus, "outer band");
+        Assert.AreEqual(0, config.GetRing(999f).coinDropBonus, "beyond the outermost band clamps to it");
+
+        Object.DestroyImmediate(config);
+    }
+
+    [Test]
+    public void Identity_HasNoCoinDropBonus()
+    {
+        Assert.AreEqual(0, RingTier.Identity.coinDropBonus);
+    }
 }

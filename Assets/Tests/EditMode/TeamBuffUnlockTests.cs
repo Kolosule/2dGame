@@ -64,4 +64,27 @@ public class TeamBuffUnlockTests
     {
         Assert.AreEqual(2, TeamBuffUnlock.TeamTier(Vanguard, 55 * 10, 10, MaxTier));
     }
+
+    [Test]
+    public void SuddenDeath_ForcesVanguardToMaxRegardlessOfScore()
+    {
+        int[] thresholds = { 12, 45 };
+
+        Assert.AreEqual(0, TeamBuffUnlock.TeamTier(thresholds, 0, 10, 2), "locked in normal play");
+        Assert.AreEqual(2, TeamBuffUnlock.TeamTier(thresholds, 0, 10, 2, allUnlocked: true),
+            "Sudden Death maxes a team that has banked nothing");
+        Assert.AreEqual(2, TeamBuffUnlock.TeamTier(thresholds, 500, 10, 2, allUnlocked: true),
+            "and does not exceed the max for a rich team");
+    }
+
+    [Test]
+    public void SuddenDeath_MaxesEvenAnUncountedRoster()
+    {
+        int[] thresholds = { 12, 45 };
+
+        Assert.AreEqual(0, TeamBuffUnlock.TeamTier(thresholds, 300, 0, 2),
+            "roster of 0 has no average, so no tier in normal play");
+        Assert.AreEqual(2, TeamBuffUnlock.TeamTier(thresholds, 300, 0, 2, allUnlocked: true),
+            "Sudden Death does not care about the divisor");
+    }
 }

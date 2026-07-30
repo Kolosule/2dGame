@@ -21,9 +21,10 @@ public class Enemy : NetworkBehaviour
     [Tooltip("Coin prefab to spawn when this enemy dies")]
     [SerializeField] private NetworkObject coinPrefab;
 
-    [Tooltip("How many coins to drop on death")]
-    [SerializeField] private int coinsToDropMin = 1;
-    [SerializeField] private int coinsToDropMax = 3;
+    [Tooltip("How many coins to drop on death. AUTHORED PER ARCHETYPE, no randomness — pacing " +
+             "cannot be tuned against a random drop. Stronger archetypes drop more. The ring's " +
+             "coinDropBonus is added on top at spawn.")]
+    [SerializeField] private int coinsToDrop = 2;
 
     [Tooltip("How far coins should scatter from death position")]
     [SerializeField] private float coinScatterRadius = 1.5f;
@@ -67,6 +68,7 @@ public class Enemy : NetworkBehaviour
     private int effectiveMaxHealth;
     private int effectiveAttackDamage;
     private float effectiveMoveSpeed;
+    private int effectiveCoinDrop;
 
     // Home anchor captured at spawn (authority); the AI leashes to this point.
     public Vector2 Home { get; private set; }
@@ -135,6 +137,7 @@ public class Enemy : NetworkBehaviour
         effectiveMaxHealth = Mathf.Max(1, Mathf.RoundToInt(stats.maxHealth * tier.healthMult));
         effectiveAttackDamage = Mathf.Max(0, Mathf.RoundToInt(stats.attackDamage * tier.damageMult));
         effectiveMoveSpeed = stats.moveSpeed * tier.speedMult;
+        effectiveCoinDrop = Mathf.Max(0, coinsToDrop + tier.coinDropBonus);
     }
 
     /// <summary>SERVER: assign this enemy's team (called from the spawner's spawn callback).</summary>
@@ -325,8 +328,8 @@ public class Enemy : NetworkBehaviour
     /// </summary>
     private void SpawnCoins()
     {
-        // Determine how many coins to drop
-        int coinCount = Random.Range(coinsToDropMin, coinsToDropMax + 1);
+        // Deterministic: archetype base + this enemy's ring bonus, both resolved once at spawn.
+        int coinCount = effectiveCoinDrop;
 
 
         // Spawn each coin with slight scatter
