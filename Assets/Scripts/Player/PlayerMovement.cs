@@ -68,6 +68,12 @@ public class PlayerMovement : NetworkBehaviour
                         Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
         bool stunned = IsStunned();
 
+        // Carrying-state must come from networked flag state (resim-safe), not the render-path
+        // FlagCarrierMarker bool — see CTFGameManager.IsCarrying. Read once: both the Flag Runner
+        // speed bonus and the dash gate below need it.
+        bool carryingFlag = CTFGameManager.Instance != null &&
+                            CTFGameManager.Instance.IsCarrying(Object.InputAuthority);
+
         // Resolve dash lifetime first (pure function of networked timers).
         if (Dashing && DashDurationTimer.ExpiredOrNotRunning(Runner))
             EndDash();
@@ -91,12 +97,15 @@ public class PlayerMovement : NetworkBehaviour
         }
         else
         {
+            // Flag Runner scales the walk target while carrying; accel/decel are expressed as
+            // "reach walk speed in N ticks", so they scale with it and the feel stays consistent.
+            float walkSpeed = mods != null ? mods.EffectiveWalkSpeed(carryingFlag) : stats.walkSpeed;
             var p = new MoveParams
             {
-                WalkSpeed = stats.walkSpeed,
-                AccelPerTick = stats.walkSpeed /
+                WalkSpeed = walkSpeed,
+                AccelPerTick = walkSpeed /
                     System.Math.Max(1, grounded ? stats.groundAccelTicks : stats.airAccelTicks),
-                DecelPerTick = stats.walkSpeed /
+                DecelPerTick = walkSpeed /
                     System.Math.Max(1, grounded ? stats.groundDecelTicks : stats.airDecelTicks),
                 MomentumDecayPerTick =
                     (grounded ? stats.momentumDecayGround : stats.momentumDecayAir) * Runner.DeltaTime,
@@ -127,11 +136,9 @@ public class PlayerMovement : NetworkBehaviour
             DashCooldownTimer.ExpiredOrNotRunning(Runner) &&
             (combat == null || !combat.IsSwingCommitted))
         {
-            // Carrying-state must come from networked flag state (resim-safe), not the
-            // render-path FlagCarrierMarker bool — see CTFGameManager.IsCarrying.
-            bool carrying = CTFGameManager.Instance != null &&
-                            CTFGameManager.Instance.IsCarrying(Object.InputAuthority);
-            if (!carrying) StartDash();
+            // Carrying blocks dash by default; Flag Runner T3 lifts that restriction.
+            bool dashBlocked = carryingFlag && (mods == null || !mods.CanDashWhileCarryingFlag);
+            if (!dashBlocked) StartDash();
         }
         if (released.IsSet((int)PlayerButton.Dash) && Dashing)
             EndDash();

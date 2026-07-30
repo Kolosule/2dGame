@@ -41,4 +41,10 @@ public class PlayerStatModifiers : MonoBehaviour
     public float EffectiveDashCooldown => stats.dashCooldown * Current().DashCooldownMultiplier;
     public float EffectiveDashTime => stats.dashTime * Current().DashTimeMultiplier;
     public bool DashDealsDamage => Current().DashDealsDamage;
+
+    /// <summary>Walk speed for this tick. The carry bonus applies ONLY while carrying the flag.</summary>
+    public float EffectiveWalkSpeed(bool carryingFlag) =>
+        carryingFlag ? stats.walkSpeed * Current().CarrySpeedMultiplier : stats.walkSpeed;
+
+    public bool CanDashWhileCarryingFlag => Current().CanDashWhileCarryingFlag;
 }
