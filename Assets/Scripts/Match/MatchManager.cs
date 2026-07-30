@@ -77,28 +77,25 @@ public class MatchManager : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
 
-        switch (Phase)
+        // TickTimer.None never expires, which is what makes an uncapped SuddenDeath and
+        // Intermission inert without a special case here.
+        if (!PhaseTimer.Expired(Runner)) return;
+
+        MatchPhase next = MatchRules.NextOnTimerExpiry(Phase);
+        if (next == Phase) return; // untimed/terminal phase: no transition
+
+        // SuddenDeath's timer expiry is the operator hard-cap ops valve, not a normal transition:
+        // resolve a draw (Winner must be set before EnterPhase(PostMatch)) rather than following
+        // NextOnTimerExpiry's PostMatch target directly.
+        if (MatchRules.ResolvesAsDrawOnTimerExpiry(Phase))
         {
-            case MatchPhase.Warmup:
-                if (PhaseTimer.Expired(Runner)) EnterPhase(MatchPhase.Countdown);
-                break;
-            case MatchPhase.Countdown:
-                if (PhaseTimer.Expired(Runner)) EnterPhase(MatchPhase.Live);
-                break;
-            case MatchPhase.Live:
-                // Timer expiry no longer resolves a winner: coins cannot decide a match.
-                if (PhaseTimer.Expired(Runner)) EnterPhase(MatchPhase.SuddenDeath);
-                break;
-            case MatchPhase.SuddenDeath:
-                // Only armed when an operator sets suddenDeathHardCap; TickTimer.None never expires.
-                if (PhaseTimer.Expired(Runner)) ResolveAsDraw();
-                break;
-            case MatchPhase.PostMatch:
-                if (PhaseTimer.Expired(Runner)) EnterPhase(MatchPhase.Intermission);
-                break;
-            case MatchPhase.Intermission:
-                break;
+            ResolveAsDraw();
+            return;
         }
+
+        // PostMatch -> Intermission must still route through EnterPhase: EnterPhase(Intermission)
+        // is what calls GameNetworkManager.Instance.BeginReturnToLobby().
+        EnterPhase(next);
     }
 
     /// <summary>Server-only. Sets Phase and arms the timer for the new phase.</summary>

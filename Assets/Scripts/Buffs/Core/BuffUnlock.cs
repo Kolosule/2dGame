@@ -43,6 +43,9 @@ namespace Game.Buffs.Core
         public static int ResolveTier(int unlockedSteps, int priorityPosition, int buffCount,
                                       int maxTier, bool allUnlocked)
         {
+            // Mirror TierLevel's buffCount <= 0 guard: a buff that isn't part of any loadout
+            // (buffCount <= 0) has no tier to force to max, all-unlocked or not.
+            if (buffCount <= 0) return 0;
             if (allUnlocked) return maxTier > 0 ? maxTier : 0;
             return TierLevel(unlockedSteps, priorityPosition, buffCount, maxTier);
         }

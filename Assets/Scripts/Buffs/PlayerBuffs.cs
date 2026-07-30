@@ -27,8 +27,17 @@ public class PlayerBuffs : NetworkBehaviour
     /// <summary>Fires when the networked stealth-active flag flips. HUD subscribes.</summary>
     public event System.Action StealthStateChanged;
 
+    // Cached at subscribe time: MatchManager.Instance can already be null during scene teardown,
+    // so Despawned must unsubscribe via this reference rather than re-resolving the static.
+    private MatchManager subscribedMatchManager;
+
     private void OnBuffsChanged() => BuffsChanged?.Invoke();
     private void OnStealthChanged() => StealthStateChanged?.Invoke();
+
+    // TierOf now reads MatchManager.Phase (via SuddenDeathMaxesTiers) as well as
+    // TotalDepositedValue, so a phase change is a tier change too — re-raise BuffsChanged on it.
+    // PhaseChanged fires on every peer via OnChangedRender, so this needs no new networking.
+    private void OnMatchPhaseChanged() => BuffsChanged?.Invoke();
 
     /// <summary>
     /// Radial fill for the stealth icon: 1 = ready, 0 = just used, ramping up while it recharges.
@@ -46,6 +55,19 @@ public class PlayerBuffs : NetworkBehaviour
     {
         if (HasStateAuthority && LoadoutLength == 0)
             ApplyDefaultLoadout();
+
+        if (MatchManager.Instance != null)
+        {
+            subscribedMatchManager = MatchManager.Instance;
+            subscribedMatchManager.PhaseChanged += OnMatchPhaseChanged;
+        }
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        if (subscribedMatchManager != null)
+            subscribedMatchManager.PhaseChanged -= OnMatchPhaseChanged;
+        subscribedMatchManager = null;
     }
 
     private void ApplyDefaultLoadout()

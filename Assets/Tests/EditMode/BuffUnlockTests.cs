@@ -73,4 +73,12 @@ public class BuffUnlockTests
         Assert.AreEqual(0, BuffUnlock.ResolveTier(5, 0, buffCount: 3, maxTier: 0, allUnlocked: true));
         Assert.AreEqual(0, BuffUnlock.ResolveTier(5, 0, buffCount: 3, maxTier: -2, allUnlocked: true));
     }
+
+    // A buff with no loadout (buffCount <= 0) has no tier to force to max, all-unlocked or not:
+    // the allUnlocked branch must honour the same buffCount <= 0 guard TierLevel already has.
+    [Test]
+    public void ResolveTier_AllUnlocked_HonoursBuffCountGuard()
+    {
+        Assert.AreEqual(0, BuffUnlock.ResolveTier(5, 0, buffCount: 0, maxTier: 3, allUnlocked: true));
+    }
 }

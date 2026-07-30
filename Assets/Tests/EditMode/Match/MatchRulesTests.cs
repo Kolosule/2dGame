@@ -49,4 +49,32 @@ public class MatchRulesTests
         Assert.AreEqual(4, (int)MatchPhase.Intermission);
         Assert.AreEqual(5, (int)MatchPhase.SuddenDeath);
     }
+
+    // The timer-expiry advance table. Live -> SuddenDeath (not a winner resolution) because
+    // capture is the only win condition. Intermission maps to itself, meaning "no transition":
+    // an untimed/terminal phase's timer expiry (TickTimer.None never expires anyway) must be a
+    // no-op rather than a self re-entry.
+    [TestCase(MatchPhase.Warmup, MatchPhase.Countdown)]
+    [TestCase(MatchPhase.Countdown, MatchPhase.Live)]
+    [TestCase(MatchPhase.Live, MatchPhase.SuddenDeath)]
+    [TestCase(MatchPhase.SuddenDeath, MatchPhase.PostMatch)]
+    [TestCase(MatchPhase.PostMatch, MatchPhase.Intermission)]
+    [TestCase(MatchPhase.Intermission, MatchPhase.Intermission)]
+    public void NextOnTimerExpiry_AdvancesToExpectedPhase(MatchPhase phase, MatchPhase expected)
+    {
+        Assert.AreEqual(expected, MatchRules.NextOnTimerExpiry(phase));
+    }
+
+    // Operator hard-cap's ops safety valve only: true in SuddenDeath, false everywhere else.
+    // Unreachable in default play (suddenDeathHardCap defaults to 0 = off) — not a game rule.
+    [TestCase(MatchPhase.Warmup, false)]
+    [TestCase(MatchPhase.Countdown, false)]
+    [TestCase(MatchPhase.Live, false)]
+    [TestCase(MatchPhase.SuddenDeath, true)]
+    [TestCase(MatchPhase.PostMatch, false)]
+    [TestCase(MatchPhase.Intermission, false)]
+    public void ResolvesAsDrawOnTimerExpiry_TrueInSuddenDeathOnly(MatchPhase phase, bool expected)
+    {
+        Assert.AreEqual(expected, MatchRules.ResolvesAsDrawOnTimerExpiry(phase));
+    }
 }
