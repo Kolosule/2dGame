@@ -116,10 +116,17 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
     {
         if (localPlayer == null || localTeam == Team.None) return;
 
+        // Wait for the score manager rather than assuming tier 0. Painting the fold from a default
+        // tier would show a late joiner a penalty their team has already bought away, then silently
+        // correct itself a frame later. Nothing is lost by waiting: Update() calls RepaintVanguard()
+        // the moment the manager resolves, and that clears zonePainted, so the first paint happens
+        // as soon as the tier is actually known.
+        if (scoreManager == null) return;
+
         TeamManager teams = TeamManager.Instance;
         if (teams == null) return;
 
-        int tier = scoreManager != null ? scoreManager.VanguardTier(localTeam) : 0;
+        int tier = scoreManager.VanguardTier(localTeam);
         float advantage = teams.GetTerritorialAdvantage(localTeam, localPlayer.position);
         TerritoryDisplay next = TerritoryReadout.Resolve(advantage, tier);
 
