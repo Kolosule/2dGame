@@ -335,8 +335,9 @@ public class BuffProgressTests
         Assert.AreEqual(9f / 64f, BuffProgress.ToNextTier01(Curve, 55, 0, 4), 1e-4f);
         // Sitting exactly on a threshold reads as empty toward the NEXT one, not full.
         Assert.AreEqual(0f, BuffProgress.ToNextTier01(Curve, 46, 0, 4), 1e-4f);
-        // One point short of the target reads nearly full.
-        Assert.AreEqual(63f / 64f, BuffProgress.ToNextTier01(Curve, 109, 0, 4), 1e-4f);
+        // One point short of the target reads nearly full. The anchor at 109 is 80 (the last
+        // threshold crossed by ANY buff), not 46 — 62 and 80 were crossed on the way.
+        Assert.AreEqual(29f / 30f, BuffProgress.ToNextTier01(Curve, 109, 0, 4), 1e-4f);
     }
 
     [Test]
