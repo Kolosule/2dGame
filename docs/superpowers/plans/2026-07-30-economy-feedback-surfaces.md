@@ -72,6 +72,7 @@ For the whole-surface compile gate, build a `@response.rsp` for `csc.dll` refere
 - `Assets/Scripts/Hud/Core/TierUpEdge.cs` (+ `.meta`) — pure, primeable rising-edge detector so a bind/late-join never toasts.
 - `Assets/Scripts/Hud/Core/ToastFade.cs` (+ `.meta`) — pure hold-then-fade alpha.
 - `Assets/Scripts/Hud/HudToastFeed.cs` (+ `.meta`) — the shared transient-notification surface (one queue, one label).
+- `Assets/Scripts/Hud/TierPipRow.cs` (+ `.meta`) — the one pip-painting loop, shared by the buff row and the team strip. Engine-bound (it touches `Image`), so it cannot live in the `noEngineReferences` `Game.Hud.Core` next to `BuffTierVisual.PipFilled`.
 - `Assets/Scripts/Editor/EconomyHudBuilder.cs` (+ `.meta`) — one-click builder that creates and wires every new UI object, mirroring `MatchHudBuilder`.
 - `Assets/Tests/EditMode/BuffProgressTests.cs` (+ `.meta`) — in the existing `Game.Buffs.EditModeTests` asmdef.
 - `Assets/Tests/EditMode/Hud/TerritoryReadoutTests.cs`, `TierUpEdgeTests.cs`, `ToastFadeTests.cs` (+ `.meta` each) — in the existing `Game.Hud.Tests` asmdef.
@@ -1041,11 +1042,14 @@ git commit -m "feat(hud): expose derived unlock progress on both buff layers"
 
 **Files:**
 - Create: `Assets/Scripts/Hud/HudToastFeed.cs` (+ `.meta`)
+- Create: `Assets/Scripts/Hud/TierPipRow.cs` (+ `.meta`)
 - Modify: `Assets/Scripts/Hud/BuffIconDisplay.cs`
 
 **Interfaces:**
 - Consumes: `ToastFade.Alpha01`, `TierUpEdge`, `BuffTierVisual.PipFilled`, `BuffTierVisual.Intensity01`, `PlayerBuffs.{TierOf, MaxTier, NextUnlockProgress01}`, `MatchManager.Instance.AllBuffsMaxed`.
-- Produces: `HudToastFeed.Show(string message)` — the shared notification entry point Task 7 also calls.
+- Produces:
+  - `HudToastFeed.Show(string message)` — the shared notification entry point Task 7 also calls.
+  - `TierPipRow.Paint(Image[] pips, int tier, int maxTier, Color filled, Color empty)` — the shared pip loop Task 7 also calls.
 
 - [ ] **Step 1: Write `HudToastFeed`**
 
@@ -1117,7 +1121,45 @@ public class HudToastFeed : MonoBehaviour
 
 Create `Assets/Scripts/Hud/HudToastFeed.cs.meta` from the template.
 
-- [ ] **Step 2: Extend `BuffIconDisplay`**
+- [ ] **Step 2: Write the shared pip painter**
+
+Both surfaces paint a pip row identically. Extract it once rather than duplicating the loop.
+
+Create `Assets/Scripts/Hud/TierPipRow.cs`:
+
+```csharp
+using UnityEngine;
+using UnityEngine.UI;
+using Game.Hud.Core;
+
+/// <summary>
+/// Paints a row of tier pips: pips below the current tier are filled, the rest are empty, and
+/// pips past the buff's max tier are hidden entirely. Shared by the individual buff row and the
+/// Team Power strip so the two surfaces read identically and the loop exists in one place.
+///
+/// Lives in Assembly-CSharp rather than beside BuffTierVisual.PipFilled in Game.Hud.Core because
+/// it touches UnityEngine.UI.Image and that assembly is noEngineReferences. The decision
+/// (which pips are filled) stays pure there; only the painting is here.
+/// </summary>
+public static class TierPipRow
+{
+    public static void Paint(Image[] pips, int tier, int maxTier, Color filled, Color empty)
+    {
+        if (pips == null) return;
+
+        for (int i = 0; i < pips.Length; i++)
+        {
+            if (pips[i] == null) continue;
+            pips[i].gameObject.SetActive(i < maxTier);
+            pips[i].color = BuffTierVisual.PipFilled(i, tier) ? filled : empty;
+        }
+    }
+}
+```
+
+Create `Assets/Scripts/Hud/TierPipRow.cs.meta` from the template.
+
+- [ ] **Step 3: Extend `BuffIconDisplay`**
 
 Replace `Assets/Scripts/Hud/BuffIconDisplay.cs` with:
 
@@ -1208,15 +1250,7 @@ public class BuffIconDisplay : MonoBehaviour, IHudBindable
         if (icon != null)
             icon.color = Color.Lerp(lockedColor, accentColor, BuffTierVisual.Intensity01(tier, max));
 
-        if (pips != null)
-        {
-            for (int i = 0; i < pips.Length; i++)
-            {
-                if (pips[i] == null) continue;
-                pips[i].gameObject.SetActive(i < max);
-                pips[i].color = BuffTierVisual.PipFilled(i, tier) ? pipFilledColor : pipEmptyColor;
-            }
-        }
+        TierPipRow.Paint(pips, tier, max, pipFilledColor, pipEmptyColor);
 
         if (nextUnlockFill != null)
             nextUnlockFill.fillAmount = buffs.NextUnlockProgress01(buffId);
@@ -1242,15 +1276,15 @@ public class BuffIconDisplay : MonoBehaviour, IHudBindable
 }
 ```
 
-- [ ] **Step 3: Verify it compiles**
+- [ ] **Step 4: Verify it compiles**
 
 Run the compile gate.
 Expected: no errors.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add Assets/Scripts/Hud/HudToastFeed.cs Assets/Scripts/Hud/HudToastFeed.cs.meta Assets/Scripts/Hud/BuffIconDisplay.cs
+git add Assets/Scripts/Hud/HudToastFeed.cs Assets/Scripts/Hud/HudToastFeed.cs.meta Assets/Scripts/Hud/TierPipRow.cs Assets/Scripts/Hud/TierPipRow.cs.meta Assets/Scripts/Hud/BuffIconDisplay.cs
 git commit -m "feat(hud): tier pips, next-unlock fill and unlock toasts on the buff row"
 ```
 
@@ -1266,7 +1300,7 @@ Territory and team buffs are one subject — how strong is my team's position ri
 - Modify: `Assets/Scripts/Hud/TeamScoreDisplay.cs` (full rewrite, same class name)
 
 **Interfaces:**
-- Consumes: `TerritoryReadout.Resolve`, `TierUpEdge`, `BuffTierVisual.PipFilled`, `HudToastFeed.Show`, `TeamManager.Instance.GetTerritorialAdvantage(Team, Vector2)`, `TeamScoreManager.{ScoresChanged, TeamBuffsChanged, Team1Score, Team2Score, VanguardTier, VanguardMaxTier, PerPlayerAverageOf, NextVanguardAverage, VanguardProgress01}`.
+- Consumes: `TerritoryReadout.Resolve`, `TierUpEdge`, `TierPipRow.Paint`, `HudToastFeed.Show`, `TeamManager.Instance.GetTerritorialAdvantage(Team, Vector2)`, `TeamScoreManager.{ScoresChanged, TeamBuffsChanged, Team1Score, Team2Score, VanguardTier, VanguardMaxTier, PerPlayerAverageOf, NextVanguardAverage, VanguardProgress01}`.
 
 - [ ] **Step 1: Rewrite the display**
 
@@ -1418,15 +1452,7 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
         int tier = scoreManager.VanguardTier(localTeam);
         int max = scoreManager.VanguardMaxTier;
 
-        if (vanguardPips != null)
-        {
-            for (int i = 0; i < vanguardPips.Length; i++)
-            {
-                if (vanguardPips[i] == null) continue;
-                vanguardPips[i].gameObject.SetActive(i < max);
-                vanguardPips[i].color = BuffTierVisual.PipFilled(i, tier) ? pipFilledColor : pipEmptyColor;
-            }
-        }
+        TierPipRow.Paint(vanguardPips, tier, max, pipFilledColor, pipEmptyColor);
 
         if (vanguardProgressFill != null)
             vanguardProgressFill.fillAmount = scoreManager.VanguardProgress01(localTeam);
