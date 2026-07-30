@@ -1030,9 +1030,12 @@ In `Assets/Scripts/Coin Scripts/TeamScoreManager.cs`, add after `VanguardTier`:
     /// <summary>HUD fill 0..1 toward the next Vanguard milestone; 1 when maxed.</summary>
     public float VanguardProgress01(Team team)
     {
+        // Sudden Death maxes Vanguard — but only for teams that HAVE an economy. VanguardTier
+        // returns 0 for None/Team3AI in every phase, so a full bar here would sit next to locked
+        // pips. Each of the three team accessors answers "no economy" before it answers "which
+        // phase", so they cannot disagree.
+        if (team == Team.None || team == Team.Team3AI) return 0f;
         if (SuddenDeathMaxesTiers) return 1f;
-        // No guard for Team.None/Team3AI: Fraction01's value <= lower branch already reads 0, which
-        // is the right fill for a team with no economy and no tier.
         return BuffProgress.ToNextTier01(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
     }
 ```
