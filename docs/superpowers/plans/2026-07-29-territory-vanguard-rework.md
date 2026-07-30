@@ -1019,3 +1019,37 @@ State plainly, item by item: what was **executed** (EditMode suite with counts, 
 **Type consistency:** `VanguardTier(Team)` is the name used in Tasks 3, 4 and 6. `TeamBuffUnlock.TeamTier(thresholds, teamScore, rosterSize, maxTier)` is used identically in Tasks 2, 3 and 5. `TerritorialCombat.DealtMultiplier(advantage, tier)` is used identically in Tasks 1, 4 and 5. `GetDamageDealtModifier(Team, float, int)` is defined and called only in Task 4.
 
 **Known consequence, flagged not fixed:** with `Team3AI` enemies ignoring territory (`aiUsesTerritory = false`, the current scene value) the debuff applies to players only, which is the pre-existing behaviour and unchanged by this work.
+
+---
+
+## Addendum — decisions taken during execution
+
+Recorded after the whole-branch review raised three Important findings. Two were
+resolved by the user; the third was fixed in the review's fix wave (`c043b52`).
+
+**1. Roster freeze timing — kept as specified.** The review observed that freezing
+the divisor on the first `Live` tick makes the per-player thresholds hostage to that
+instant's roster: a match that starts 2v2 and fills to 10v10 has divisors of 2, so
+`{12, 45}` behave like absolute team scores of 24 and 90 rather than 120 and 450.
+The alternatives — raising the frozen size on late joins, or gating `Live` on a
+roster — were rejected. Raising the divisor *lowers* the per-player average, so an
+already-unlocked Vanguard tier could revoke, which is precisely the property the
+freeze exists to protect; gating `Live` is match-phase work belonging to another
+seam. The lobby assembles the roster before Start, so the exposure is the late-joiner
+case. **Watch for it in playtest:** if matches routinely start short-handed and fill,
+this is the first thing to revisit.
+
+**2. Projectiles now route through `ResolveDamage`** (`760bd18`). The review found
+`PlayerCombat.ShootProjectile` passed the raw authored `projectileDamage` straight
+into `Projectile.ServerInitialize`, so ranged attacks ignored the territorial debuff
+entirely — the plan's "single damage entry point" constraint was not true of the
+shipped code, and this branch would have sharpened the melee/ranged asymmetry from a
+soft lerp into a hard 3×. Damage is now resolved once per shot, at the fire position,
+so committing deep is taxed for ranged exactly as for melee. **Consequence to
+playtest:** crit now applies to projectiles for the first time (10% chance, ×2 by
+default), because crit lives inside `ResolveDamage`.
+
+**3. Per-team roster latch** (`c043b52`). A single combined latch froze a team's
+roster size at 0 whenever the first `Live` tick saw players on only one side, which
+locked that team out of Vanguard for the whole match even after it filled. Each team
+now latches independently, the first tick its own count is non-zero.
