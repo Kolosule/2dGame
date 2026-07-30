@@ -49,5 +49,16 @@ namespace Game.Buffs.Core
             if (allUnlocked) return maxTier > 0 ? maxTier : 0;
             return TierLevel(unlockedSteps, priorityPosition, buffCount, maxTier);
         }
+
+        /// <summary>
+        /// True when the threshold list holds exactly one entry per (buff x tier) cell. A
+        /// mismatch mis-tiers every buff — adding a 4th buff without 3 more thresholds used to
+        /// silently demote everyone from tier 3 to tier 2 — so callers must fail loudly on false.
+        /// </summary>
+        public static bool IsCurveComplete(int thresholdCount, int buffCount, int maxTier)
+        {
+            if (buffCount <= 0 || maxTier <= 0) return false;
+            return thresholdCount == maxTier * buffCount;
+        }
     }
 }

@@ -1,6 +1,7 @@
 using UnityEngine;
 using Fusion;
 using Game.Buffs.Core;
+using Game.Match.Core;
 
 /// <summary>
 /// Singleton manager that tracks team scores and derives the one team buff, Vanguard.

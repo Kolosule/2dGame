@@ -211,11 +211,5 @@ public class LobbyScreenUI : MonoBehaviour
         }
     }
 
-    private byte[] LoadoutAsBytes()
-    {
-        if (loadoutOrder == null) return null;
-        var bytes = new byte[loadoutOrder.Count];
-        for (int i = 0; i < loadoutOrder.Count; i++) bytes[i] = (byte)loadoutOrder[i];
-        return bytes;
-    }
+    private byte[] LoadoutAsBytes() => Game.Buffs.Core.LoadoutCodec.ToBytes(loadoutOrder);
 }

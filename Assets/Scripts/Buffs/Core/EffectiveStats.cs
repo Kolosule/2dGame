@@ -12,6 +12,12 @@ namespace Game.Buffs.Core
         public float DashTimeMultiplier;
         public bool DashDealsDamage;
 
+        /// <summary>Walk-speed multiplier applied ONLY while carrying the enemy flag.</summary>
+        public float CarrySpeedMultiplier;
+
+        /// <summary>Lifts the default rule that carrying the flag blocks dashing.</summary>
+        public bool CanDashWhileCarryingFlag;
+
         public static EffectiveStats Default() => new EffectiveStats
         {
             BonusAirJumps = 0,
@@ -19,6 +25,8 @@ namespace Game.Buffs.Core
             DashCooldownMultiplier = 1f,
             DashTimeMultiplier = 1f,
             DashDealsDamage = false,
+            CarrySpeedMultiplier = 1f,
+            CanDashWhileCarryingFlag = false,
         };
     }
 }
