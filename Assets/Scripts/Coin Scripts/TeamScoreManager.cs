@@ -1,13 +1,16 @@
-﻿using UnityEngine;
-using UnityEngine.Events;
+using UnityEngine;
 using Fusion;
+using Game.Buffs.Core;
 
 /// <summary>
-/// Singleton manager that tracks team scores and unlocks coin-milestone buffs.
-/// META-LAYER MODEL (review item #4): CTF is the win condition; coin milestones lift the
-/// territorial combat nerf. HasDamageBuff/HasDefenseBuff feed CombatConfig.ResolveDamage.
-/// See docs/superpowers/specs/2026-06-22-unified-damage-pipeline-design.md.
-/// Place one on an empty GameObject in the Gameplay scene. PHOTON FUSION networked.
+/// Singleton manager that tracks team scores and derives the one team buff, Vanguard.
+/// META-LAYER MODEL: CTF capture is the only win condition; coin deposits buy Vanguard, which
+/// lifts the territorial debuff on damage dealt in the enemy third (CombatConfig.ResolveDamage).
+/// Tiers are DERIVED on query from networked score + a once-frozen roster size — never stored —
+/// so there is nothing to replay on resimulation and no monotonic latch to maintain.
+/// Place one on an empty GameObject in the Gameplay scene. PHOTON FUSION networked; must be
+/// always-interested under interest management.
+/// See docs/superpowers/specs/2026-07-29-coins-buffs-economy-design.md.
 /// </summary>
 public class TeamScoreManager : NetworkBehaviour
 {
@@ -15,30 +18,36 @@ public class TeamScoreManager : NetworkBehaviour
     [Networked, OnChangedRender(nameof(OnScoresChanged))] public int Team1Score { get; set; }
     [Networked, OnChangedRender(nameof(OnScoresChanged))] public int Team2Score { get; set; }
 
-    [Header("Milestone Thresholds")]
-    [Tooltip("Score needed to unlock damage buff (removes 0.5x territory debuff)")]
-    [SerializeField] private int damageBuffThreshold = 50;
+    [Header("Vanguard (the entire team buff catalog)")]
+    [Tooltip("PER-PLAYER-AVERAGE deposited value per Vanguard tier. Compared against " +
+             "teamScore / roster size — NOT against the raw team score. On a 10-player team, " +
+             "{12, 45} means absolute team scores of 120 and 450.")]
+    [SerializeField] private int[] vanguardThresholds = { 12, 45 };
 
-    [Tooltip("Score needed to unlock defense buff (removes 0.5x territory debuff)")]
-    [SerializeField] private int defenseBuffThreshold = 100;
+    [Tooltip("Vanguard's top tier. One team buff means one threshold per tier, so this must " +
+             "equal vanguardThresholds.Length.")]
+    [SerializeField] private int vanguardMaxTier = 2;
 
-    [Header("Buff Status")]
-    [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public bool Team1DamageBuff { get; set; }
-    [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public bool Team2DamageBuff { get; set; }
-    [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public bool Team1DefenseBuff { get; set; }
-    [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public bool Team2DefenseBuff { get; set; }
-
-    // Events that fire when milestones are reached (optional, for effects/UI)
-    public UnityEvent<string> onDamageBuffUnlocked;
-    public UnityEvent<string> onDefenseBuffUnlocked;
+    [Header("Roster (frozen once, on entering Live)")]
+    [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public byte Team1RosterSize { get; set; }
+    [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public byte Team2RosterSize { get; set; }
+    [Networked] private NetworkBool RosterCaptured { get; set; }
 
     /// <summary>Fires when Team1Score / Team2Score change. HUD subscribes.</summary>
     public event System.Action ScoresChanged;
 
-    /// <summary>Fires when any team damage/defense buff flag changes. HUD subscribes.</summary>
+    /// <summary>
+    /// Fires whenever the Vanguard tier could have moved — i.e. on score changes AND on the
+    /// roster capture, since the tier derives from both. HUD subscribes.
+    /// </summary>
     public event System.Action TeamBuffsChanged;
 
-    private void OnScoresChanged() => ScoresChanged?.Invoke();
+    private void OnScoresChanged()
+    {
+        ScoresChanged?.Invoke();
+        TeamBuffsChanged?.Invoke();
+    }
+
     private void OnTeamBuffsChanged() => TeamBuffsChanged?.Invoke();
 
     // Singleton instance
@@ -72,10 +81,57 @@ public class TeamScoreManager : NetworkBehaviour
 
     public override void Spawned()
     {
+        // Fail loudly on a mis-authored catalog rather than silently locking or over-unlocking a tier.
+        int authored = vanguardThresholds != null ? vanguardThresholds.Length : 0;
+        if (authored != vanguardMaxTier)
+        {
+            Debug.LogError($"❌ TeamScoreManager: vanguardThresholds has {authored} entries but " +
+                           $"vanguardMaxTier is {vanguardMaxTier}. One team buff needs exactly one " +
+                           $"threshold per tier.");
+        }
+    }
+
+    public override void FixedUpdateNetwork()
+    {
+        if (!HasStateAuthority || RosterCaptured) return;
+
+        // MatchManager owns the phase. If it is absent (a scene with no match loop), capture at once
+        // so the team layer is never dead just because the phase machine is missing.
+        MatchManager match = MatchManager.Instance;
+        if (match != null && match.Phase != MatchPhase.Live) return;
+
+        CaptureRosterSizes();
     }
 
     /// <summary>
-    /// Adds points to a team's score and checks for milestone unlocks
+    /// SERVER: freeze each team's head-count once, on entering Live, and use it as the divisor for
+    /// the rest of the match. This is what keeps tier derivation pure: roster churn afterwards
+    /// cannot retroactively unlock or revoke Vanguard, so no stored tier state is needed.
+    /// </summary>
+    private void CaptureRosterSizes()
+    {
+        int t1 = 0;
+        int t2 = 0;
+
+        foreach (PlayerRef player in Runner.ActivePlayers)
+        {
+            if (!Runner.TryGetPlayerObject(player, out NetworkObject playerObject) || playerObject == null)
+                continue;
+
+            PlayerTeamData team = playerObject.GetComponent<PlayerTeamData>();
+            if (team == null) continue;
+
+            if (team.Team == Team.Team1) t1++;
+            else if (team.Team == Team.Team2) t2++;
+        }
+
+        Team1RosterSize = (byte)Mathf.Clamp(t1, 0, 255);
+        Team2RosterSize = (byte)Mathf.Clamp(t2, 0, 255);
+        RosterCaptured = true;
+    }
+
+    /// <summary>
+    /// Adds points to a team's score.
     /// Handles multiple team naming conventions: Team1/Blue and Team2/Red
     /// RPC so any client can request adding points, but only server executes
     /// </summary>
@@ -92,12 +148,10 @@ public class TeamScoreManager : NetworkBehaviour
         if (scoring == Team.Team1)
         {
             Team1Score += points;
-            CheckMilestones("Team1");
         }
         else if (scoring == Team.Team2)
         {
             Team2Score += points;
-            CheckMilestones("Team2");
         }
         else
         {
@@ -114,61 +168,29 @@ public class TeamScoreManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Checks if team has reached any milestones and unlocks buffs
-    /// Only runs on server/state authority
+    /// Current Vanguard tier (0 = locked, 1 = half the territorial debuff removed, 2 = all of it).
+    /// Derived on query from networked state — never stored.
     /// </summary>
-    private void CheckMilestones(string team)
+    public int VanguardTier(Team team)
     {
-        if (!HasStateAuthority) return;
+        int score;
+        int roster;
 
-        bool isTeam1 = TeamUtil.Normalize(team) == Team.Team1;
-        int teamScore = isTeam1 ? Team1Score : Team2Score;
-
-
-        // Check damage buff milestone (50 points)
-        if (teamScore >= damageBuffThreshold)
+        if (team == Team.Team1)
         {
-            if (isTeam1 && !Team1DamageBuff)
-            {
-                Team1DamageBuff = true;
-                onDamageBuffUnlocked?.Invoke("Team1");
-            }
-            else if (!isTeam1 && !Team2DamageBuff)
-            {
-                Team2DamageBuff = true;
-                onDamageBuffUnlocked?.Invoke("Team2");
-            }
+            score = Team1Score;
+            roster = Team1RosterSize;
+        }
+        else if (team == Team.Team2)
+        {
+            score = Team2Score;
+            roster = Team2RosterSize;
+        }
+        else
+        {
+            return 0; // Team3AI and None have no economy.
         }
 
-        // Check defense buff milestone (100 points)
-        if (teamScore >= defenseBuffThreshold)
-        {
-            if (isTeam1 && !Team1DefenseBuff)
-            {
-                Team1DefenseBuff = true;
-                onDefenseBuffUnlocked?.Invoke("Team1");
-            }
-            else if (!isTeam1 && !Team2DefenseBuff)
-            {
-                Team2DefenseBuff = true;
-                onDefenseBuffUnlocked?.Invoke("Team2");
-            }
-        }
-    }
-
-    /// <summary>True once the team has unlocked its coin-milestone damage buff.</summary>
-    public bool HasDamageBuff(Team team)
-    {
-        if (team == Team.Team1) return Team1DamageBuff;
-        if (team == Team.Team2) return Team2DamageBuff;
-        return false;
-    }
-
-    /// <summary>True once the team has unlocked its coin-milestone defense buff.</summary>
-    public bool HasDefenseBuff(Team team)
-    {
-        if (team == Team.Team1) return Team1DefenseBuff;
-        if (team == Team.Team2) return Team2DefenseBuff;
-        return false;
+        return TeamBuffUnlock.TeamTier(vanguardThresholds, score, roster, vanguardMaxTier);
     }
 }
