@@ -303,6 +303,25 @@ public class PlayerCombat : NetworkBehaviour
         return config.ResolveDamage(stats.attackDamage, myTeam, transform.position);
     }
 
+    /// <summary>
+    /// Resolves projectile damage through the unified pipeline, taxed by where the shot was FIRED
+    /// from (the shooter's position at the moment of firing) — committing deep into enemy
+    /// territory is what carries the tax, not where the shot lands. Mirrors ResolveMeleeDamage().
+    /// Falls back to the raw authored projectileDamage if no CombatConfig is available.
+    /// Note: crit (via ResolveDamage) is now rolled once per shot at fire time; previously
+    /// projectiles bypassed the pipeline entirely and never crit.
+    /// </summary>
+    private int ResolveProjectileDamage()
+    {
+        CombatConfig config = GameSettingsManager.Instance != null
+            ? GameSettingsManager.Instance.GetCombatConfig()
+            : null;
+        if (config == null) return projectileDamage;
+
+        Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
+        return config.ResolveDamage(projectileDamage, myTeam, transform.position);
+    }
+
     private void ShootProjectile(Vector2 aimWorldPoint)
     {
         if (playerAnimator != null) playerAnimator.TriggerShoot();
@@ -332,6 +351,11 @@ public class PlayerCombat : NetworkBehaviour
 
         Team shooterTeam = teamComponent != null ? teamComponent.Team : Team.None;
 
+        // Resolve once per shot, before spawning, at the shooter's fire position — not inside the
+        // spawn callback and not per hit (that would tax/crit on landing position or per-hit,
+        // neither of which is the intent).
+        int resolvedDamage = ResolveProjectileDamage();
+
         NetworkObject spawned = Runner.Spawn(
             projectilePrefab,
             projectileSpawnPoint.position,
@@ -340,7 +364,7 @@ public class PlayerCombat : NetworkBehaviour
             (runner, obj) =>
             {
                 Projectile p = obj.GetComponent<Projectile>();
-                if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam, projectileScale);
+                if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, resolvedDamage, shooterTeam, projectileScale);
             });
     }
 
