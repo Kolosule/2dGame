@@ -40,4 +40,37 @@ public class BuffUnlockTests
     {
         Assert.AreEqual(3, BuffUnlock.TierLevel(9, 0, buffCount: 3, maxTier: 3));
     }
+
+    // Sudden Death: every buff resolves to maxTier regardless of deposited value or position.
+    [TestCase(0, 0)]
+    [TestCase(0, 2)]
+    [TestCase(9, 0)]
+    [TestCase(4, 1)]
+    public void ResolveTier_AllUnlocked_ReturnsMaxTierRegardlessOfStepsOrPosition(int steps, int position)
+    {
+        Assert.AreEqual(3, BuffUnlock.ResolveTier(steps, position, buffCount: 3, maxTier: 3,
+                                                  allUnlocked: true));
+    }
+
+    // Not Sudden Death: identical to TierLevel, so normal play is untouched.
+    [TestCase(4, 0, 2)]
+    [TestCase(4, 1, 1)]
+    [TestCase(1, 1, 0)]
+    [TestCase(0, 0, 0)]
+    [TestCase(9, 2, 3)]
+    public void ResolveTier_NotUnlocked_MatchesTierLevel(int steps, int position, int expected)
+    {
+        Assert.AreEqual(expected, BuffUnlock.ResolveTier(steps, position, buffCount: 3, maxTier: 3,
+                                                         allUnlocked: false));
+        Assert.AreEqual(BuffUnlock.TierLevel(steps, position, 3, 3),
+                        BuffUnlock.ResolveTier(steps, position, 3, 3, allUnlocked: false));
+    }
+
+    // A misconfigured maxTier must not produce a negative tier under the override.
+    [Test]
+    public void ResolveTier_AllUnlocked_ClampsNonPositiveMaxTierToZero()
+    {
+        Assert.AreEqual(0, BuffUnlock.ResolveTier(5, 0, buffCount: 3, maxTier: 0, allUnlocked: true));
+        Assert.AreEqual(0, BuffUnlock.ResolveTier(5, 0, buffCount: 3, maxTier: -2, allUnlocked: true));
+    }
 }

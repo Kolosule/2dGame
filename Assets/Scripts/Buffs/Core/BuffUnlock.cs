@@ -33,5 +33,18 @@ namespace Game.Buffs.Core
             int tier = (unlockedSteps - priorityPosition - 1) / buffCount + 1;
             return tier > maxTier ? maxTier : tier;
         }
+
+        /// <summary>
+        /// Tier of the buff at the given priority position, with an all-unlocked override.
+        /// When allUnlocked is true (Sudden Death) every buff resolves to maxTier regardless of
+        /// deposited value or priority. The override is applied at READ time by the caller's
+        /// query, so no tier is ever stored and nothing needs replaying on resimulation.
+        /// </summary>
+        public static int ResolveTier(int unlockedSteps, int priorityPosition, int buffCount,
+                                      int maxTier, bool allUnlocked)
+        {
+            if (allUnlocked) return maxTier > 0 ? maxTier : 0;
+            return TierLevel(unlockedSteps, priorityPosition, buffCount, maxTier);
+        }
     }
 }

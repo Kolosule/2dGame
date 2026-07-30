@@ -91,10 +91,20 @@ public class PlayerBuffs : NetworkBehaviour
     {
         if (config == null) return 0;
         int pos = PositionOf(id);
-        if (pos < 0) return 0;
+        if (pos < 0) return 0; // not equipped — the loadout always holds the whole catalog
         int steps = BuffUnlock.UnlockedSteps(config.Thresholds, TotalDepositedValue);
-        return BuffUnlock.TierLevel(steps, pos, config.BuffCount, config.MaxTier);
+        return BuffUnlock.ResolveTier(steps, pos, config.BuffCount, config.MaxTier,
+                                      allUnlocked: SuddenDeathMaxesTiers);
     }
+
+    /// <summary>
+    /// Sudden Death forces every tier to MaxTier. Derived from MatchManager's [Networked] Phase,
+    /// so it resolves identically on clients and during resimulation. Deliberately adds no
+    /// per-player state and never mutates TotalDepositedValue — tiers stay derived, so leaving
+    /// Sudden Death (scene reload on rematch) restores normal tiers with nothing to reset.
+    /// </summary>
+    private bool SuddenDeathMaxesTiers =>
+        MatchManager.Instance != null && MatchManager.Instance.AllBuffsMaxed;
 
     /// <summary>Sum every equipped buff's passive contribution at its current tier.</summary>
     public void BuildEffectiveStats(ref EffectiveStats stats)
