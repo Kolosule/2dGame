@@ -46,4 +46,14 @@ public class BuffTierVisualTests
     {
         Assert.AreEqual(0f, BuffTierVisual.Intensity01(2, 0), 1e-4f);
     }
+
+    [Test]
+    public void PipFilled_FillsExactlyTierPips()
+    {
+        Assert.IsFalse(BuffTierVisual.PipFilled(0, 0), "tier 0 fills nothing");
+        Assert.IsTrue(BuffTierVisual.PipFilled(0, 1));
+        Assert.IsFalse(BuffTierVisual.PipFilled(1, 1));
+        Assert.IsTrue(BuffTierVisual.PipFilled(2, 3), "top pip at max tier");
+        Assert.IsFalse(BuffTierVisual.PipFilled(-1, 3), "negative index is never filled");
+    }
 }

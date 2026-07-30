@@ -14,13 +14,18 @@ public struct RingTier
     public float damageMult;
     public float speedMult;
 
+    [Tooltip("Flat extra coins dropped by enemies in this band. INTEGER so total coin supply " +
+             "stays exactly computable: total = kills x (coinsToDrop + coinDropBonus).")]
+    public int coinDropBonus;
+
     /// <summary>Neutral 1.0x band used when no config/center is available.</summary>
     public static RingTier Identity => new RingTier
     {
         maxDistanceFromCenter = float.MaxValue,
         healthMult = 1f,
         damageMult = 1f,
-        speedMult = 1f
+        speedMult = 1f,
+        coinDropBonus = 0
     };
 }
 
