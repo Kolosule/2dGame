@@ -17,5 +17,11 @@ namespace Game.Hud.Core
             if (t > 1f) return 1f;
             return t;
         }
+
+        /// <summary>
+        /// Whether the pip at this index (0-based, ascending) is filled at the given tier. Pips
+        /// make the tier readable EXACTLY, instead of inferred from a colour lerp.
+        /// </summary>
+        public static bool PipFilled(int pipIndex, int tier) => pipIndex >= 0 && pipIndex < tier;
     }
 }

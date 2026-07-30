@@ -1,7 +1,7 @@
 {
     "name": "Game.Hud.Core",
     "rootNamespace": "Game.Hud.Core",
-    "references": [],
+    "references": [ "Game.Combat.Core" ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
