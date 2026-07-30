@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Linq;
+using Game.Match.Core;
 
 /// <summary>
 /// Manages Capture the Flag game mode
@@ -96,7 +97,7 @@ public class CTFGameManager : NetworkBehaviour
     public void OnCarrierEnteredBase(PlayerRef carrier, Team baseTeam)
     {
         if (!HasStateAuthority) return;
-        if (MatchManager.Instance == null || !MatchManager.Instance.IsLive) return;
+        if (MatchManager.Instance == null || !MatchManager.Instance.IsPlayActive) return;
         if (team1Flag == null || team2Flag == null) return;
 
         if (baseTeam == Team.Team1 &&
@@ -120,7 +121,7 @@ public class CTFGameManager : NetworkBehaviour
     public void OnFlagReturnedHome()
     {
         if (!HasStateAuthority) return;
-        if (MatchManager.Instance != null && !MatchManager.Instance.IsLive) return;
+        if (MatchManager.Instance != null && !MatchManager.Instance.IsPlayActive) return;
 
         if (homeBases == null || homeBases.Length == 0)
             homeBases = FindObjectsByType<NetworkedHomeBase>(FindObjectsSortMode.None);

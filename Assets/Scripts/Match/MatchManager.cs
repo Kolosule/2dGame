@@ -3,18 +3,18 @@ using Fusion;
 using UnityEngine;
 using Game.Match.Core;
 
-/// <summary>Explicit match life-cycle phases. Replaces CTFGameManager's lone GameIsOver bool.</summary>
-public enum MatchPhase : byte { Warmup, Countdown, Live, PostMatch, Intermission }
-
 /// <summary>
 /// Server-authoritative match life cycle. Owns the phase enum, one reused TickTimer, and the
-/// single "who won" resolver (CTF capture + timer expiry both feed it). One per Gameplay scene.
-/// Must be always-interested under AoI so every player sees the phase/timer/results.
+/// results banner's winner code. Capture is the ONLY win condition: a Live timer expiry hands off
+/// to SuddenDeath rather than resolving a winner from coin score. One per Gameplay scene. Must be
+/// always-interested under AoI so every player sees the phase/timer/results.
 /// </summary>
 public class MatchManager : NetworkBehaviour
 {
     public static MatchManager Instance { get; private set; }
 
+    // Sudden Death's own hard-cap timer is not a duration serialized here: it is a match rule,
+    // so it lives with matchTimeLimit on GameSettingsManager (suddenDeathHardCap, minutes, 0 = off).
     [Header("Phase Durations (seconds)")]
     [SerializeField] private float warmupSeconds = 3f;
     [SerializeField] private float countdownSeconds = 3f;
@@ -32,8 +32,20 @@ public class MatchManager : NetworkBehaviour
     /// <summary>Fires on every phase change (all peers, via OnChangedRender). HUD subscribes.</summary>
     public event Action PhaseChanged;
 
-    public bool IsLive => Phase == MatchPhase.Live;
-    public bool InputEnabled => Phase == MatchPhase.Live;
+    /// <summary>
+    /// Play is running: input live, enemies thinking, flags carryable, captures counted. TRUE in
+    /// SuddenDeath as well as Live — every gameplay gate must use this rather than testing
+    /// Phase == Live, or Sudden Death would freeze the match it is supposed to decide.
+    /// </summary>
+    public bool IsPlayActive => MatchRules.IsPlayActive(Phase);
+
+    /// <summary>
+    /// Sudden Death forces every buff to max tier. PlayerBuffs reads this at tier-resolve time;
+    /// no tier is stored, so this costs no networked state.
+    /// </summary>
+    public bool AllBuffsMaxed => MatchRules.AllBuffsMaxed(Phase);
+
+    public bool InputEnabled => IsPlayActive;
 
     /// <summary>Seconds left in the current timed phase, or null when the phase has no running timer.</summary>
     public float? PhaseTimeRemaining => PhaseTimer.RemainingTime(Runner);
@@ -65,23 +77,25 @@ public class MatchManager : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
 
-        switch (Phase)
+        // TickTimer.None never expires, which is what makes an uncapped SuddenDeath and
+        // Intermission inert without a special case here.
+        if (!PhaseTimer.Expired(Runner)) return;
+
+        MatchPhase next = MatchRules.NextOnTimerExpiry(Phase);
+        if (next == Phase) return; // untimed/terminal phase: no transition
+
+        // SuddenDeath's timer expiry is the operator hard-cap ops valve, not a normal transition:
+        // resolve a draw (Winner must be set before EnterPhase(PostMatch)) rather than following
+        // NextOnTimerExpiry's PostMatch target directly.
+        if (MatchRules.ResolvesAsDrawOnTimerExpiry(Phase))
         {
-            case MatchPhase.Warmup:
-                if (PhaseTimer.Expired(Runner)) EnterPhase(MatchPhase.Countdown);
-                break;
-            case MatchPhase.Countdown:
-                if (PhaseTimer.Expired(Runner)) EnterPhase(MatchPhase.Live);
-                break;
-            case MatchPhase.Live:
-                if (PhaseTimer.Expired(Runner)) ResolveByTimer();
-                break;
-            case MatchPhase.PostMatch:
-                if (PhaseTimer.Expired(Runner)) EnterPhase(MatchPhase.Intermission);
-                break;
-            case MatchPhase.Intermission:
-                break;
+            ResolveAsDraw();
+            return;
         }
+
+        // PostMatch -> Intermission must still route through EnterPhase: EnterPhase(Intermission)
+        // is what calls GameNetworkManager.Instance.BeginReturnToLobby().
+        EnterPhase(next);
     }
 
     /// <summary>Server-only. Sets Phase and arms the timer for the new phase.</summary>
@@ -104,6 +118,13 @@ public class MatchManager : NetworkBehaviour
                 // matchTimeLimit == 0 means "no timer": capture is then the only end condition.
                 PhaseTimer = limit > 0f ? TickTimer.CreateFromSeconds(Runner, limit) : TickTimer.None;
                 break;
+            case MatchPhase.SuddenDeath:
+                float cap = (GameSettingsManager.Instance != null)
+                    ? GameSettingsManager.Instance.suddenDeathHardCap * 60f
+                    : 0f;
+                // Default 0 = off: no timer at all, so the next capture is the only end condition.
+                PhaseTimer = cap > 0f ? TickTimer.CreateFromSeconds(Runner, cap) : TickTimer.None;
+                break;
             case MatchPhase.PostMatch:
                 PhaseTimer = TickTimer.CreateFromSeconds(Runner, postMatchSeconds);
                 break;
@@ -115,10 +136,10 @@ public class MatchManager : NetworkBehaviour
         }
     }
 
-    /// <summary>Server-only. A team carried the enemy flag home during Live — instant win.</summary>
+    /// <summary>Server-only. A team carried the enemy flag home while play was active — instant win.</summary>
     public void ReportCapture(Team winningTeam)
     {
-        if (!HasStateAuthority || Phase != MatchPhase.Live) return;
+        if (!HasStateAuthority || !MatchRules.IsPlayActive(Phase)) return;
         Winner = (byte)TeamUtil.ToNumber(winningTeam);
         EnterPhase(MatchPhase.PostMatch);
     }
@@ -158,12 +179,14 @@ public class MatchManager : NetworkBehaviour
         return LobbyHostPolicy.DesignateHostId(ids) == p.PlayerId;
     }
 
-    /// <summary>Server-only. Live timer ran out with no capture: higher coin score wins, tie = draw.</summary>
-    private void ResolveByTimer()
+    /// <summary>
+    /// Server-only OPS SAFETY VALVE: the operator-set Sudden Death hard cap elapsed, so end the
+    /// match as a draw rather than let a headless dedicated server wedge on an unwinnable match.
+    /// Unreachable in default play — suddenDeathHardCap defaults to 0 = off.
+    /// </summary>
+    private void ResolveAsDraw()
     {
-        int t1 = TeamScoreManager.Instance != null ? TeamScoreManager.Instance.Team1Score : 0;
-        int t2 = TeamScoreManager.Instance != null ? TeamScoreManager.Instance.Team2Score : 0;
-        Winner = (byte)MatchResolver.ResolveTimerWinner(t1, t2);
+        Winner = 0; // MatchResolver.WinnerLabel(0) reads as a draw.
         EnterPhase(MatchPhase.PostMatch);
     }
 

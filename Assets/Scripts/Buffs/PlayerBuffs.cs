@@ -27,8 +27,17 @@ public class PlayerBuffs : NetworkBehaviour
     /// <summary>Fires when the networked stealth-active flag flips. HUD subscribes.</summary>
     public event System.Action StealthStateChanged;
 
+    // Cached at subscribe time: MatchManager.Instance can already be null during scene teardown,
+    // so Despawned must unsubscribe via this reference rather than re-resolving the static.
+    private MatchManager subscribedMatchManager;
+
     private void OnBuffsChanged() => BuffsChanged?.Invoke();
     private void OnStealthChanged() => StealthStateChanged?.Invoke();
+
+    // TierOf now reads MatchManager.Phase (via SuddenDeathMaxesTiers) as well as
+    // TotalDepositedValue, so a phase change is a tier change too — re-raise BuffsChanged on it.
+    // PhaseChanged fires on every peer via OnChangedRender, so this needs no new networking.
+    private void OnMatchPhaseChanged() => BuffsChanged?.Invoke();
 
     /// <summary>
     /// Radial fill for the stealth icon: 1 = ready, 0 = just used, ramping up while it recharges.
@@ -46,6 +55,19 @@ public class PlayerBuffs : NetworkBehaviour
     {
         if (HasStateAuthority && LoadoutLength == 0)
             ApplyDefaultLoadout();
+
+        if (MatchManager.Instance != null)
+        {
+            subscribedMatchManager = MatchManager.Instance;
+            subscribedMatchManager.PhaseChanged += OnMatchPhaseChanged;
+        }
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        if (subscribedMatchManager != null)
+            subscribedMatchManager.PhaseChanged -= OnMatchPhaseChanged;
+        subscribedMatchManager = null;
     }
 
     private void ApplyDefaultLoadout()
@@ -91,10 +113,20 @@ public class PlayerBuffs : NetworkBehaviour
     {
         if (config == null) return 0;
         int pos = PositionOf(id);
-        if (pos < 0) return 0;
+        if (pos < 0) return 0; // not equipped — the loadout always holds the whole catalog
         int steps = BuffUnlock.UnlockedSteps(config.Thresholds, TotalDepositedValue);
-        return BuffUnlock.TierLevel(steps, pos, config.BuffCount, config.MaxTier);
+        return BuffUnlock.ResolveTier(steps, pos, config.BuffCount, config.MaxTier,
+                                      allUnlocked: SuddenDeathMaxesTiers);
     }
+
+    /// <summary>
+    /// Sudden Death forces every tier to MaxTier. Derived from MatchManager's [Networked] Phase,
+    /// so it resolves identically on clients and during resimulation. Deliberately adds no
+    /// per-player state and never mutates TotalDepositedValue — tiers stay derived, so leaving
+    /// Sudden Death (scene reload on rematch) restores normal tiers with nothing to reset.
+    /// </summary>
+    private bool SuddenDeathMaxesTiers =>
+        MatchManager.Instance != null && MatchManager.Instance.AllBuffsMaxed;
 
     /// <summary>Sum every equipped buff's passive contribution at its current tier.</summary>
     public void BuildEffectiveStats(ref EffectiveStats stats)
