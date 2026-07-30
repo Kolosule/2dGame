@@ -12,10 +12,12 @@ public class BuffLoadoutConfig : ScriptableObject
     [SerializeField] private BuffDefinition[] allBuffs;
 
     [Header("Cumulative deposited-value thresholds — exactly maxTier x buffCount entries, ascending")]
-    [SerializeField] private int[] thresholds = { 5, 10, 15, 30, 45, 60, 120, 180, 240 };
+    [SerializeField] private int[] thresholds =
+        { 5, 10, 16, 24, 34, 46, 62, 80, 110, 150, 200, 260 };
 
     [Header("Default priority order if a player submits none")]
-    [SerializeField] private BuffId[] defaultOrder = { BuffId.ExtraJump, BuffId.Stealth, BuffId.QuickerDash };
+    [SerializeField] private BuffId[] defaultOrder =
+        { BuffId.ExtraJump, BuffId.Stealth, BuffId.QuickerDash, BuffId.FlagRunner };
 
     [Header("Highest tier any buff can reach. AUTHORED, not derived — see IsCurveValid.")]
     [SerializeField] private int maxTier = 3;
