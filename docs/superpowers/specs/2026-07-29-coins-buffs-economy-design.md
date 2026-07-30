@@ -123,7 +123,8 @@ Sole consumer is
    method. The live respawn path is
    [`PlayerStatsHandler.cs:204`](../../../Assets/Scripts/Player/PlayerStatsHandler.cs),
    which arms `RespawnTimer` from its own local `[SerializeField] respawnDelay = 3f`.
-   This matters because it is where the Reinforcement team buff must hook.
+   Nothing in this design depends on it — noted as a standalone cleanup, not scoped
+   here (see "Respawn-path cleanup is out of scope").
 
 Minor, noted not designed: `RPC_AddPoints` is `RpcSources.All`, so any client can
 inflate team score directly.
@@ -139,7 +140,7 @@ inflate team score directly.
 | 5 | **Individual buffs are movement/utility only.** No attack, health, or base move-speed buffs. |
 | 6 | **Stealth remains the only active ability.** Everything else is passive. |
 | 7 | **Individual catalog is four buffs** — the existing three plus Flag Runner. |
-| 8 | **Team catalog is two buffs at two tiers each.** |
+| 8 | **Team catalog is one buff (Vanguard) at two tiers**, unlocking at per-player averages of 75 and 150. The team layer is therefore fully coupled to territory by choice. |
 | 9 | **Enemy coin drops become deterministic** so pacing is computable. |
 | 10 | **Timer expiry enters Sudden Death** with all buffs unlocked for everyone. No draw in normal play. |
 | 11 | **`GameSettingsManager.scoreLimit` is deleted**, not repurposed. |
@@ -199,10 +200,11 @@ the same pure helper.
 
 ### The one justified asymmetry
 
-Individuals **choose** their priority order in the lobby. Teams use a **fixed
-authored** order. There is no team-level UI, and picking one collectively mid-match
-is a coordination problem with no good answer. So team order is authored, not
-chosen. Everything else about the two layers is identical.
+Individuals **choose** their priority order in the lobby. The team layer has no
+ordering to choose — it holds a single buff — and would use a **fixed authored**
+order if it ever held more than one, because there is no team-level UI and picking
+one collectively mid-match is a coordination problem with no good answer. Everything
+else about the two layers is identical.
 
 ### Team thresholds are per-player-average
 
@@ -285,40 +287,50 @@ clean and neutral and only committing deep carries the tax. Two states, not a
 gradient, which is what makes it displayable as an icon.
 
 **This is what ties the economy to the objective.** The enemy flag sits in the enemy
-third, so the debuff is precisely a tax on flag-grabbing — and the team buff below
-progressively lifts it. The coin economy literally funds your ability to attack the
-win condition.
+third, so the debuff is precisely a tax on flag-grabbing — and Vanguard, the sole team
+buff, is the only thing that lifts it. The coin economy literally funds your ability
+to attack the win condition. Note the steepness of that funding: see "Team curve" for
+why most teams will pay the full tax for the whole match.
 
-## Team buff catalog — two buffs, two tiers
+## Team buff catalog — one buff, two tiers
 
-Fixed authored priority order: `[Vanguard, Reinforcement]`. Four unlock steps.
+**Vanguard is the entire team catalog.** Two unlock steps.
 
 | Team buff | Tier 1 | Tier 2 |
 |---|---|---|
 | **Vanguard** | 50% of the territorial debuff removed → ×0.67 | 100% removed → ×1.00 |
-| **Reinforcement** | −15% team respawn delay | −30% team respawn delay |
 
 Vanguard resolves as `dealt = 1 − 0.67 × (1 − 0.5 × tier)`, giving even thirds
 `0.33 → 0.67 → 1.00` across tiers 0/1/2.
 
-**Reinforcement is the standalone pillar.** It is entirely territory-independent and
-matters enormously in CTF, where respawn timing decides whether a defence re-forms
-before a carrier gets home. It exists so the team layer is not 100% parasitic on
-territory (finding #2) — if territory is ever dialled down or disabled, half the
-team catalog still does real work.
+With a single team buff there is no round-robin and no ordering: step 1 is Vanguard
+T1, step 2 is Vanguard T2. The team layer still derives its tier through the same
+`BuffUnlock` helper, so the shared vocabulary holds and a second team buff can be
+added later without changing the mechanism.
 
-**Where it hooks, given finding #7.** Not `GameSettingsManager.GetRespawnTime` —
-that method is dead. Reinforcement scales the delay armed at
-[`PlayerStatsHandler.cs:204`](../../../Assets/Scripts/Player/PlayerStatsHandler.cs),
-resolved from the dying player's team tier at the moment of death.
+### Accepted tradeoff: the team layer is now fully territory-coupled
 
-Since this design has to touch the respawn path anyway, it also **collapses the dead
-parallel path**: `PlayerStatsHandler` becomes the single owner of respawn timing, and
-`GameSettingsManager.GetRespawnTime` / `respawnTimeMultiplier` /
-`TeamData.respawnDelay` are deleted. Leaving a second, unused, differently-configured
-respawn formula alive next to a buff that modifies respawn timing is how the next
-reader gets it wrong. This is a targeted cleanup of code the work already touches,
-not an invitation to refactor respawn behaviour.
+The original brief required team buffs to matter *even with territory disabled*.
+With Vanguard as the only team buff, **that requirement is deliberately dropped** —
+the entire team layer is now a modifier on the territorial debuff and does literally
+nothing if territory is turned off.
+
+This is a defensible call because territory is being kept and tuned as a live system
+(decision 2), so the coupling is to something real rather than to the untuned
+0.5×–1.5× lerp that made the old booleans hollow. But it is a genuine single point of
+failure, and it is worth naming: **if territory is ever disabled or dialled toward
+neutral, the team layer's value goes to zero and the coin economy becomes purely
+individual.** Re-adding a territory-independent team buff is the mitigation if that
+ever happens, and it is cheap because the mechanism supports it.
+
+### Respawn-path cleanup is out of scope
+
+An earlier revision of this design had a second team buff (Reinforcement) that
+modified respawn timing, which justified collapsing the dead respawn config path in
+finding #7. With Reinforcement removed, **nothing in this design touches respawn
+timing**, so that cleanup would be unrelated refactoring and is explicitly not part
+of this work. Finding #7 stands as a true observation and is left as a standalone
+follow-up.
 
 Both old booleans and their thresholds are deleted. `Team{1,2}DamageBuff` /
 `Team{1,2}DefenseBuff` and `damageBuffThreshold` / `defenseBuffThreshold` are
@@ -396,22 +408,49 @@ Tier 3 is deliberately rare in normal play (decision 4) because those tiers are
 strong — unlimited air jumps, 10 s stealth, dash-damage, dash-while-carrying. Sudden
 Death is the one place everyone gets to feel them.
 
-### Team curve — 4 steps, per-player-average thresholds
+### Team curve — 2 steps, per-player-average thresholds
 
 ```
-per-player-average deposited value:  12, 24, 45, 70
+per-player-average deposited value:  75, 150
 compared against:  teamScore / TeamRosterSize
 ```
 
-| Team average | Steps | Result |
-|---|---|---|
-| 30 | 2 | Vanguard T1, Reinforcement T1 |
-| 55 (typical) | 3 | **Vanguard T2** (debuff fully lifted), Reinforcement T1 |
-| 120 (dominant) | 4 | Both maxed |
+Both numbers are **per-player averages**, not absolute team scores — the same
+convention as the rest of this section. Against absolute team score, 75 and 150 would
+be crossed within the opening minute by a 10-player team, which is the exact failure
+mode of the old 50/100 booleans (finding #4).
 
-A normal team fully lifts the territorial debuff around the middle of the match,
-which is a deliberate arc: pushing into the enemy third to grab the flag gets
-progressively cheaper as the team's economy matures.
+| Team average | Steps | Vanguard | Debuff in enemy third |
+|---|---|---|---|
+| < 75 (typical, ~55) | 0 | locked | ×0.33 — never lifted |
+| 75–149 (strong) | 1 | T1 | ×0.67 — halved |
+| 150+ (dominant) | 2 | T2 | ×1.00 — fully lifted |
+
+**This is a deliberately steep curve, and the consequence is worth stating plainly.**
+At the target pacing (typical player banks 40–70), **a typical team never unlocks
+Vanguard at all** and fights the full ×0.33 debuff in the enemy third for the entire
+match. T1 requires a strong team; T2 requires a dominant one.
+
+The effects that follow from that, so they are chosen rather than discovered in
+playtest:
+
+- **Grabbing the enemy flag is expensive all match for most teams.** The flag sits in
+  the enemy third, so an unbuffed attacker fights there at a third of their damage.
+  Captures will come from mobility and stealth rather than from winning fights on
+  enemy ground — which is consistent with the individual catalog being movement and
+  utility only.
+- **Sudden Death carries more weight.** With captures made harder, more matches will
+  reach the timer, where the debuff is lifted for everyone. That makes Sudden Death a
+  routine part of the match arc rather than a rare tiebreak, and it should be treated
+  as a first-class phase in playtesting rather than an edge case.
+- **Vanguard becomes an achievement rather than a pacing beat.** A team that unlocks
+  it has visibly out-farmed the other, and the reward is the ability to fight on
+  enemy ground. That is a sharper, more legible payoff than the gradual mid-match
+  lift of the earlier curve — at the cost of most teams never seeing it.
+
+If playtesting shows matches stalling into Sudden Death too often, the first knob to
+turn is these two thresholds, not the debuff magnitude — the debuff is what makes the
+zones legible, and softening it would undo that.
 
 ### Caps and diminishing returns
 
@@ -510,8 +549,8 @@ playable state:
    `SuddenDeath` phase and its tier override. Touches `MatchManager`,
    `MatchResolver`, `GameSettingsManager`. Independent of everything below.
 2. **Territory + team layer** — one debuff, two zones, derived team tiers,
-   `TeamRosterSize`, Reinforcement and the respawn-path collapse. Touches
-   `TeamManager`, `CombatConfig`, `TeamScoreManager`, `PlayerStatsHandler`.
+   `TeamRosterSize`, and Vanguard's two tiers at 75/150. Touches `TeamManager`,
+   `CombatConfig`, `TeamScoreManager`.
 3. **Individual layer** — explicit `MaxTier`, the 12-step curve, Flag Runner,
    `CarrySpeedMultiplier`, the 4-entry loadout picker.
 4. **Feedback + supply** — the merged Team Power strip, buff-row pips and progress,
@@ -536,6 +575,11 @@ planning decision, not a design one, and is deliberately left to the plan.
 - **A per-player stats scoreboard** (K/D, captures, coins) — separate item, as the
   match-lifecycle spec also notes.
 - **In-place networked reset** — scene reload does it.
+- **A territory-independent team buff.** The team layer is one buff, fully coupled to
+  territory, by decision.
+- **Any change to respawn timing**, including collapsing the dead
+  `GetRespawnTime` / `respawnTimeMultiplier` / `TeamData.respawnDelay` path from
+  finding #7. Nothing here touches respawns; that is a standalone follow-up.
 - **Fixing `RPC_AddPoints`'s `RpcSources.All` cheat surface.** Noted in the audit;
   it is a security concern, not an economy-design one, and wants its own pass.
 
@@ -544,7 +588,7 @@ planning decision, not a design one, and is deliberately left to the plan.
 | Question | Resolution |
 |---|---|
 | Dual-benefit, player-chosen split, or separate currencies? | **Dual benefit.** Tension moves to the carry loop's four knobs instead of an allocation decision. |
-| Keep territorial combat or cut it? | **Keep and tune** — simplified to one debuff, 3× swing, two zones. Team buffs stay coupled to it deliberately, with Reinforcement as the territory-independent pillar. |
+| Keep territorial combat or cut it? | **Keep and tune** — simplified to one debuff, 3× swing, two zones. The team layer is deliberately and *fully* coupled to it: Vanguard is the only team buff, so disabling territory zeroes the team layer. Accepted tradeoff, named explicitly. |
 | Target match length and reachable tiers? | **8–10 min.** T2 on top priorities is the reliable outcome; T3 is rare, and universal only in Sudden Death. |
 | Combat stats in the individual catalog? | **No.** Movement/utility only, to cap the snowball at mobility. |
 | More actives beyond Stealth? | **No.** Stealth is the only active; everything else is passive. |
@@ -558,12 +602,13 @@ Per project convention the authoritative check is manual play, but the pure logi
 here is deliberately engine-free and unit-testable outside Unity (see the
 bundled-Roslyn workaround):
 
-- `BuffUnlock` step and tier math against the new 12-step and 4-step curves,
-  including the 4-buff round-robin.
+- `BuffUnlock` step and tier math against the 12-step individual curve, including the
+  4-buff round-robin, and against the 2-step team curve where `buffCount == 1`.
 - The `MaxTier` validation rule — `thresholds.Length == maxTier × buffCount` must
   fail loudly.
-- Team threshold normalisation: `teamScore / TeamRosterSize` against the
-  per-player-average list, including `rosterSize` of 1 and an empty team.
+- Team threshold normalisation: `teamScore / TeamRosterSize` against `{75, 150}`,
+  including `rosterSize` of 1 and an empty team, and the boundary cases at exactly
+  75 and exactly 150.
 - Vanguard's debuff formula producing exactly `0.33 / 0.67 / 1.00` at tiers 0/1/2.
 - Zone classification at the ±0.33 boundaries.
 - Sudden Death's tier override returning `MaxTier` for every buff regardless of
