@@ -28,12 +28,16 @@ namespace Game.Buffs.Core
         /// <summary>
         /// Tier (0 = locked, up to maxTier) of the single team buff. Pure: same inputs, same tier,
         /// which is what keeps the team layer resimulation-safe with no stored tier state.
+        /// allUnlocked (Sudden Death) forces maxTier, mirroring the individual layer's read-time
+        /// override — applied at READ time by the caller's query, so no tier is ever stored.
         /// </summary>
-        public static int TeamTier(IReadOnlyList<int> thresholds, int teamScore, int rosterSize, int maxTier)
+        public static int TeamTier(IReadOnlyList<int> thresholds, int teamScore, int rosterSize,
+                                   int maxTier, bool allUnlocked = false)
         {
             int average = PerPlayerAverage(teamScore, rosterSize);
             int steps = BuffUnlock.UnlockedSteps(thresholds, average);
-            return BuffUnlock.TierLevel(steps, priorityPosition: 0, buffCount: 1, maxTier: maxTier);
+            return BuffUnlock.ResolveTier(steps, priorityPosition: 0, buffCount: 1, maxTier: maxTier,
+                                          allUnlocked: allUnlocked);
         }
     }
 }

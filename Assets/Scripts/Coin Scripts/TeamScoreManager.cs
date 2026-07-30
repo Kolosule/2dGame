@@ -52,6 +52,10 @@ public class TeamScoreManager : NetworkBehaviour
 
     private void OnTeamBuffsChanged() => TeamBuffsChanged?.Invoke();
 
+    // Cached at subscribe time: MatchManager.Instance can already be null during scene teardown,
+    // so Despawned must unsubscribe via this reference rather than re-resolving the static.
+    private MatchManager subscribedMatchManager;
+
     // Singleton instance
     private static TeamScoreManager instance;
 
@@ -107,6 +111,21 @@ public class TeamScoreManager : NetworkBehaviour
                 }
             }
         }
+
+        // VanguardTier now reads MatchManager.Phase as well as score, so a phase change is a tier
+        // change too. PhaseChanged fires on every peer via OnChangedRender — no new networking.
+        if (MatchManager.Instance != null)
+        {
+            subscribedMatchManager = MatchManager.Instance;
+            subscribedMatchManager.PhaseChanged += OnTeamBuffsChanged;
+        }
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        if (subscribedMatchManager != null)
+            subscribedMatchManager.PhaseChanged -= OnTeamBuffsChanged;
+        subscribedMatchManager = null;
     }
 
     public override void FixedUpdateNetwork()
@@ -229,6 +248,15 @@ public class TeamScoreManager : NetworkBehaviour
             return 0; // Team3AI and None have no economy.
         }
 
-        return TeamBuffUnlock.TeamTier(vanguardThresholds, score, roster, vanguardMaxTier);
+        return TeamBuffUnlock.TeamTier(vanguardThresholds, score, roster, vanguardMaxTier,
+                                       allUnlocked: SuddenDeathMaxesTiers);
     }
+
+    /// <summary>
+    /// Sudden Death forces Vanguard to its top tier, matching PlayerBuffs.TierOf on the individual
+    /// side. Derived from MatchManager's [Networked] Phase, so it resolves identically on clients
+    /// and during resimulation, adds no state, and needs nothing reset when the phase ends.
+    /// </summary>
+    private bool SuddenDeathMaxesTiers =>
+        MatchManager.Instance != null && MatchManager.Instance.AllBuffsMaxed;
 }
