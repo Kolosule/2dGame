@@ -281,6 +281,10 @@ public class TeamScoreManager : NetworkBehaviour
     /// <summary>HUD fill 0..1 toward the next Vanguard milestone; 1 when maxed.</summary>
     public float VanguardProgress01(Team team)
     {
+        // Sudden Death maxes Vanguard — but only for teams that HAVE an economy. VanguardTier
+        // returns 0 for None/Team3AI in every phase, so returning a full bar for them here would
+        // put a filled bar next to locked pips.
+        if (team == Team.None || team == Team.Team3AI) return 0f;
         if (SuddenDeathMaxesTiers) return 1f;
         return BuffProgress.ToNextTier01(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
     }
