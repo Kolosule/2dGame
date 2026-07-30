@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using NUnit.Framework;
 using Game.Combat.Core;
+using Game.Buffs.Core;
 
 public class TerritorialCombatTests
 {
@@ -58,5 +60,31 @@ public class TerritorialCombatTests
         float clear = TerritorialCombat.DealtMultiplier(0f, 0);
         float debuffed = TerritorialCombat.DealtMultiplier(-1f, 0);
         Assert.AreEqual(3.0f, clear / debuffed, 4e-2f);
+    }
+
+    // End-to-end pacing: team score -> Vanguard tier -> damage dealt deep in the enemy third.
+    // A 10-player team, so the {12, 45} per-player averages are absolute scores of 120 and 450.
+    private static readonly List<int> VanguardThresholds = new List<int> { 12, 45 };
+
+    [TestCase(0, 0.33f)]     // match start: full debuff
+    [TestCase(119, 0.33f)]   // just short of T1
+    [TestCase(120, 0.665f)]  // T1: half the debuff removed
+    [TestCase(449, 0.665f)]
+    [TestCase(450, 1.0f)]    // T2: fully lifted
+    [TestCase(550, 1.0f)]    // typical end-state (~55 per player)
+    public void EnemyThirdDamage_TracksTeamEconomy(int teamScore, float expectedMultiplier)
+    {
+        int tier = TeamBuffUnlock.TeamTier(VanguardThresholds, teamScore, rosterSize: 10, maxTier: 2);
+        float dealt = TerritorialCombat.DealtMultiplier(-0.8f, tier);
+        Assert.AreEqual(expectedMultiplier, dealt, 1e-4f);
+    }
+
+    // Own half is never debuffed, however poor the team's economy is.
+    [TestCase(0)]
+    [TestCase(550)]
+    public void OwnTerritoryDamage_IsAlwaysNeutral(int teamScore)
+    {
+        int tier = TeamBuffUnlock.TeamTier(VanguardThresholds, teamScore, rosterSize: 10, maxTier: 2);
+        Assert.AreEqual(1.0f, TerritorialCombat.DealtMultiplier(0.5f, tier), 1e-4f);
     }
 }

@@ -3,6 +3,7 @@
     "rootNamespace": "",
     "references": [
         "Game.Combat.Core",
+        "Game.Buffs.Core",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
