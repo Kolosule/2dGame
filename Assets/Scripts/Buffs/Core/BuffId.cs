@@ -6,5 +6,6 @@ namespace Game.Buffs.Core
         ExtraJump = 0,
         Stealth = 1,
         QuickerDash = 2,
+        FlagRunner = 3,
     }
 }
