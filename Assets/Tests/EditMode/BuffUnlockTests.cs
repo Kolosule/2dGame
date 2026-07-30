@@ -81,4 +81,18 @@ public class BuffUnlockTests
     {
         Assert.AreEqual(0, BuffUnlock.ResolveTier(5, 0, buffCount: 0, maxTier: 3, allUnlocked: true));
     }
+
+    // The curve must contain exactly one threshold per (buff x tier) cell. Anything else
+    // silently mis-tiers every buff, which is the footgun this rule exists to catch.
+    [TestCase(9, 3, 3, true)]    // the pre-Flag-Runner catalog
+    [TestCase(12, 4, 3, true)]   // the four-buff catalog
+    [TestCase(9, 4, 3, false)]   // 4th buff added, thresholds forgotten — the exact footgun
+    [TestCase(13, 4, 3, false)]  // one threshold too many
+    [TestCase(0, 0, 3, false)]   // no buffs authored
+    [TestCase(0, 4, 0, false)]   // maxTier left at zero (an unserialized field deserializes to 0)
+    public void IsCurveComplete_RequiresOneThresholdPerBuffPerTier(
+        int thresholdCount, int buffCount, int maxTier, bool expected)
+    {
+        Assert.AreEqual(expected, BuffUnlock.IsCurveComplete(thresholdCount, buffCount, maxTier));
+    }
 }
