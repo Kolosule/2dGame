@@ -1017,12 +1017,24 @@ In `Assets/Scripts/Coin Scripts/TeamScoreManager.cs`, add after `VanguardTier`:
         TeamBuffUnlock.PerPlayerAverage(ScoreOf(team), RosterSizeOf(team));
 
     /// <summary>Per-player average at which this team's Vanguard next tiers up; 0 when maxed.</summary>
-    public int NextVanguardAverage(Team team) =>
-        BuffProgress.NextThresholdFor(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
+    public int NextVanguardAverage(Team team)
+    {
+        // Sudden Death maxes Vanguard outright, and a team with no economy never tiers up — both
+        // mean "nothing left to reach". Without this guard these accessors contradict VanguardTier,
+        // which DOES gate on Sudden Death: the strip would read "T2" beside a half-full bar.
+        // Mirrors PlayerBuffs.NextUnlockThreshold.
+        if (SuddenDeathMaxesTiers || team == Team.None || team == Team.Team3AI) return 0;
+        return BuffProgress.NextThresholdFor(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
+    }
 
     /// <summary>HUD fill 0..1 toward the next Vanguard milestone; 1 when maxed.</summary>
-    public float VanguardProgress01(Team team) =>
-        BuffProgress.ToNextTier01(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
+    public float VanguardProgress01(Team team)
+    {
+        if (SuddenDeathMaxesTiers) return 1f;
+        // No guard for Team.None/Team3AI: Fraction01's value <= lower branch already reads 0, which
+        // is the right fill for a team with no economy and no tier.
+        return BuffProgress.ToNextTier01(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
+    }
 ```
 
 - [ ] **Step 3: Verify it compiles**
