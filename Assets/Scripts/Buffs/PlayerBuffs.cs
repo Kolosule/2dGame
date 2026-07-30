@@ -124,14 +124,18 @@ public class PlayerBuffs : NetworkBehaviour
 
     /// <summary>
     /// HUD fill 0..1 toward the deposit that next raises this buff's tier. 1 means "nothing left
-    /// to earn" — already at the top of the curve, or Sudden Death has maxed everything.
+    /// to earn" — already at the top of the curve, or Sudden Death has maxed everything. A buff
+    /// with no economy (no config, or not in this player's loadout) reads 0, not 1: TierOf reports
+    /// tier 0 for it in every phase, and a full bar beside empty pips is the contradiction this
+    /// ordering exists to prevent.
     /// Read-only derivation from the same networked state TierOf uses.
     /// </summary>
     public float NextUnlockProgress01(BuffId id)
     {
-        if (config == null || SuddenDeathMaxesTiers) return 1f;
+        if (config == null) return 0f;
         int pos = PositionOf(id);
-        if (pos < 0) return 1f;
+        if (pos < 0) return 0f;
+        if (SuddenDeathMaxesTiers) return 1f;
         return BuffProgress.ToNextTier01(config.Thresholds, TotalDepositedValue, pos, config.BuffCount);
     }
 
@@ -141,9 +145,10 @@ public class PlayerBuffs : NetworkBehaviour
     /// </summary>
     public int NextUnlockThreshold(BuffId id)
     {
-        if (config == null || SuddenDeathMaxesTiers) return 0;
+        if (config == null) return 0;
         int pos = PositionOf(id);
         if (pos < 0) return 0;
+        if (SuddenDeathMaxesTiers) return 0;
         return BuffProgress.NextThresholdFor(config.Thresholds, TotalDepositedValue, pos, config.BuffCount);
     }
 

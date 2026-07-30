@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.UI;
+using Game.Buffs.Core;
 
 /// <summary>
 /// One-click builder for the Scope 4 economy HUD: the shared unlock-toast feed, the Team Power
@@ -29,12 +30,14 @@ public static class EconomyHudBuilder
         }
 
         HudToastFeed feed = BuildToastFeed(canvas);
-        int icons = BuildBuffIcons(feed);
+        var iconNames = new System.Collections.Generic.List<string>();
+        int icons = BuildBuffIcons(feed, iconNames);
         bool strip = BuildTeamPowerStrip(feed);
         bool banner = BuildSuddenDeathBanner(canvas);
 
         EditorSceneManager.MarkSceneDirty(canvas.gameObject.scene);
-        Debug.Log($"[Economy] HUD built: toast feed ✔, {icons} buff icon(s) extended, " +
+        string names = iconNames.Count > 0 ? string.Join(", ", iconNames) : "none";
+        Debug.Log($"[Economy] HUD built: toast feed ✔, {icons} buff icon(s) extended ({names}), " +
                   $"Team Power strip {(strip ? "✔" : "SKIPPED — no TeamScoreDisplay in scene")}, " +
                   $"Sudden Death banner {(banner ? "✔" : "SKIPPED — no MatchPhaseHud in scene")}. " +
                   $"Save the scene (Ctrl+S).");
@@ -69,7 +72,7 @@ public static class EconomyHudBuilder
         return feed;
     }
 
-    private static int BuildBuffIcons(HudToastFeed feed)
+    private static int BuildBuffIcons(HudToastFeed feed, System.Collections.Generic.List<string> namesSet)
     {
         var icons = Object.FindObjectsByType<BuffIconDisplay>(
             FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -89,6 +92,11 @@ public static class EconomyHudBuilder
                 new Vector2(64f, 6f), new Color(0.35f, 0.65f, 1f));
             so.FindProperty("nextUnlockFill").objectReferenceValue = fill;
             so.FindProperty("toastFeed").objectReferenceValue = feed;
+
+            string displayName = DisplayNameFor((BuffId)so.FindProperty("buffId").enumValueIndex);
+            so.FindProperty("displayName").stringValue = displayName;
+            namesSet?.Add(displayName);
+
             so.ApplyModifiedProperties();
         }
 
@@ -163,6 +171,22 @@ public static class EconomyHudBuilder
     }
 
     // ---- primitives ----
+
+    /// <summary>
+    /// Human-readable buff name for the unlock toast. Without this the toast reads "Buff T1" for
+    /// every buff, which is the one thing it must not do — naming the buff IS the message.
+    /// </summary>
+    private static string DisplayNameFor(BuffId id)
+    {
+        switch (id)
+        {
+            case BuffId.ExtraJump: return "Extra Jump";
+            case BuffId.Stealth: return "Stealth";
+            case BuffId.QuickerDash: return "Quicker Dash";
+            case BuffId.FlagRunner: return "Flag Runner";
+            default: return id.ToString();
+        }
+    }
 
     private static GameObject Rebuild(string name, Transform parent, Vector2 pos, Vector2 size)
     {
