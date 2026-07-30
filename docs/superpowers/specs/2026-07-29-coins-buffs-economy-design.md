@@ -140,7 +140,7 @@ inflate team score directly.
 | 5 | **Individual buffs are movement/utility only.** No attack, health, or base move-speed buffs. |
 | 6 | **Stealth remains the only active ability.** Everything else is passive. |
 | 7 | **Individual catalog is four buffs** — the existing three plus Flag Runner. |
-| 8 | **Team catalog is one buff (Vanguard) at two tiers**, unlocking at per-player averages of 75 and 150. The team layer is therefore fully coupled to territory by choice. |
+| 8 | **Team catalog is one buff (Vanguard) at two tiers**, unlocking at per-player averages of 12 and 45. The team layer is therefore fully coupled to territory by choice. |
 | 9 | **Enemy coin drops become deterministic** so pacing is computable. |
 | 10 | **Timer expiry enters Sudden Death** with all buffs unlocked for everyone. No draw in normal play. |
 | 11 | **`GameSettingsManager.scoreLimit` is deleted**, not repurposed. |
@@ -289,8 +289,8 @@ gradient, which is what makes it displayable as an icon.
 **This is what ties the economy to the objective.** The enemy flag sits in the enemy
 third, so the debuff is precisely a tax on flag-grabbing — and Vanguard, the sole team
 buff, is the only thing that lifts it. The coin economy literally funds your ability
-to attack the win condition. Note the steepness of that funding: see "Team curve" for
-why most teams will pay the full tax for the whole match.
+to attack the win condition, and a normal team finishes paying that tax around
+mid-match — see "Team curve".
 
 ## Team buff catalog — one buff, two tiers
 
@@ -411,46 +411,34 @@ Death is the one place everyone gets to feel them.
 ### Team curve — 2 steps, per-player-average thresholds
 
 ```
-per-player-average deposited value:  75, 150
+per-player-average deposited value:  12, 45
 compared against:  teamScore / TeamRosterSize
 ```
 
-Both numbers are **per-player averages**, not absolute team scores — the same
-convention as the rest of this section. Against absolute team score, 75 and 150 would
-be crossed within the opening minute by a 10-player team, which is the exact failure
-mode of the old 50/100 booleans (finding #4).
+**The unit is a per-player average, not an absolute team score.** This is the one
+number in the design most likely to be misread, so, concretely: on a 10-player team
+these thresholds correspond to absolute team scores of **120 and 450**. Compared
+against absolute team score instead, 12 and 45 would be crossed in the first few
+seconds — which is exactly the failure mode of the old 50/100 booleans (finding #4)
+and the reason the normalisation exists at all.
 
 | Team average | Steps | Vanguard | Debuff in enemy third |
 |---|---|---|---|
-| < 75 (typical, ~55) | 0 | locked | ×0.33 — never lifted |
-| 75–149 (strong) | 1 | T1 | ×0.67 — halved |
-| 150+ (dominant) | 2 | T2 | ×1.00 — fully lifted |
+| < 12 | 0 | locked | ×0.33 |
+| 12–44 | 1 | T1 | ×0.67 — halved |
+| 45+ (typical is ~55) | 2 | T2 | ×1.00 — fully lifted |
 
-**This is a deliberately steep curve, and the consequence is worth stating plainly.**
-At the target pacing (typical player banks 40–70), **a typical team never unlocks
-Vanguard at all** and fights the full ×0.33 debuff in the enemy third for the entire
-match. T1 requires a strong team; T2 requires a dominant one.
+A normal team fully lifts the territorial debuff around the middle of the match,
+which is the deliberate arc: pushing into the enemy third to grab the flag gets
+progressively cheaper as the team's economy matures. Both tiers are comfortably
+reachable in ordinary play — unlike the individual layer, where tier 3 is meant to be
+rare, the team layer is meant to resolve.
 
-The effects that follow from that, so they are chosen rather than discovered in
-playtest:
-
-- **Grabbing the enemy flag is expensive all match for most teams.** The flag sits in
-  the enemy third, so an unbuffed attacker fights there at a third of their damage.
-  Captures will come from mobility and stealth rather than from winning fights on
-  enemy ground — which is consistent with the individual catalog being movement and
-  utility only.
-- **Sudden Death carries more weight.** With captures made harder, more matches will
-  reach the timer, where the debuff is lifted for everyone. That makes Sudden Death a
-  routine part of the match arc rather than a rare tiebreak, and it should be treated
-  as a first-class phase in playtesting rather than an edge case.
-- **Vanguard becomes an achievement rather than a pacing beat.** A team that unlocks
-  it has visibly out-farmed the other, and the reward is the ability to fight on
-  enemy ground. That is a sharper, more legible payoff than the gradual mid-match
-  lift of the earlier curve — at the cost of most teams never seeing it.
-
-If playtesting shows matches stalling into Sudden Death too often, the first knob to
-turn is these two thresholds, not the debuff magnitude — the debuff is what makes the
-zones legible, and softening it would undo that.
+The consequence to watch in playtest is the opposite of a stall: because a typical
+team reaches T2 by mid-match, the territorial debuff is a **first-half** mechanic. If
+it turns out to stop mattering too early, raise these two thresholds rather than
+deepening the debuff — the debuff magnitude is what makes the two zones legible, and
+softening or steepening it fights the feedback design.
 
 ### Caps and diminishing returns
 
@@ -549,7 +537,7 @@ playable state:
    `SuddenDeath` phase and its tier override. Touches `MatchManager`,
    `MatchResolver`, `GameSettingsManager`. Independent of everything below.
 2. **Territory + team layer** — one debuff, two zones, derived team tiers,
-   `TeamRosterSize`, and Vanguard's two tiers at 75/150. Touches `TeamManager`,
+   `TeamRosterSize`, and Vanguard's two tiers at 12/45. Touches `TeamManager`,
    `CombatConfig`, `TeamScoreManager`.
 3. **Individual layer** — explicit `MaxTier`, the 12-step curve, Flag Runner,
    `CarrySpeedMultiplier`, the 4-entry loadout picker.
@@ -606,9 +594,9 @@ bundled-Roslyn workaround):
   4-buff round-robin, and against the 2-step team curve where `buffCount == 1`.
 - The `MaxTier` validation rule — `thresholds.Length == maxTier × buffCount` must
   fail loudly.
-- Team threshold normalisation: `teamScore / TeamRosterSize` against `{75, 150}`,
+- Team threshold normalisation: `teamScore / TeamRosterSize` against `{12, 45}`,
   including `rosterSize` of 1 and an empty team, and the boundary cases at exactly
-  75 and exactly 150.
+  12 and exactly 45.
 - Vanguard's debuff formula producing exactly `0.33 / 0.67 / 1.00` at tiers 0/1/2.
 - Zone classification at the ±0.33 boundaries.
 - Sudden Death's tier override returning `MaxTier` for every buff regardless of
