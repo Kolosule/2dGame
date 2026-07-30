@@ -225,41 +225,38 @@ public class TeamScoreManager : NetworkBehaviour
     }
 
     /// <summary>
+    /// Only the two human teams have a coin economy. Team3AI and None never bank, never tier up,
+    /// and are not maxed by Sudden Death — every accessor here must answer this BEFORE it answers
+    /// which phase the match is in, or a maxed reading lands beside a locked one.
+    /// </summary>
+    private static bool HasEconomy(Team team) => team == Team.Team1 || team == Team.Team2;
+
+    /// <summary>
     /// Current Vanguard tier (0 = locked, 1 = half the territorial debuff removed, 2 = all of it).
     /// Derived on query from networked state — never stored.
     /// </summary>
     public int VanguardTier(Team team)
     {
-        int score;
-        int roster;
+        if (!HasEconomy(team)) return 0; // Team3AI and None have no economy.
 
-        if (team == Team.Team1)
-        {
-            score = Team1Score;
-            roster = Team1RosterSize;
-        }
-        else if (team == Team.Team2)
-        {
-            score = Team2Score;
-            roster = Team2RosterSize;
-        }
-        else
-        {
-            return 0; // Team3AI and None have no economy.
-        }
-
-        return TeamBuffUnlock.TeamTier(vanguardThresholds, score, roster, vanguardMaxTier,
-                                       allUnlocked: SuddenDeathMaxesTiers);
+        return TeamBuffUnlock.TeamTier(vanguardThresholds, ScoreOf(team), RosterSizeOf(team),
+                                       vanguardMaxTier, allUnlocked: SuddenDeathMaxesTiers);
     }
 
     /// <summary>Vanguard's top tier, so the HUD can size its pip row without hard-coding 2.</summary>
     public int VanguardMaxTier => vanguardMaxTier;
 
-    public int ScoreOf(Team team) =>
-        team == Team.Team1 ? Team1Score : (team == Team.Team2 ? Team2Score : 0);
+    public int ScoreOf(Team team)
+    {
+        if (!HasEconomy(team)) return 0;
+        return team == Team.Team1 ? Team1Score : Team2Score;
+    }
 
-    public int RosterSizeOf(Team team) =>
-        team == Team.Team1 ? Team1RosterSize : (team == Team.Team2 ? Team2RosterSize : 0);
+    public int RosterSizeOf(Team team)
+    {
+        if (!HasEconomy(team)) return 0;
+        return team == Team.Team1 ? Team1RosterSize : Team2RosterSize;
+    }
 
     /// <summary>
     /// The team's deposited value PER PLAYER — the unit Vanguard thresholds are authored in, and
@@ -272,9 +269,12 @@ public class TeamScoreManager : NetworkBehaviour
     /// <summary>Per-player average at which this team's Vanguard next tiers up; 0 when maxed.</summary>
     public int NextVanguardAverage(Team team)
     {
-        // Sudden Death maxes Vanguard outright, and a team with no economy never tiers up —
-        // both mean "nothing left to reach". Mirrors PlayerBuffs.NextUnlockThreshold.
-        if (SuddenDeathMaxesTiers || team == Team.None || team == Team.Team3AI) return 0;
+        // A team with no economy never tiers up — checked before Sudden Death so "no economy"
+        // is answered first, mirroring PlayerBuffs.NextUnlockThreshold. Both cases return 0 here,
+        // but the ordering matters for readers, and is what keeps this invariant from drifting
+        // if either branch's return value ever changes.
+        if (!HasEconomy(team)) return 0;
+        if (SuddenDeathMaxesTiers) return 0;
         return BuffProgress.NextThresholdFor(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
     }
 
@@ -284,7 +284,7 @@ public class TeamScoreManager : NetworkBehaviour
         // Sudden Death maxes Vanguard — but only for teams that HAVE an economy. VanguardTier
         // returns 0 for None/Team3AI in every phase, so returning a full bar for them here would
         // put a filled bar next to locked pips.
-        if (team == Team.None || team == Team.Team3AI) return 0f;
+        if (!HasEconomy(team)) return 0f;
         if (SuddenDeathMaxesTiers) return 1f;
         return BuffProgress.ToNextTier01(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
     }

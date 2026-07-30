@@ -54,6 +54,12 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
     private Team localTeam = Team.None;
     private Transform localPlayer;
 
+    // Cached so RepaintVanguard can re-read the team if it was still None at Bind time. Not
+    // known to be reachable today (NetworkedSpawnManager sets the team before the object is
+    // discoverable), but PlayerHud binds exactly once, so a late assignment would otherwise leave
+    // this surface permanently blank with nothing to self-heal it.
+    private PlayerTeamData teamData;
+
     private TeamScoreManager scoreManager;
     private MatchManager matchManager;
 
@@ -63,6 +69,7 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
 
     public void Bind(HudContext ctx)
     {
+        teamData = ctx.Team;
         localTeam = ctx.Team != null ? ctx.Team.Team : Team.None;
         localPlayer = ctx.Inventory != null ? ctx.Inventory.transform : null;
         zonePainted = false;
@@ -81,6 +88,7 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
         scoreManager = null;
         matchManager = null;
         localPlayer = null;
+        teamData = null;
         vanguardEdge.Reset();
     }
 
@@ -145,6 +153,11 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
 
     private void RepaintVanguard()
     {
+        // Defensive re-read: if the team was still None at Bind time, pick up a late assignment
+        // here rather than staying permanently blank. Not known to be reachable today; see the
+        // comment on the teamData field.
+        if (localTeam == Team.None && teamData != null) localTeam = teamData.Team;
+
         if (scoreManager == null || localTeam == Team.None) return;
 
         int tier = scoreManager.VanguardTier(localTeam);
@@ -163,8 +176,10 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
                 : $"VANGUARD T{tier}   MAX";
         }
 
-        // Sudden Death maxes Vanguard for both teams at once; its banner announces that.
-        bool suddenDeath = matchManager != null && matchManager.AllBuffsMaxed;
+        // Sudden Death maxes Vanguard for both teams at once; its banner announces that. Resolved
+        // via the static Instance (not the lazily-cached matchManager field) so this matches
+        // BuffIconDisplay's check and doesn't depend on Update() having already run this frame.
+        bool suddenDeath = MatchManager.Instance != null && MatchManager.Instance.AllBuffsMaxed;
         if (vanguardEdge.Observe(tier) && !suddenDeath && toastFeed != null)
             toastFeed.Show($"VANGUARD  T{tier}");
 

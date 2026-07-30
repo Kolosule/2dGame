@@ -15,9 +15,12 @@ namespace Game.Hud.Core
 
     /// <summary>
     /// Pure zone-to-display mapping that FOLDS IN the team's Vanguard tier. Deliberately derived
-    /// from TerritorialCombat.DealtMultiplier rather than re-deriving the thresholds: the indicator
-    /// is penalised exactly when combat actually penalises you, so the display can never drift from
-    /// the damage math.
+    /// from TerritorialCombat.DealtMultiplier rather than re-deriving the thresholds, so it cannot
+    /// drift from the zone/Vanguard math WHILE TERRITORIAL ADVANTAGE IS ENABLED. It does not
+    /// consult CombatConfig.territorialAdvantageEnabled or TeamManager's Team3AI exemption, both of
+    /// which gate the real damage path — if the flag is ever turned off, the real path applies
+    /// ×1.0 while this can still resolve to Penalised. Low risk today: the flag defaults true, no
+    /// CombatConfig asset overrides it, and a loud warning fires when it is off.
     /// Engine-free (this asmdef sets noEngineReferences) so it is testable outside Unity.
     /// See docs/superpowers/specs/2026-07-29-coins-buffs-economy-design.md, "Merged Team Power strip".
     /// </summary>
