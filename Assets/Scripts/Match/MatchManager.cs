@@ -3,9 +3,6 @@ using Fusion;
 using UnityEngine;
 using Game.Match.Core;
 
-/// <summary>Explicit match life-cycle phases. Replaces CTFGameManager's lone GameIsOver bool.</summary>
-public enum MatchPhase : byte { Warmup, Countdown, Live, PostMatch, Intermission }
-
 /// <summary>
 /// Server-authoritative match life cycle. Owns the phase enum, one reused TickTimer, and the
 /// single "who won" resolver (CTF capture + timer expiry both feed it). One per Gameplay scene.
