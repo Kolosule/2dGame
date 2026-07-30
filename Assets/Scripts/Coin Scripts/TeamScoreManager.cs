@@ -28,10 +28,11 @@ public class TeamScoreManager : NetworkBehaviour
              "equal vanguardThresholds.Length.")]
     [SerializeField] private int vanguardMaxTier = 2;
 
-    [Header("Roster (frozen once, on entering Live)")]
+    [Header("Roster (frozen once per team, on entering Live)")]
     [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public byte Team1RosterSize { get; set; }
     [Networked, OnChangedRender(nameof(OnTeamBuffsChanged))] public byte Team2RosterSize { get; set; }
-    [Networked] private NetworkBool RosterCaptured { get; set; }
+    [Networked] private NetworkBool Team1RosterCaptured { get; set; }
+    [Networked] private NetworkBool Team2RosterCaptured { get; set; }
 
     /// <summary>Fires when Team1Score / Team2Score change. HUD subscribes.</summary>
     public event System.Action ScoresChanged;
@@ -89,11 +90,27 @@ public class TeamScoreManager : NetworkBehaviour
                            $"vanguardMaxTier is {vanguardMaxTier}. One team buff needs exactly one " +
                            $"threshold per tier.");
         }
+
+        // BuffUnlock.UnlockedSteps assumes ascending thresholds and breaks at the first entry above
+        // the total, so a misordered catalog (e.g. {45, 12}) would silently lock Vanguard forever
+        // instead of throwing. Fail loudly here instead.
+        if (vanguardThresholds != null)
+        {
+            for (int i = 1; i < vanguardThresholds.Length; i++)
+            {
+                if (vanguardThresholds[i] <= vanguardThresholds[i - 1])
+                {
+                    Debug.LogError($"❌ TeamScoreManager: vanguardThresholds must be strictly " +
+                                   $"ascending, but index {i} ({vanguardThresholds[i]}) is not " +
+                                   $"greater than index {i - 1} ({vanguardThresholds[i - 1]}).");
+                }
+            }
+        }
     }
 
     public override void FixedUpdateNetwork()
     {
-        if (!HasStateAuthority || RosterCaptured) return;
+        if (!HasStateAuthority || (Team1RosterCaptured && Team2RosterCaptured)) return;
 
         // MatchManager owns the phase. If it is absent (a scene with no match loop), capture at once
         // so the team layer is never dead just because the phase machine is missing.
@@ -104,11 +121,18 @@ public class TeamScoreManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// SERVER: freeze each team's head-count once, on entering Live, and use it as the divisor for
-    /// the rest of the match. This is what keeps tier derivation pure: roster churn afterwards
-    /// cannot retroactively unlock or revoke Vanguard, so no stored tier state is needed.
-    /// If no players have joined yet (total count is zero), retry on the next tick; only latch
-    /// RosterCaptured when at least one player with an assigned team is found.
+    /// SERVER: freeze each team's head-count once, independently, the first tick that team's own
+    /// count is greater than zero, and use it as the divisor for the rest of the match. This is
+    /// what keeps tier derivation pure: roster churn afterwards cannot retroactively unlock or
+    /// revoke Vanguard, so no stored tier state is needed.
+    /// PER-TEAM, not combined: a single latch keyed on "any player anywhere" freezes the other
+    /// team at 0 the moment one team has players and the other doesn't (everyone picked the same
+    /// side; a 1v0 start; a host who joins a minute in), and PerPlayerAverage over a roster of 0
+    /// permanently locks that team's Vanguard at tier 0. Two independent latches avoid that.
+    /// Deliberate consequence: a team that is genuinely still empty keeps retrying every tick for
+    /// as long as it stays empty. That is the correct trade — it must not lock out a team that
+    /// fills in later — and the loop is bounded by session size (&lt;= 20 players) with an O(1)
+    /// body per player, so the per-tick cost of the retry is negligible.
     /// </summary>
     private void CaptureRosterSizes()
     {
@@ -127,15 +151,19 @@ public class TeamScoreManager : NetworkBehaviour
             else if (team.Team == Team.Team2) t2++;
         }
 
-        // Only latch the capture if we actually found someone to count. If total is zero,
-        // leave RosterCaptured false so the next tick retries. Never write the networked
-        // fields on a zero-total tick to avoid wasted state changes.
-        int total = t1 + t2;
-        if (total > 0)
+        // Each team latches independently, and only once it has actually found someone to count.
+        // Never write a team's networked fields on a tick where that team's count is zero — that
+        // would be a needless networked write, and would also latch a team that is still empty.
+        if (!Team1RosterCaptured && t1 > 0)
         {
             Team1RosterSize = (byte)Mathf.Clamp(t1, 0, 255);
+            Team1RosterCaptured = true;
+        }
+
+        if (!Team2RosterCaptured && t2 > 0)
+        {
             Team2RosterSize = (byte)Mathf.Clamp(t2, 0, 255);
-            RosterCaptured = true;
+            Team2RosterCaptured = true;
         }
     }
 

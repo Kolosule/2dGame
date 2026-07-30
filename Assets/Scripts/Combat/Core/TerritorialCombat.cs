@@ -19,7 +19,7 @@ namespace Game.Combat.Core
         /// </summary>
         public const float EnemyThirdBoundary = -0.33f;
 
-        /// <summary>Damage dealt multiplier inside the enemy third with Vanguard locked. Total swing 3x.</summary>
+        /// <summary>Damage dealt multiplier inside the enemy third with Vanguard locked. Total swing ~3x.</summary>
         public const float FullDebuff = 0.33f;
 
         /// <summary>Vanguard's top tier. Each tier removes half of the debuff.</summary>

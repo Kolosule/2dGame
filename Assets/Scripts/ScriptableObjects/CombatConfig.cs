@@ -62,6 +62,10 @@ public class CombatConfig : ScriptableObject
     [Range(0f, 1f)]
     public float hitSoundVolume = 0.5f;
 
+    // Not serialized: resets on domain reload, which is exactly the cadence we want for a
+    // once-per-session operator warning.
+    [System.NonSerialized] private bool warnedTerritoryDisabled;
+
     /// <summary>
     /// Calculate if an attack is a critical hit
     /// </summary>
@@ -102,29 +106,30 @@ public class CombatConfig : ScriptableObject
     {
         float dealt = 1f;
 
-        TeamManager teams = TeamManager.Instance;
-        if (teams != null)
+        if (territorialAdvantageEnabled)
         {
-            int vanguardTier = 0;
+            TeamManager teams = TeamManager.Instance;
+            if (teams != null)
+            {
+                int vanguardTier = 0;
 
-            TeamScoreManager scores = TeamScoreManager.Instance;
-            if (scores != null && scores.Object != null && scores.Object.IsValid)
-                vanguardTier = scores.VanguardTier(attackerTeam);
+                TeamScoreManager scores = TeamScoreManager.Instance;
+                if (scores != null && scores.Object != null && scores.Object.IsValid)
+                    vanguardTier = scores.VanguardTier(attackerTeam);
 
-            float advantage = teams.GetTerritorialAdvantage(attackerTeam, attackerPos);
-            dealt = teams.GetDamageDealtModifier(attackerTeam, advantage, vanguardTier);
+                float advantage = teams.GetTerritorialAdvantage(attackerTeam, attackerPos);
+                dealt = teams.GetDamageDealtModifier(attackerTeam, advantage, vanguardTier);
+            }
         }
-
-        if (!territorialAdvantageEnabled) WarnTerritoryDisabledOnce();
+        else
+        {
+            WarnTerritoryDisabledOnce();
+        }
 
         bool isCritical = RollCritical();
         float finalDamage = CalculateFinalDamage(baseDamage, dealt, isCritical);
         return Mathf.Max(0, Mathf.RoundToInt(finalDamage));
     }
-
-    // Not serialized: resets on domain reload, which is exactly the cadence we want for a
-    // once-per-session operator warning.
-    [System.NonSerialized] private bool warnedTerritoryDisabled;
 
     /// <summary>
     /// The old team buffs were silent no-ops whenever territorialAdvantageEnabled was false
