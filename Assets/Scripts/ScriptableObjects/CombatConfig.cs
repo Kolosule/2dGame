@@ -1,11 +1,11 @@
 using UnityEngine;
 
-// META-LAYER DAMAGE MODEL (review item #4): every attack is resolved by ResolveDamage below.
-// finalDamage = base x globalDamageMultiplier x dealtModifier(attacker) x receivedModifier(defender) x crit.
-// dealtModifier/receivedModifier come from TeamManager's distance-based territorial system;
-// coin-milestone buffs (TeamScoreManager) lift the nerf: DamageBuff floors the outgoing
-// modifier at 1.0, DefenseBuff caps the incoming modifier at 1.0.
-// See docs/superpowers/specs/2026-06-22-unified-damage-pipeline-design.md.
+// META-LAYER DAMAGE MODEL: every attack is resolved by ResolveDamage below.
+// finalDamage = base x globalDamageMultiplier x dealtModifier(attacker) x crit.
+// dealtModifier is the quantized territorial debuff (x0.33 in the enemy third, x1 elsewhere),
+// lifted in halves by the attacking team's Vanguard tier from TeamScoreManager. There is no
+// received-side modifier: one debuff, one side, one direction.
+// See docs/superpowers/specs/2026-07-29-coins-buffs-economy-design.md.
 [CreateAssetMenu(fileName = "CombatConfig", menuName = "Game/Combat Configuration")]
 public class CombatConfig : ScriptableObject
 {
@@ -36,7 +36,8 @@ public class CombatConfig : ScriptableObject
     public float attackSpeedMultiplier = 1.0f;
 
     [Header("Territorial Combat")]
-    [Tooltip("Enable territorial advantage system")]
+    [Tooltip("Enable the territorial debuff. Turning this OFF also makes the ENTIRE team-buff " +
+             "layer inert, because Vanguard exists only to lift this debuff.")]
     public bool territorialAdvantageEnabled = true;
 
     [Header("Visual Feedback")]
@@ -70,16 +71,16 @@ public class CombatConfig : ScriptableObject
     }
 
     /// <summary>
-    /// Pure-math composition from already-resolved modifiers. Called by ResolveDamage;
+    /// Pure-math composition from an already-resolved modifier. Called by ResolveDamage;
     /// kept separate so the arithmetic is trivial to reason about.
     /// </summary>
-    public float CalculateFinalDamage(float baseDamage, float dealtModifier, float receivedModifier, bool isCritical = false)
+    public float CalculateFinalDamage(float baseDamage, float dealtModifier, bool isCritical = false)
     {
         float damage = baseDamage * globalDamageMultiplier;
 
         if (territorialAdvantageEnabled)
         {
-            damage *= dealtModifier * receivedModifier;
+            damage *= dealtModifier;
         }
 
         if (isCritical)
@@ -91,39 +92,50 @@ public class CombatConfig : ScriptableObject
     }
 
     /// <summary>
-    /// THE single entry point for all combat damage (review item #4). Gathers the distance-based
-    /// territorial modifiers from TeamManager, applies the coin-economy buff lift from
-    /// TeamScoreManager, rolls crit, and composes via CalculateFinalDamage. Returns a rounded,
-    /// non-negative int. Call only on StateAuthority (the call sites already gate on it).
+    /// THE single entry point for all combat damage. Reads the attacker's territorial advantage and
+    /// its team's Vanguard tier, rolls crit, and composes via CalculateFinalDamage. Returns a
+    /// rounded, non-negative int. Call only on StateAuthority (the call sites already gate on it).
+    /// The defender no longer participates: the received-side modifier was deleted with the old
+    /// two-sided model.
     /// </summary>
-    public int ResolveDamage(float baseDamage,
-                             Team attackerTeam, Vector2 attackerPos,
-                             Team defenderTeam, Vector2 defenderPos)
+    public int ResolveDamage(float baseDamage, Team attackerTeam, Vector2 attackerPos)
     {
         float dealt = 1f;
-        float received = 1f;
 
         TeamManager teams = TeamManager.Instance;
         if (teams != null)
         {
-            float attackerAdvantage = teams.GetTerritorialAdvantage(attackerTeam, attackerPos);
-            dealt = teams.GetDamageDealtModifier(attackerTeam, attackerAdvantage);
+            int vanguardTier = 0;
 
-            float defenderAdvantage = teams.GetTerritorialAdvantage(defenderTeam, defenderPos);
-            received = teams.GetDamageReceivedModifier(defenderTeam, defenderAdvantage);
+            TeamScoreManager scores = TeamScoreManager.Instance;
+            if (scores != null && scores.Object != null && scores.Object.IsValid)
+                vanguardTier = scores.VanguardTier(attackerTeam);
+
+            float advantage = teams.GetTerritorialAdvantage(attackerTeam, attackerPos);
+            dealt = teams.GetDamageDealtModifier(attackerTeam, advantage, vanguardTier);
         }
 
-        TeamScoreManager scores = TeamScoreManager.Instance;
-        if (scores != null && scores.Object != null && scores.Object.IsValid)
-        {
-            // DamageBuff lifts the outgoing nerf: never below neutral 1.0x.
-            if (scores.HasDamageBuff(attackerTeam)) dealt = Mathf.Max(dealt, 1f);
-            // DefenseBuff removes enemy-territory vulnerability: never above neutral 1.0x.
-            if (scores.HasDefenseBuff(defenderTeam)) received = Mathf.Min(received, 1f);
-        }
+        if (!territorialAdvantageEnabled) WarnTerritoryDisabledOnce();
 
         bool isCritical = RollCritical();
-        float finalDamage = CalculateFinalDamage(baseDamage, dealt, received, isCritical);
+        float finalDamage = CalculateFinalDamage(baseDamage, dealt, isCritical);
         return Mathf.Max(0, Mathf.RoundToInt(finalDamage));
+    }
+
+    // Not serialized: resets on domain reload, which is exactly the cadence we want for a
+    // once-per-session operator warning.
+    [System.NonSerialized] private bool warnedTerritoryDisabled;
+
+    /// <summary>
+    /// The old team buffs were silent no-ops whenever territorialAdvantageEnabled was false
+    /// (they were only ever multiplied in inside that flag's branch). Say so out loud instead.
+    /// </summary>
+    private void WarnTerritoryDisabledOnce()
+    {
+        if (warnedTerritoryDisabled) return;
+        warnedTerritoryDisabled = true;
+        Debug.LogWarning("⚠️ CombatConfig.territorialAdvantageEnabled is FALSE — the territorial " +
+                         "debuff and the entire Vanguard team-buff layer are inert. Coin deposits " +
+                         "then buy nothing at the team level.");
     }
 }

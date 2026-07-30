@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using Game.Combat.Core;
 
 public class TeamManager : MonoBehaviour
 {
@@ -8,13 +9,6 @@ public class TeamManager : MonoBehaviour
     [SerializeField] private TeamData team1Data;
     [SerializeField] private TeamData team2Data;
     [SerializeField] private TeamData team3Data; // AI/NPC team
-
-    [Header("Damage Scaling")]
-    [Tooltip("Minimum damage multiplier when at enemy base (default: 0.5 = 50%)")]
-    [SerializeField] private float minDamageMultiplier = 0.5f;
-
-    [Tooltip("Maximum damage multiplier when at own base (default: 1.5 = 150%)")]
-    [SerializeField] private float maxDamageMultiplier = 1.5f;
 
     [Header("AI Team Behavior")]
     [Tooltip("Does Team3 (AI) use territorial advantage? If false, always uses 1.0x modifier")]
@@ -52,20 +46,16 @@ public class TeamManager : MonoBehaviour
         return null;
     }
 
-    /// <summary>Damage dealt modifier for an attacking team given its territorial advantage.</summary>
-    public float GetDamageDealtModifier(Team attacker, float territorialAdvantage)
+    /// <summary>
+    /// Damage dealt modifier for an attacking team: x1 everywhere except the enemy third, where the
+    /// quantized territorial debuff applies, lifted in halves by the team's Vanguard tier.
+    /// Only quantizes GetTerritorialAdvantage's output — the advantage formula itself is unchanged.
+    /// There is deliberately NO received-side counterpart: one debuff, one side, one direction.
+    /// </summary>
+    public float GetDamageDealtModifier(Team attacker, float territorialAdvantage, int vanguardTier)
     {
         if (attacker == Team.Team3AI && !aiUsesTerritory) return 1.0f;
-        territorialAdvantage = Mathf.Clamp(territorialAdvantage, -1f, 1f);
-        float normalizedValue = (territorialAdvantage + 1f) / 2f;
-        return Mathf.Lerp(minDamageMultiplier, maxDamageMultiplier, normalizedValue);
-    }
-
-    /// <summary>Damage received modifier for a defending team given its territorial advantage.</summary>
-    public float GetDamageReceivedModifier(Team defender, float territorialAdvantage)
-    {
-        if (defender == Team.Team3AI && !aiUsesTerritory) return 1.0f;
-        return GetDamageDealtModifier(defender, -territorialAdvantage);
+        return TerritorialCombat.DealtMultiplier(territorialAdvantage, vanguardTier);
     }
 
     /// <summary>

@@ -2,9 +2,10 @@ using UnityEngine;
 using TMPro;
 
 /// <summary>
-/// Team score readout plus a single badge shown only while the local player's team has an active
-/// coin-milestone buff (damage or defense). Event-driven off TeamScoreManager; the manager is a
-/// runtime singleton, so subscription is deferred until Instance exists.
+/// Team score readout plus a single badge shown only while the local player's team has unlocked
+/// Vanguard (tier >= 1). Event-driven off TeamScoreManager; the manager is a runtime singleton, so
+/// subscription is deferred until Instance exists. Scope 4 replaces this with the merged Team Power
+/// strip that shows the tier and the zone state properly.
 /// </summary>
 public class TeamScoreDisplay : MonoBehaviour, IHudBindable
 {
@@ -62,8 +63,7 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
     private void RepaintBadge()
     {
         if (scoreManager == null || teamBuffBadge == null) return;
-        bool active = localTeam != Team.None &&
-                      (scoreManager.HasDamageBuff(localTeam) || scoreManager.HasDefenseBuff(localTeam));
+        bool active = localTeam != Team.None && scoreManager.VanguardTier(localTeam) > 0;
         teamBuffBadge.SetActive(active);
     }
 
