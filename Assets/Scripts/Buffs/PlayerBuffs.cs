@@ -80,14 +80,7 @@ public class PlayerBuffs : NetworkBehaviour
     private void ApplyDefaultLoadout()
     {
         if (config == null || config.DefaultOrder == null) return;
-        ServerInitLoadout(ToBytes(config.DefaultOrder));
-    }
-
-    private static byte[] ToBytes(BuffId[] order)
-    {
-        var bytes = new byte[order.Length];
-        for (int i = 0; i < order.Length; i++) bytes[i] = (byte)order[i];
-        return bytes;
+        ServerInitLoadout(LoadoutCodec.ToBytes(config.DefaultOrder));
     }
 
     /// <summary>SERVER: set this player's priority order (from the lobby choice or default).</summary>
@@ -95,7 +88,7 @@ public class PlayerBuffs : NetworkBehaviour
     {
         if (!HasStateAuthority || order == null) return;
         if (order.Length == 0) return; // empty choice: keep the default loadout applied in Spawned
-        int n = Mathf.Min(order.Length, 8);
+        int n = Mathf.Min(order.Length, LoadoutCodec.MaxEntries);
         for (int i = 0; i < n; i++) LoadoutOrder.Set(i, order[i]);
         LoadoutLength = n;
     }
