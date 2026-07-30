@@ -270,12 +270,20 @@ public class TeamScoreManager : NetworkBehaviour
         TeamBuffUnlock.PerPlayerAverage(ScoreOf(team), RosterSizeOf(team));
 
     /// <summary>Per-player average at which this team's Vanguard next tiers up; 0 when maxed.</summary>
-    public int NextVanguardAverage(Team team) =>
-        BuffProgress.NextThresholdFor(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
+    public int NextVanguardAverage(Team team)
+    {
+        // Sudden Death maxes Vanguard outright, and a team with no economy never tiers up —
+        // both mean "nothing left to reach". Mirrors PlayerBuffs.NextUnlockThreshold.
+        if (SuddenDeathMaxesTiers || team == Team.None || team == Team.Team3AI) return 0;
+        return BuffProgress.NextThresholdFor(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
+    }
 
     /// <summary>HUD fill 0..1 toward the next Vanguard milestone; 1 when maxed.</summary>
-    public float VanguardProgress01(Team team) =>
-        BuffProgress.ToNextTier01(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
+    public float VanguardProgress01(Team team)
+    {
+        if (SuddenDeathMaxesTiers) return 1f;
+        return BuffProgress.ToNextTier01(vanguardThresholds, PerPlayerAverageOf(team), 0, 1);
+    }
 
     /// <summary>
     /// Sudden Death forces Vanguard to its top tier, matching PlayerBuffs.TierOf on the individual
