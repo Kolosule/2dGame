@@ -286,10 +286,7 @@ public class Enemy : NetworkBehaviour
         if (config != null)
         {
             Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
-            PlayerTeamData playerTeam = player.GetComponent<PlayerTeamData>();
-            Team defenderTeam = playerTeam != null ? playerTeam.Team : Team.None;
-            finalDamage = config.ResolveDamage(effectiveAttackDamage, myTeam, transform.position,
-                                               defenderTeam, player.transform.position);
+            finalDamage = config.ResolveDamage(effectiveAttackDamage, myTeam, transform.position);
         }
 
         // Deal damage to player, attributed to this enemy (per-attacker hit cooldown).

@@ -239,7 +239,7 @@ public class PlayerCombat : NetworkBehaviour
             {
                 Vector2 knockbackDirection = (hit.transform.position - transform.position).normalized;
                 Vector2 knockbackForce = new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward);
-                int finalDamage = ResolveMeleeDamage(hit.gameObject, hit.transform.position);
+                int finalDamage = ResolveMeleeDamage();
                 enemy.TakeDamage(finalDamage, knockbackForce, hit.transform.position);
                 RPC_HitFeedback(enemy.Object.Id, hit.transform.position, finalDamage);
                 continue;
@@ -257,7 +257,7 @@ public class PlayerCombat : NetworkBehaviour
                 Team otherTeam = targetTeam != null ? targetTeam.Team : Team.None;
                 if (!TeamUtil.AreEnemies(myTeam, otherTeam)) continue;
 
-                int finalDamage = ResolveMeleeDamage(hit.gameObject, hit.transform.position);
+                int finalDamage = ResolveMeleeDamage();
                 targetPlayer.ServerApplyDamage(finalDamage, Object.Id);
                 RPC_HitFeedback(targetPlayer.Object.Id, hit.transform.position, finalDamage);
 
@@ -288,10 +288,11 @@ public class PlayerCombat : NetworkBehaviour
     }
 
     /// <summary>
-    /// Resolves melee damage to a hit target through the unified pipeline (review item #4).
+    /// Resolves melee damage through the unified pipeline. The defender no longer participates in
+    /// the calculation (the received-side territorial modifier is gone), so no target lookup here.
     /// Falls back to raw base damage if no CombatConfig is available.
     /// </summary>
-    private int ResolveMeleeDamage(GameObject target, Vector2 targetPos)
+    private int ResolveMeleeDamage()
     {
         CombatConfig config = GameSettingsManager.Instance != null
             ? GameSettingsManager.Instance.GetCombatConfig()
@@ -299,20 +300,26 @@ public class PlayerCombat : NetworkBehaviour
         if (config == null) return Mathf.RoundToInt(stats.attackDamage);
 
         Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
+        return config.ResolveDamage(stats.attackDamage, myTeam, transform.position);
+    }
 
-        Team targetTeam = Team.None;
-        EnemyTeamComponent etc = target.GetComponent<EnemyTeamComponent>();
-        if (etc != null)
-        {
-            targetTeam = etc.Team;
-        }
-        else
-        {
-            PlayerTeamData ptc = target.GetComponent<PlayerTeamData>();
-            if (ptc != null) targetTeam = ptc.Team;
-        }
+    /// <summary>
+    /// Resolves projectile damage through the unified pipeline, taxed by where the shot was FIRED
+    /// from (the shooter's position at the moment of firing) — committing deep into enemy
+    /// territory is what carries the tax, not where the shot lands. Mirrors ResolveMeleeDamage().
+    /// Falls back to the raw authored projectileDamage if no CombatConfig is available.
+    /// Note: crit (via ResolveDamage) is now rolled once per shot at fire time; previously
+    /// projectiles bypassed the pipeline entirely and never crit.
+    /// </summary>
+    private int ResolveProjectileDamage()
+    {
+        CombatConfig config = GameSettingsManager.Instance != null
+            ? GameSettingsManager.Instance.GetCombatConfig()
+            : null;
+        if (config == null) return projectileDamage;
 
-        return config.ResolveDamage(stats.attackDamage, myTeam, transform.position, targetTeam, targetPos);
+        Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
+        return config.ResolveDamage(projectileDamage, myTeam, transform.position);
     }
 
     private void ShootProjectile(Vector2 aimWorldPoint)
@@ -344,6 +351,11 @@ public class PlayerCombat : NetworkBehaviour
 
         Team shooterTeam = teamComponent != null ? teamComponent.Team : Team.None;
 
+        // Resolve once per shot, before spawning, at the shooter's fire position — not inside the
+        // spawn callback and not per hit (that would tax/crit on landing position or per-hit,
+        // neither of which is the intent).
+        int resolvedDamage = ResolveProjectileDamage();
+
         NetworkObject spawned = Runner.Spawn(
             projectilePrefab,
             projectileSpawnPoint.position,
@@ -352,7 +364,7 @@ public class PlayerCombat : NetworkBehaviour
             (runner, obj) =>
             {
                 Projectile p = obj.GetComponent<Projectile>();
-                if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam, projectileScale);
+                if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, resolvedDamage, shooterTeam, projectileScale);
             });
     }
 
