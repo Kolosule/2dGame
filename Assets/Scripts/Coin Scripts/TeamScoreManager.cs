@@ -107,6 +107,8 @@ public class TeamScoreManager : NetworkBehaviour
     /// SERVER: freeze each team's head-count once, on entering Live, and use it as the divisor for
     /// the rest of the match. This is what keeps tier derivation pure: roster churn afterwards
     /// cannot retroactively unlock or revoke Vanguard, so no stored tier state is needed.
+    /// If no players have joined yet (total count is zero), retry on the next tick; only latch
+    /// RosterCaptured when at least one player with an assigned team is found.
     /// </summary>
     private void CaptureRosterSizes()
     {
@@ -125,9 +127,16 @@ public class TeamScoreManager : NetworkBehaviour
             else if (team.Team == Team.Team2) t2++;
         }
 
-        Team1RosterSize = (byte)Mathf.Clamp(t1, 0, 255);
-        Team2RosterSize = (byte)Mathf.Clamp(t2, 0, 255);
-        RosterCaptured = true;
+        // Only latch the capture if we actually found someone to count. If total is zero,
+        // leave RosterCaptured false so the next tick retries. Never write the networked
+        // fields on a zero-total tick to avoid wasted state changes.
+        int total = t1 + t2;
+        if (total > 0)
+        {
+            Team1RosterSize = (byte)Mathf.Clamp(t1, 0, 255);
+            Team2RosterSize = (byte)Mathf.Clamp(t2, 0, 255);
+            RosterCaptured = true;
+        }
     }
 
     /// <summary>
