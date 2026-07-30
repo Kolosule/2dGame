@@ -136,18 +136,21 @@ SCOPE — exactly these changes:
      Assets/Scripts/Buffs/Core/BuffUnlock.cs, with buffCount == 1 and maxTier == 2.
      Do not write a parallel tier mechanism.
 
-3. Team thresholds are PER-PLAYER-AVERAGE deposited value: {75, 150}, compared against
-   teamScore / TeamRosterSize. They are NOT absolute team scores — against absolute
-   score a 10-player team would cross both in the opening minute, which is the exact
-   failure mode of the old 50/100 numbers.
+3. Team thresholds are PER-PLAYER-AVERAGE deposited value: {12, 45}, compared against
+   teamScore / TeamRosterSize. They are NOT absolute team scores — on a 10-player team
+   they correspond to absolute team scores of 120 and 450. Compared against absolute
+   score, 12 and 45 would be crossed within seconds, which is the exact failure mode of
+   the old 50/100 numbers. If you find yourself comparing a raw threshold to
+   Team1Score/Team2Score, you have got it wrong.
    - Capture TeamRosterSize ONCE as [Networked] state on entering MatchPhase.Live and
      use it as the divisor for the rest of the match. This keeps tier derivation pure:
      roster churn cannot retroactively unlock or revoke a tier, so no monotonic latch
      and no stored tier state is needed.
 
-Be aware of the intended consequence, and do not "fix" it: at target pacing a TYPICAL
-team never unlocks Vanguard and fights the full x0.33 debuff in the enemy third all
-match. T1 needs a strong team, T2 a dominant one. That steepness is deliberate.
+Expected pacing, which you should assert in tests: a team averaging under 12 has
+Vanguard locked (x0.33), 12-44 gets T1 (x0.67), and 45+ gets T2 (x1.00). Typical play
+is around 55, so a normal team fully lifts the debuff around mid-match. That is the
+intended arc — the territorial debuff is a first-half mechanic, not a permanent tax.
 
 OUT OF SCOPE — do not touch: the individual buff catalog, coin drop rates, any HUD
 work (Scope 4), match phases (Scope 1), and ANY respawn timing. In particular do NOT
@@ -168,8 +171,8 @@ PROJECT CONVENTIONS (non-negotiable):
 VERIFICATION: add EditMode tests (pure C#, runnable outside Unity) covering the
 Vanguard formula producing exactly 0.33 / 0.67 / 1.00 at tiers 0/1/2; zone
 classification at the -0.33 boundary from both sides; and team threshold
-normalisation against {75, 150} including rosterSize of 1, an empty team, and exact
-boundary values of 75 and 150. Report what you actually ran. A clean compile is not
+normalisation against {12, 45} including rosterSize of 1, an empty team, and exact
+boundary values of 12 and 45. Report what you actually ran. A clean compile is not
 verification.
 ```
 
