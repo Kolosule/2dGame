@@ -45,8 +45,10 @@ public class GameSettingsManager : MonoBehaviour
     [Tooltip("Match time limit in minutes (0 = no limit)")]
     public float matchTimeLimit = 0f;
 
-    [Tooltip("Score limit to win (0 = no limit)")]
-    public int scoreLimit = 0;
+    [Tooltip("Sudden Death hard cap in minutes (0 = off). Operations safety valve only: on " +
+             "expiry the match resolves as a draw so a headless server cannot wedge on an " +
+             "unwinnable match. Leave at 0 — draws are unreachable in default play.")]
+    public float suddenDeathHardCap = 0f;
 
     [Header("Quality of Life")]
     [Tooltip("Auto-respawn after death")]

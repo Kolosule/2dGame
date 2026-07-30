@@ -163,8 +163,8 @@ public class EnemyAI : MonoBehaviour
     /// <summary>Authority-only AI step (from Enemy.FixedUpdateNetwork).</summary>
     public void Tick()
     {
-        // Hold enemies still during non-Live phases (countdown spawn-in, post-match freeze).
-        if (MatchManager.Instance != null && !MatchManager.Instance.IsLive) return;
+        // Hold enemies still when play isn't active (countdown spawn-in, post-match freeze).
+        if (MatchManager.Instance != null && !MatchManager.Instance.IsPlayActive) return;
 
         if (!initialized || rb == null || enemyComponent == null) return;
 
