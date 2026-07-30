@@ -53,9 +53,16 @@ public class PlayerBuffs : NetworkBehaviour
 
     public override void Spawned()
     {
-        if (HasStateAuthority && LoadoutLength == 0)
-            ApplyDefaultLoadout();
+        if (HasStateAuthority)
+        {
+            // Loud on the server too: OnValidate only fires in the editor, so a headless
+            // dedicated server with a mis-authored curve must still say so.
+            if (config != null) config.LogIfCurveInvalid();
+            if (LoadoutLength == 0) ApplyDefaultLoadout();
+        }
 
+        // Every peer subscribes: the Sudden Death tier override is a render-time read, so
+        // clients need the repaint too.
         if (MatchManager.Instance != null)
         {
             subscribedMatchManager = MatchManager.Instance;

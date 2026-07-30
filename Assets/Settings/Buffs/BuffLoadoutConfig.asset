@@ -18,3 +18,4 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 3dea78701a9fd144b9467f9edcbeab94, type: 2}
   thresholds: 050000000a0000000f0000001e0000002d0000003c00000078000000b4000000f0000000
   defaultOrder: 000201
+  maxTier: 3
