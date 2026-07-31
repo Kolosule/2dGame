@@ -62,13 +62,23 @@ public class MatchStatsManager : NetworkBehaviour
     public void RegisterPlayer(int playerId, int team, string displayName)
     {
         if (!HasStateAuthority) return;
-        if (!RosterIndex.TryResolve(playerId, RosterCapacity, out int index)) return;
+        if (!RosterIndex.TryResolve(playerId, RosterCapacity, out int index))
+        {
+            // Loud on purpose: a silent drop here discards every stat this player ever earns for
+            // the rest of the match with nothing in the console. RosterCapacity, GameNetworkManager
+            // .maxPlayers, and NetworkProjectConfig's Simulation.PlayerCount are only coupled by
+            // comment -- if session size is ever raised without updating all three, this is how
+            // you find out.
+            Debug.LogError($"❌ MatchStatsManager.RegisterPlayer: playerId {playerId} exceeds " +
+                            $"RosterCapacity ({RosterCapacity}); this player's stats will not be tracked.");
+            return;
+        }
 
         Entries.Set(index, new PlayerStatEntry
         {
             Active = true,
             Team = (byte)team,
-            DisplayName = displayName,
+            DisplayName = displayName ?? string.Empty,
             IsDead = false,
             Kills = 0,
             Deaths = 0,

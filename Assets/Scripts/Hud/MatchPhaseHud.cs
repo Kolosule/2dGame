@@ -103,6 +103,11 @@ public class MatchPhaseHud : MonoBehaviour
         if (resultsPanel != null) resultsPanel.SetActive(results);
         if (results)
         {
+            // The scoreboard auto-shows for this same PostMatch phase (see the SetForcedVisible
+            // call below) and can end up a later sibling on the canvas; force the results panel
+            // (winner banner + Return-to-Lobby button) above it so the board never occludes the
+            // banner or swallows the host's button clicks, regardless of hierarchy order.
+            if (resultsPanel != null) resultsPanel.transform.SetAsLastSibling();
             if (winnerText != null) winnerText.text = MatchResolver.WinnerLabel(bound.Winner);
             if (finalScoreText != null)
             {

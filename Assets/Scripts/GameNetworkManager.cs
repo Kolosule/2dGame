@@ -88,6 +88,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         runner.AddCallbacks(this);
 
         LobbyTeamChoices.Clear();
+        LobbyNicknameChoices.Clear();
         LobbyLoadoutChoices.Clear();
         serverLobby = new LobbyServerState();
         gameStarting = false;

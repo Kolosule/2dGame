@@ -22,9 +22,15 @@ public class ScoreboardInputReader : MonoBehaviour
 
     private void OnDisable()
     {
-        if (scoreboardAction == null || scoreboardAction.action == null) return;
-        scoreboardAction.action.performed -= OnPerformed;
-        scoreboardAction.action.canceled -= OnCanceled;
+        if (scoreboardAction != null && scoreboardAction.action != null)
+        {
+            scoreboardAction.action.performed -= OnPerformed;
+            scoreboardAction.action.canceled -= OnCanceled;
+        }
+
+        // If this reader (or its GameObject) is disabled while Tab is held, canceled never fires
+        // and the board would otherwise stay open indefinitely -- release the hold explicitly.
+        if (panel != null) panel.SetHeld(false);
     }
 
     private void OnPerformed(InputAction.CallbackContext ctx)

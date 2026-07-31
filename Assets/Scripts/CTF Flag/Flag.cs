@@ -150,9 +150,14 @@ public class Flag : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// SERVER: three responsibilities per tick -- (1) drop the flag if its carrier's player object
+    /// has vanished without dying (disconnect/crash guard), (2) accumulate flag-carry-time stats
+    /// while the flag is actively carried during live play, and (3) auto-return a dropped flag
+    /// once its countdown elapses.
+    /// </summary>
     public override void FixedUpdateNetwork()
     {
-        // SERVER: auto-return a dropped flag once its countdown elapses.
         if (!HasStateAuthority) return;
 
         // Carrier disconnect/crash: death drops the flag via PlayerStatsHandler.Die(), but a
@@ -165,7 +170,8 @@ public class Flag : NetworkBehaviour
             DropFlag();
         }
 
-        if (CurrentState == FlagState.Carried && CarrierPlayerRef != PlayerRef.None)
+        if (CurrentState == FlagState.Carried && CarrierPlayerRef != PlayerRef.None &&
+            MatchManager.Instance != null && MatchManager.Instance.IsPlayActive)
         {
             int wholeSeconds = FlagCarryAccumulator.Tick(ref carrySecondsRemainder, Runner.DeltaTime);
             if (wholeSeconds > 0 && MatchStatsManager.Instance != null)

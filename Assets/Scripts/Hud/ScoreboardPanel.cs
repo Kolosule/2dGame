@@ -80,7 +80,12 @@ public class ScoreboardPanel : MonoBehaviour
     private void PaintRows()
     {
         MatchStatsManager manager = MatchStatsManager.Instance;
-        if (manager == null || manager.Runner == null) return;
+        // MatchStatsManager.Instance is assigned in Awake -- at scene load, strictly before Fusion
+        // spawns scene NetworkObjects. NullChecksForNetworkedProperties is enabled for this project,
+        // so reading Entries before the state block is allocated throws; Object.IsValid is the
+        // project's established "has this NetworkObject actually spawned yet" guard (see
+        // NetworkedSpawnManager.cs and TeamScoreDisplay.cs's lazy-bind checks).
+        if (manager == null || manager.Object == null || !manager.Object.IsValid || manager.Runner == null) return;
 
         var team1Rows = new List<ScoreboardRow>();
         var team2Rows = new List<ScoreboardRow>();

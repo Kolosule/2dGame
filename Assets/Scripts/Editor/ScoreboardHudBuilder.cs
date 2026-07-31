@@ -57,7 +57,9 @@ public static class ScoreboardHudBuilder
         var backdrop = panel.GetComponent<Image>();
         if (backdrop == null) backdrop = Undo.AddComponent<Image>(panel);
         backdrop.color = new Color(0f, 0f, 0f, 0.75f);
-        backdrop.raycastTarget = true;
+        // Purely informational -- never intercept pointer events (the PostMatch results panel's
+        // Return-to-Lobby button lives on the same canvas and must stay clickable).
+        backdrop.raycastTarget = false;
 
         var old = panel.transform.Find("ScoreboardContent");
         if (old != null) Undo.DestroyObjectImmediate(old.gameObject);
