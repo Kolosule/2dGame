@@ -30,6 +30,7 @@ public class MatchPhaseHud : MonoBehaviour
     [SerializeField] private TMP_Text finalScoreText;
     [SerializeField] private TMP_Text returnCountdownText;
     [SerializeField] private Button returnToLobbyButton;
+    [SerializeField] private ScoreboardPanel scoreboardPanel;
 
     private MatchManager bound;
 
@@ -112,6 +113,8 @@ public class MatchPhaseHud : MonoBehaviour
             if (returnToLobbyButton != null)
                 returnToLobbyButton.gameObject.SetActive(bound.LocalPlayerIsHost());
         }
+
+        if (scoreboardPanel != null) scoreboardPanel.SetForcedVisible(phase == MatchPhase.PostMatch);
     }
 
     private void OnReturnToLobbyClicked()
