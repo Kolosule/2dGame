@@ -33,19 +33,42 @@
 | Score weight — coin deposited | `+0.75` |
 | Score weight — flag carry second | `+1` |
 | Score weight — flag return | `+20` |
-| Display-name capacity | `NetworkString<_64>` (matches `LobbyProtocol.MaxNicknameBytes`) |
+| Display-name capacity | `NetworkString<_16>` (matches `LobbyProtocol.MaxNicknameChars` = 16, which is what `SanitizeNickname` actually caps to — **not** `MaxNicknameBytes` = 64, which is the UTF-8 wire budget, a different unit) |
 | Input | Hold `<Keyboard>/tab`, new `UI/Scoreboard` action, no interaction modifier (plain press/release) |
 
 ### How to run tests
 
-EditMode tests run in Unity: **Window ▸ General ▸ Test Runner ▸ EditMode ▸ Run All**.
+**Environment truth, verified on this machine in three previous runs on this branch — read this before writing any "tests pass" claim:**
+
+- **NUnit does NOT run outside the Unity editor here** (no `nunit.framework.dll` is reachable). The committed NUnit `[Test]` files are the **user's** Test Runner gate. They are still required deliverables — write them exactly as specified — but you cannot execute them.
+- **Your execution evidence is a plain-`Main` harness**: compile the engine-free `Game.*.Core` sources plus a hand-written `class H { static int Main() }` assert harness against `netstandard 2.1` using `C:\Program Files\Unity\Hub\Editor\6000.3.0f1\Editor\Data\DotNetSdkRoslyn\csc.dll`, write a `net6.0` `runtimeconfig.json` beside the exe, and run it on `C:\Program Files\Unity\Hub\Editor\6000.3.0f1\Editor\Data\NetCoreRuntime\dotnet.exe` (it carries `Microsoft.NETCore.App 6.0.21`). Mirror every NUnit case as a harness assertion so the numbers you report correspond 1:1 to the committed tests.
+- **Report the two separately.** "Harness: N/N assertions pass" is execution evidence. "Compile gate: exit 0" is not. Never write "tests pass" meaning only that it compiled.
+
+EditMode tests run in Unity for the **user**: Window ▸ General ▸ Test Runner ▸ EditMode ▸ Run All. Note this as pending in your report; do not claim it.
 
 If the editor holds the project lock (`Unity.exe -batchmode -runTests` then fails), use the bundled-Roslyn workaround: compile the engine-free core `.cs` plus a hand-written assert harness against `netstandard 2.1` with
 `C:\Program Files\Unity\Hub\Editor\6000.3.0f1\Editor\Data\DotNetSdkRoslyn\csc.dll`, write a `net8.0` `runtimeconfig.json` beside the exe, and run it on
 `C:\Program Files\Unity\Hub\Editor\6000.3.0f1\Editor\Data\NetCoreRuntime\dotnet.exe`.
-For the whole-surface compile gate, build a `@response.rsp` for `csc.dll` referencing the netstandard ref, `Editor\Data\Managed\UnityEngine\*.dll`, `Assets\Photon\Fusion\Assemblies\*.dll`, and `Library\ScriptAssemblies\*.dll` (skip `*Editor*` / `*CodeGen*` / `*Tests*`), compiling every `Assets/Scripts/**/*.cs` **except** the asmdef-owned folders (`Buffs/Core`, `Combat/Core`, `Enemy/AI`, `Hud/Core`, `Match/Core`, `Net`, `Player/Animation/Core`, `Player/Movement/Core`, `Stats/Core` once Task 1 lands). Quote every path inside the `.rsp` ("Program Files" has a space). When a core assembly changed in this branch, drop its stale `Library\ScriptAssemblies\Game.*.Core.dll` from the references and compile that folder's `.cs` inline instead.
+For the whole-surface compile gate, build a `@response.rsp` for `csc.dll` referencing the netstandard ref, `Editor\Data\Managed\UnityEngine\*.dll`, `Assets\Photon\Fusion\Assemblies\*.dll`, and `Library\ScriptAssemblies\*.dll` (skip `*Editor*` / `*CodeGen*` / `*Tests*`), compiling every `Assets/Scripts/**/*.cs` **except** the asmdef-owned folders (`Buffs/Core`, `Combat/Core`, `Enemy/AI`, `Hud/Core`, `Match/Core`, `Net`, `Player/Animation/Core`, `Player/Movement/Core`, `Stats/Core` once Task 1 lands). Quote every path inside the `.rsp` ("Program Files" has a space).
 
-Networked/Fusion behavior (Tasks 2–10 beyond their pure-math pieces) is verified by entering Play mode as Host (single-player mode is already the default in `GameNetworkManager`) and observing the documented effect. **A clean compile is not verification.** Report separately what was executed and what was only compiled.
+**Compile-gate gotchas, all previously hit on this branch:**
+- **EXCLUDE `Assembly-CSharp.dll` from the reference list.** A stale copy produces bogus `CS1503`/`CS0117` errors against freshly compiled sources.
+- **This branch changes `Game.Hud.Core` (Task 8) and adds `Game.Stats.Core` (Task 1).** Drop both stale `Library\ScriptAssemblies\Game.Hud.Core.dll` and any `Game.Stats.Core.dll` from the references and compile those folders' `.cs` inline instead.
+- **Baseline warning count entering this plan is 116** (pre-existing `CS0649`/`CS0414`/`CS0436`/`CS0169`). New `[SerializeField]` fields legitimately add `CS0649`s — attribute any increase to specific new fields rather than waving it through.
+- **PowerShell gotcha:** `powershell -File script.ps1 -Sources "a","b","c"` mis-splits arrays when nested through the Bash tool. Build `$Sources` natively via the PowerShell tool instead.
+
+**A clean compile is not verification.** Report separately what was executed and what was only compiled.
+
+### What you CANNOT do (and must not claim)
+
+You have no Unity Editor and no Play mode. Every step in this plan labeled **"Manual scene setup"** or **"Manual verification"** is the **user's** work, not yours:
+
+- Do not create GameObjects, add components, or wire serialized fields in `Assets/Scenes/Gameplay.unity`.
+- Do not run the `Tools ▸ Match ▸ …` menu builders — you only write the builder *script*.
+- Do not `git add` `Assets/Scenes/Gameplay.unity` (it is the user's working file; staging it would sweep up unrelated local edits).
+- Do not enter Play mode, and never report a Play-mode result.
+
+Write the code, run the harness and the compile gate, commit **code only**, and list every manual step you skipped under "Pending user verification" in your report.
 
 ---
 
@@ -73,7 +96,7 @@ Networked/Fusion behavior (Tasks 2–10 beyond their pure-math pieces) is verifi
 - `Assets/Scripts/Hud/MatchPhaseHud.cs` — forces the scoreboard visible for the whole `PostMatch` phase.
 - `Assets/InputSystem_Actions.inputactions` — new `UI/Scoreboard` action bound to `<Keyboard>/tab`.
 
-**Also modified (manual Unity editor steps, not hand-edited YAML):** `Assets/Scenes/Gameplay.unity` — gains the `MatchStatsManager` GameObject (Task 2), the `ScoreboardPanel` hierarchy built by `ScoreboardHudBuilder` (Task 9), and the `ScoreboardInputReader` + `MatchPhaseHud` field wiring (Task 10). Every scene change happens through the Unity Editor UI or the one-click builder, never by hand-editing scene YAML. No existing HUD surface (`TeamScoreDisplay`, `HudToastFeed`, `BuffIconDisplay`) changes.
+**Modified by the USER, not by any implementer:** `Assets/Scenes/Gameplay.unity` — gains the `MatchStatsManager` GameObject (Task 2), the `ScoreboardPanel` hierarchy built by `ScoreboardHudBuilder` (Task 9), and the `ScoreboardInputReader` + `MatchPhaseHud` field wiring (Task 10). Every scene change happens through the Unity Editor UI or the one-click builder, never by hand-editing scene YAML and never by an implementer subagent. No existing HUD surface (`TeamScoreDisplay`, `HudToastFeed`, `BuffIconDisplay`) changes.
 
 ---
 
@@ -598,7 +621,7 @@ git commit -m "feat(stats): pure score/roster math in a new Game.Stats.Core asse
 **Interfaces:**
 - Consumes: `Game.Stats.Core.RosterIndex.TryResolve` (Task 1), `Game.Stats.Core.ScoreWeights` (Task 1).
 - Produces:
-  - `struct PlayerStatEntry : INetworkStruct { NetworkBool Active; byte Team; NetworkString<_64> DisplayName; NetworkBool IsDead; int Kills; int Deaths; int Captures; int CoinsDeposited; int FlagCarrySeconds; int FlagReturns; }`
+  - `struct PlayerStatEntry : INetworkStruct { NetworkBool Active; byte Team; NetworkString<_16> DisplayName; NetworkBool IsDead; int Kills; int Deaths; int Captures; int CoinsDeposited; int FlagCarrySeconds; int FlagReturns; }`
   - `class MatchStatsManager : NetworkBehaviour` with `static MatchStatsManager Instance`, `const int RosterCapacity = 20`, `NetworkArray<PlayerStatEntry> Entries`, `ScoreWeights Weights`.
   - `void RegisterPlayer(int playerId, int team, string displayName)`
   - `void SetTeam(int playerId, int team)`
@@ -790,7 +813,9 @@ public struct PlayerStatEntry : INetworkStruct
 {
     public NetworkBool Active;
     public byte Team;
-    public NetworkString<_64> DisplayName;
+    // _16 matches LobbyProtocol.MaxNicknameChars, the cap SanitizeNickname actually enforces.
+    // (MaxNicknameBytes = 64 is the UTF-8 wire budget for the lobby message -- a different unit.)
+    public NetworkString<_16> DisplayName;
     public NetworkBool IsDead;
     public int Kills;
     public int Deaths;
@@ -837,7 +862,7 @@ Enter Play mode as Host (single-player mode). Confirm no console errors on scene
 - [ ] **Step 5: Commit**
 
 ```bash
-git add "Assets/Scripts/Stats/MatchStatsManager.cs" "Assets/Scripts/Stats/MatchStatsManager.cs.meta" "Assets/Scenes/Gameplay.unity"
+git add "Assets/Scripts/Stats/MatchStatsManager.cs" "Assets/Scripts/Stats/MatchStatsManager.cs.meta"
 git commit -m "feat(stats): add MatchStatsManager, the central always-interested stat table"
 ```
 
@@ -1898,17 +1923,15 @@ public static class ScoreboardHudBuilder
         Transform team1Container = MakeColumn("Team1Column", content.transform, "BLUE");
         Transform team2Container = MakeColumn("Team2Column", content.transform, "RED");
 
-        ScoreboardRowView team1Template = MakeRowTemplate("Team1RowTemplate", team1Container);
-        ScoreboardRowView team2Template = MakeRowTemplate("Team2RowTemplate", team2Container);
+        // ONE template, shared by both columns: ScoreboardPanel.PaintTeam Instantiates it into
+        // whichever container it is pooling for, so a second per-column template would be dead
+        // weight. It lives under Team1Column and stays inactive (ScoreboardPanel.Awake hides it).
+        ScoreboardRowView rowTemplate = MakeRowTemplate("RowTemplate", team1Container);
 
         rootProp.objectReferenceValue = panel;
         so.FindProperty("team1RowContainer").objectReferenceValue = team1Container;
         so.FindProperty("team2RowContainer").objectReferenceValue = team2Container;
-        // ScoreboardPanel has a single rowTemplate field shared by both columns (it Instantiates
-        // into whichever container it's pooling for); keep the Team1 template and discard the
-        // Team2 one that was built only to keep the two columns visually symmetric while editing.
-        so.FindProperty("rowTemplate").objectReferenceValue = team1Template;
-        Object.DestroyImmediate(team2Template.gameObject);
+        so.FindProperty("rowTemplate").objectReferenceValue = rowTemplate;
         so.ApplyModifiedProperties();
 
         panel.SetActive(true);
@@ -2049,7 +2072,7 @@ Enter Play mode as Host + one client (Multiplayer Play Mode). Temporarily call `
 - [ ] **Step 7: Commit**
 
 ```bash
-git add "Assets/Scripts/Hud/ScoreboardRowView.cs" "Assets/Scripts/Hud/ScoreboardRowView.cs.meta" "Assets/Scripts/Hud/ScoreboardPanel.cs" "Assets/Scripts/Hud/ScoreboardPanel.cs.meta" "Assets/Scripts/Editor/ScoreboardHudBuilder.cs" "Assets/Scripts/Editor/ScoreboardHudBuilder.cs.meta" "Assets/Scenes/Gameplay.unity"
+git add "Assets/Scripts/Hud/ScoreboardRowView.cs" "Assets/Scripts/Hud/ScoreboardRowView.cs.meta" "Assets/Scripts/Hud/ScoreboardPanel.cs" "Assets/Scripts/Hud/ScoreboardPanel.cs.meta" "Assets/Scripts/Editor/ScoreboardHudBuilder.cs" "Assets/Scripts/Editor/ScoreboardHudBuilder.cs.meta"
 git commit -m "feat(hud): scoreboard panel UI + one-click scene builder"
 ```
 
@@ -2250,7 +2273,7 @@ Enter Play mode as Host + one client (Multiplayer Play Mode), both on different 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add "Assets/InputSystem_Actions.inputactions" "Assets/Scripts/Hud/ScoreboardInputReader.cs" "Assets/Scripts/Hud/ScoreboardInputReader.cs.meta" "Assets/Scripts/Hud/MatchPhaseHud.cs" "Assets/Scenes/Gameplay.unity"
+git add "Assets/InputSystem_Actions.inputactions" "Assets/Scripts/Hud/ScoreboardInputReader.cs" "Assets/Scripts/Hud/ScoreboardInputReader.cs.meta" "Assets/Scripts/Hud/MatchPhaseHud.cs"
 git commit -m "feat(hud): hold-Tab scoreboard input and PostMatch auto-show"
 ```
 
