@@ -213,6 +213,10 @@ public class NetworkedHomeBase : NetworkBehaviour
         // Credit the player's personal deposited-value total so buffs progress.
         PlayerBuffs buffs = playerNetObj.GetComponent<PlayerBuffs>();
         if (buffs != null) buffs.ServerAddDepositedValue(points);
+
+        // Mirror into the central match-stats table for the scoreboard.
+        if (MatchStatsManager.Instance != null)
+            MatchStatsManager.Instance.RecordDeposit(playerNetObj.InputAuthority, points);
     }
 
     /// <summary>
