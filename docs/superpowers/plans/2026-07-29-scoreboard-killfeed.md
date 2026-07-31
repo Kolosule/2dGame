@@ -602,7 +602,7 @@ MonoImporter:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: Test Runner ▸ EditMode ▸ Run All (or the Roslyn harness from "How to run tests").
-Expected: PASS — all 15 cases across `ScoreFormulaTests`, `FlagCarryAccumulatorTests`, `RosterIndexTests` green.
+Expected: PASS — all 16 cases across `ScoreFormulaTests` (7), `FlagCarryAccumulatorTests` (4), `RosterIndexTests` (5) green.
 
 - [ ] **Step 5: Commit**
 
