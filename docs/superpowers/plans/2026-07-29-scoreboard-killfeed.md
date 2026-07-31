@@ -1747,6 +1747,21 @@ public class ScoreboardPanel : MonoBehaviour
         SetVisible(false);
     }
 
+    /// <summary>
+    /// Repaint every visible frame, so a board held open during a fight keeps up with kills,
+    /// coins and carry time instead of freezing at the moment of key-down. Gated on visibility:
+    /// while hidden — the default state — this is one boolean check and an early return, no
+    /// roster iteration and no sort. Mirrors MatchPhaseHud's LateUpdate pattern.
+    /// </summary>
+    private void LateUpdate()
+    {
+        if (!IsShowing()) return;
+        PaintRows();
+    }
+
+    /// <summary>True only when the board is both wanted AND actually able to show.</summary>
+    private bool IsShowing() => panelRoot != null && (heldVisible || forcedVisible);
+
     /// <summary>Local input reader calls this on the Scoreboard action's performed/canceled.</summary>
     public void SetHeld(bool held)
     {
@@ -1763,9 +1778,10 @@ public class ScoreboardPanel : MonoBehaviour
 
     private void Repaint()
     {
-        bool visible = heldVisible || forcedVisible;
-        SetVisible(visible);
-        if (visible) PaintRows();
+        SetVisible(heldVisible || forcedVisible);
+        // Paint immediately on the transition too, so opening the board never shows a blank or
+        // stale frame before LateUpdate's first pass.
+        if (IsShowing()) PaintRows();
     }
 
     private void SetVisible(bool visible)
