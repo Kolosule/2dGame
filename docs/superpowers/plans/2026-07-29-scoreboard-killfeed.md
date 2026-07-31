@@ -665,8 +665,10 @@ public class MatchStatsManager : NetworkBehaviour
     /// <summary>Matches GameNetworkManager.maxPlayers (20); slots are indexed by PlayerId directly.</summary>
     public const int RosterCapacity = 20;
 
+    // Auto-property form, NOT `=> default` — Fusion's weaver requires `{ get; }` for a networked
+    // collection (matches the house precedent at PlayerBuffs.cs:15).
     [Networked, Capacity(RosterCapacity)]
-    public NetworkArray<PlayerStatEntry> Entries => default;
+    public NetworkArray<PlayerStatEntry> Entries { get; }
 
     [Header("Overall score weights (tunable -- see the design spec's weight table)")]
     [SerializeField] private float killWeight = 10f;
