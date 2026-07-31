@@ -1511,9 +1511,18 @@ public class ScoreboardSortTests
     public void TiedScoresPreserveInputOrder()
     {
         // Stable sort: ties keep the order they arrived in, so a fresh repaint doesn't jitter rows.
-        var input = new List<ScoreboardRow> { Row(1, 20f), Row(2, 20f), Row(3, 20f) };
+        //
+        // MUST use more than 16 tied rows. .NET introsort falls back to INSERTION SORT for
+        // partitions under ~16 elements, and insertion sort is incidentally stable — so a 3-row
+        // version of this test passes even against an unstable List.Sort implementation and
+        // therefore guards nothing. 20 also matches the roster capacity. Do not "simplify" this.
+        var input = new List<ScoreboardRow>();
+        for (int i = 1; i <= 20; i++) input.Add(Row(i, 20f));
+
         var result = ScoreboardSort.SortByScoreDescending(input);
-        Assert.AreEqual(new[] { 1, 2, 3 }, new[] { result[0].PlayerId, result[1].PlayerId, result[2].PlayerId });
+
+        for (int i = 0; i < 20; i++)
+            Assert.AreEqual(i + 1, result[i].PlayerId, $"row {i} moved; sort is not stable");
     }
 
     [Test]
