@@ -44,16 +44,37 @@ public class ScoreboardPanel : MonoBehaviour
         Repaint();
     }
 
+    /// <summary>
+    /// Per-frame render-path read of already-replicated stats while the panel is held open --
+    /// same "read networked state on the render path, gated on visibility" pattern as
+    /// MatchPhaseHud.LateUpdate's countdown/timer text. Costs nothing while hidden (the default).
+    /// </summary>
+    private void LateUpdate()
+    {
+        if (!IsShowing()) return;
+        PaintRows();
+    }
+
     private void Repaint()
     {
         bool visible = heldVisible || forcedVisible;
         SetVisible(visible);
-        if (visible) PaintRows();
+        // Paint immediately on the transition too, so there's no one-frame blank/stale flash
+        // before LateUpdate runs.
+        if (IsShowing()) PaintRows();
     }
 
     private void SetVisible(bool visible)
     {
         if (panelRoot != null) panelRoot.SetActive(visible);
+    }
+
+    /// <summary>True only when the panel can actually display: wired up and currently requested
+    /// visible. Guards both Repaint's immediate paint and LateUpdate's per-frame paint so a
+    /// misconfigured (panelRoot == null) panel never pays for roster/sort/pool work it can't show.</summary>
+    private bool IsShowing()
+    {
+        return panelRoot != null && (heldVisible || forcedVisible);
     }
 
     private void PaintRows()
