@@ -72,7 +72,10 @@ public static class ScoreboardHudBuilder
         crt.anchorMax = new Vector2(0.5f, 0.5f);
         crt.pivot = new Vector2(0.5f, 0.5f);
         crt.sizeDelta = new Vector2(1000f, 640f);
-        crt.anchoredPosition = Vector2.zero;
+        // Offset down from center so the board doesn't collide with the PostMatch results banner,
+        // which was reshaped into a top strip (see the Unity setup guide, "Step 5"). Baked in here
+        // so re-running the builder reproduces that fix instead of resetting to (0, 0).
+        crt.anchoredPosition = new Vector2(0f, -150f);
 
         var contentLayout = content.GetComponent<HorizontalLayoutGroup>();
         contentLayout.spacing = 24f;
@@ -119,7 +122,35 @@ public static class ScoreboardHudBuilder
         var header = MakeText(name + "Header", go.transform, 28, Color.white, headerLabel);
         header.fontStyle = FontStyles.Bold;
 
+        // Column labels, one per row cell, same widths/order as MakeRowTemplate's cells so they
+        // stay aligned under the data. Each column builds its own copy (rather than one shared row
+        // spanning both) because the two VerticalLayoutGroups size independently.
+        MakeHeaderRow(go.transform);
+
         return go.transform;
+    }
+
+    private static void MakeHeaderRow(Transform parent)
+    {
+        var go = new GameObject("ColumnHeaders", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+        Undo.RegisterCreatedObjectUndo(go, UndoLabel);
+        go.transform.SetParent(parent, false);
+
+        var layout = go.GetComponent<HorizontalLayoutGroup>();
+        layout.spacing = 8f;
+        layout.childForceExpandWidth = false;
+
+        Color labelColor = new Color(0.62f, 0.64f, 0.7f);
+        foreach (string label in new[] { "Name", "Score", "K/D", "Cap", "Coins", "Carry", "Ret" })
+        {
+            var text = MakeText(label + "HeaderLabel", go.transform, 14, labelColor, label);
+            text.fontStyle = FontStyles.Bold;
+        }
+
+        // Blank spacers matching the two icon cells' width, so the header row's total width
+        // matches a data row's and nothing after "Ret" drifts out of alignment.
+        MakeSpacer("DeadIconHeaderSpacer", go.transform, 20f);
+        MakeSpacer("CarryIconHeaderSpacer", go.transform, 20f);
     }
 
     private static ScoreboardRowView MakeRowTemplate(string name, Transform parent)
@@ -192,5 +223,17 @@ public static class ScoreboardHudBuilder
         img.raycastTarget = false;
         img.enabled = false; // toggled per-row by ScoreboardRowView.Paint
         return img;
+    }
+
+    /// <summary>Invisible layout-only cell, used to keep the header row's width matching a data row's.</summary>
+    private static void MakeSpacer(string name, Transform parent, float width)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(LayoutElement));
+        Undo.RegisterCreatedObjectUndo(go, UndoLabel);
+        go.transform.SetParent(parent, false);
+
+        var le = go.GetComponent<LayoutElement>();
+        le.preferredWidth = width;
+        le.preferredHeight = 20f;
     }
 }
