@@ -120,9 +120,19 @@ public class PlayerCameraShakeHandler : MonoBehaviour
         if (playerCamera == null)
             return;
 
+        // Client-local preference. At 0 we skip the call entirely rather than requesting a
+        // zero-amplitude shake, so the camera never enters its shake state at all.
+        float userScale = SettingsStore.CameraShakeIntensity;
+        if (userScale <= 0f)
+            return;
+
         // Calculate shake intensity based on damage
         float intensity = baseShakeIntensity + (damageAmount * damageToIntensityMultiplier);
         intensity = Mathf.Clamp(intensity, baseShakeIntensity, maxShakeIntensity);
+
+        // The user scale is applied AFTER the authored clamp, so maxShakeIntensity still bounds the
+        // default (1.0) case while a 2.0 preference can deliberately exceed it.
+        intensity *= userScale;
 
         // Calculate shake duration
         float duration = baseShakeDuration;
