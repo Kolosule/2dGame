@@ -46,6 +46,12 @@ public class ReconnectController : MonoBehaviour
         StartCoroutine(FallBackToMenu("Reconnect cancelled."));
     }
 
+    // Wall-clock ceiling on a single StartGame attempt (Fix 3). A server that accepts the connection
+    // but never finishes the handshake would otherwise stall the attempt counter forever, blowing
+    // the spec's ~23s "then the main menu" budget. Time.realtimeSinceStartup, not scaled time — this
+    // is a wall-clock deadline, not a gameplay one.
+    private const float AttemptTimeoutSeconds = 15f;
+
     private IEnumerator ReconnectLoop(string reason)
     {
         // Once the runner dies the gameplay scene is full of despawned husks. Get back to the menu
@@ -54,20 +60,37 @@ public class ReconnectController : MonoBehaviour
         UnityEngine.SceneManagement.SceneManager.LoadScene(net.MenuSceneIndex);
         yield return null;              // let the load settle before touching the new scene's UI
         net.ReacquireMenuUI();
-        net.ShowReconnectingUI($"Connection lost ({reason}) — reconnecting…");
 
         for (int attempt = 1; attempt <= ReconnectBackoff.MaxAttempts; attempt++)
         {
             net.ShowReconnectingUI(
-                $"Connection lost — reconnecting… (attempt {attempt} of {ReconnectBackoff.MaxAttempts})");
-            yield return new WaitForSeconds(ReconnectBackoff.DelaySecondsForAttempt(attempt));
+                $"Connection lost ({reason}) — reconnecting… (attempt {attempt} of {ReconnectBackoff.MaxAttempts})");
+            yield return new WaitForSecondsRealtime(ReconnectBackoff.DelaySecondsForAttempt(attempt));
 
             net.TeardownRunner();
             yield return null;          // Destroy is deferred to end of frame; rebuild next frame
             net.BuildRunner();
 
             var task = net.TryReconnectAsync();
-            while (!task.IsCompleted) yield return null;
+            float deadline = Time.realtimeSinceStartup + AttemptTimeoutSeconds;
+            bool timedOut = false;
+            while (!task.IsCompleted)
+            {
+                if (Time.realtimeSinceStartup >= deadline)
+                {
+                    timedOut = true;
+                    break;
+                }
+                yield return null;
+            }
+
+            if (timedOut)
+            {
+                // The abandoned task may still complete later (fire-and-forget) — that is accepted;
+                // there is no cancellation path for an in-flight Fusion StartGame.
+                Debug.LogWarning($"⚠️ Reconnect attempt {attempt} timed out after {AttemptTimeoutSeconds}s — moving on.");
+                continue;
+            }
 
             bool ok = !task.IsFaulted && !task.IsCanceled && task.Result;
             if (task.IsFaulted)
@@ -87,6 +110,13 @@ public class ReconnectController : MonoBehaviour
 
     private IEnumerator FallBackToMenu(string message)
     {
+        // Latch BEFORE tearing the runner down: TeardownRunner -> runner.Shutdown() re-enters
+        // GameNetworkManager.OnShutdown -> TryBeginReconnect, and without this latch the guard chain
+        // passes (loop is already null here, so BeginReconnect's idempotency check doesn't fire) and
+        // a second ReconnectLoop starts concurrently with this one. TryReconnectAsync clears the
+        // latch on the next deliberate connection attempt, so it does not stick.
+        net.MarkIntentionalDisconnect();
+
         // Leave a live, unused runner behind and the menu's Join button would call StartGame on a
         // dead one. Rebuild so a manual Join still works.
         net.TeardownRunner();

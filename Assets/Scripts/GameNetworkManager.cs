@@ -166,6 +166,9 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public async void StartHost()
     {
         startedAsClient = false;
+        intentionalDisconnect = false;
+        hasBeenConnected = false;
+        connectedSessionName = null;
         var args = new StartGameArgs()
         {
             GameMode = GameMode.Host, // AutoHostOrClient creates separate sessions — never use it here
@@ -199,6 +202,9 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public async void StartClient()
     {
         startedAsClient = true;
+        intentionalDisconnect = false;
+        hasBeenConnected = false;
+        connectedSessionName = null;
         var args = new StartGameArgs()
         {
             GameMode = GameMode.Client,
@@ -232,6 +238,9 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     async void StartServer()
     {
         startedAsClient = false;
+        intentionalDisconnect = false;
+        hasBeenConnected = false;
+        connectedSessionName = null;
         var args = new StartGameArgs()
         {
             GameMode = GameMode.Server,
@@ -287,6 +296,9 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         menuUI = FindFirstObjectByType<MainMenuUI>(FindObjectsInactive.Include);
         lobbyUI = FindFirstObjectByType<LobbyScreenUI>(FindObjectsInactive.Include);
 
+        // The reloaded scene's UI holds serialized references to the duplicate GameNetworkManager
+        // that the Awake dup-guard destroyed, so they must be re-pointed at this persistent instance
+        // or their buttons call into a destroyed object and silently do nothing.
         if (menuUI != null) menuUI.SetNetworkManager(this);
         if (lobbyUI != null) lobbyUI.SetNetworkManager(this);
     }
@@ -314,7 +326,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     /// <summary>A reconnect attempt succeeded: drop the overlay and re-enter the normal lobby flow.</summary>
     public void OnReconnectSucceeded()
     {
-        connectedSessionName = string.IsNullOrEmpty(connectedSessionName) ? sessionName : connectedSessionName;
         if (menuUI != null) menuUI.HideReconnecting();
         EnterLobbyUI();
     }
@@ -818,15 +829,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // Only care about arriving back in the menu scene (the return-to-lobby path). The gameplay
         // load has a different build index and is handled by the gameplay-side managers.
         if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex != menuSceneIndex)
-        {
-            // A player pulled into a RUNNING match — a mid-match late joiner, or a reconnecting
-            // player — never went through LoadGameplayScene's lobbyUI.Hide(), so without this the
-            // lobby panel stays drawn on top of gameplay. Pre-existing, but reconnection turns a
-            // rare path into the common one.
-            if (lobbyUI != null) lobbyUI.Hide();
-            if (menuUI != null) menuUI.Hide();
             return;
-        }
 
         // The persistent GameNetworkManager's serialized menu/lobby refs died with the previous
         // menu scene instance; re-acquire the new ones.
