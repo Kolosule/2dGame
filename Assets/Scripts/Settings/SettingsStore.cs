@@ -67,14 +67,25 @@ public static class SettingsStore
     public static void SetResolution(int width, int height)
     {
         EnsureLoaded();
-        if (width <= 0 || height <= 0) return;
+        if (!SetResolutionNoNotify(width, height)) return;
+        PlayerPrefs.Save();
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// Core of <see cref="SetResolution"/> without the save/notify, so batch writers
+    /// (the Reset*ToDefaults methods) can fold a resolution change into a single flush. Keeps the
+    /// same width/height-move-together guard; returns false (no-op) if it rejects the values.
+    /// </summary>
+    private static bool SetResolutionNoNotify(int width, int height)
+    {
+        if (width <= 0 || height <= 0) return false;
 
         resolutionWidth = width;
         resolutionHeight = height;
         PlayerPrefs.SetInt(SettingsCatalog.WidthKey, width);
         PlayerPrefs.SetInt(SettingsCatalog.HeightKey, height);
-        PlayerPrefs.Save();
-        RaiseChanged();
+        return true;
     }
 
     public static int DisplayMode
@@ -156,30 +167,42 @@ public static class SettingsStore
         PlayerPrefs.Save();
     }
 
+    /// <summary>Resets all audio fields and flushes/notifies exactly once for the whole batch.</summary>
     public static void ResetAudioToDefaults()
     {
         EnsureLoaded();
-        masterVolume = WriteFloat(SettingsCatalog.MasterVolumeKey, SettingsCatalog.MasterVolumeDefault);
-        musicVolume = WriteFloat(SettingsCatalog.MusicVolumeKey, SettingsCatalog.MusicVolumeDefault);
-        sfxVolume = WriteFloat(SettingsCatalog.SfxVolumeKey, SettingsCatalog.SfxVolumeDefault);
-        uiVolume = WriteFloat(SettingsCatalog.UiVolumeKey, SettingsCatalog.UiVolumeDefault);
+        masterVolume = WriteFloatNoNotify(SettingsCatalog.MasterVolumeKey, SettingsCatalog.MasterVolumeDefault);
+        musicVolume = WriteFloatNoNotify(SettingsCatalog.MusicVolumeKey, SettingsCatalog.MusicVolumeDefault);
+        sfxVolume = WriteFloatNoNotify(SettingsCatalog.SfxVolumeKey, SettingsCatalog.SfxVolumeDefault);
+        uiVolume = WriteFloatNoNotify(SettingsCatalog.UiVolumeKey, SettingsCatalog.UiVolumeDefault);
+        PlayerPrefs.Save();
+        RaiseChanged();
     }
 
+    /// <summary>
+    /// Resets all video fields, including resolution, and flushes/notifies exactly once for the
+    /// whole batch (the resolution write goes through the no-notify core, not the public setter).
+    /// </summary>
     public static void ResetVideoToDefaults()
     {
         EnsureLoaded();
         NativeResolution(out int nativeWidth, out int nativeHeight);
-        SetResolution(nativeWidth, nativeHeight);
-        displayMode = WriteInt(SettingsCatalog.DisplayModeKey, SettingsCatalog.DisplayModeDefault);
-        vsync = WriteInt(SettingsCatalog.VSyncKey, SettingsCatalog.VSyncDefault);
-        fpsCap = WriteInt(SettingsCatalog.FpsCapKey, SettingsCatalog.FpsCapDefault);
+        SetResolutionNoNotify(nativeWidth, nativeHeight);
+        displayMode = WriteIntNoNotify(SettingsCatalog.DisplayModeKey, SettingsCatalog.DisplayModeDefault);
+        vsync = WriteIntNoNotify(SettingsCatalog.VSyncKey, SettingsCatalog.VSyncDefault);
+        fpsCap = WriteIntNoNotify(SettingsCatalog.FpsCapKey, SettingsCatalog.FpsCapDefault);
+        PlayerPrefs.Save();
+        RaiseChanged();
     }
 
+    /// <summary>Resets all gameplay fields and flushes/notifies exactly once for the whole batch.</summary>
     public static void ResetGameplayToDefaults()
     {
         EnsureLoaded();
-        cameraShake = WriteFloat(SettingsCatalog.CameraShakeKey, SettingsCatalog.CameraShakeDefault);
-        damageNumbers = WriteInt(SettingsCatalog.DamageNumbersKey, SettingsCatalog.DamageNumbersDefault);
+        cameraShake = WriteFloatNoNotify(SettingsCatalog.CameraShakeKey, SettingsCatalog.CameraShakeDefault);
+        damageNumbers = WriteIntNoNotify(SettingsCatalog.DamageNumbersKey, SettingsCatalog.DamageNumbersDefault);
+        PlayerPrefs.Save();
+        RaiseChanged();
     }
 
     /// <summary>
@@ -209,6 +232,23 @@ public static class SettingsStore
         PlayerPrefs.SetInt(key, value);
         PlayerPrefs.Save();
         RaiseChanged();
+        return value;
+    }
+
+    /// <summary>
+    /// Same field-and-PlayerPrefs write as <see cref="WriteFloat"/> but without the save/notify, for
+    /// batch writers (the Reset*ToDefaults methods) that flush and raise once for several fields.
+    /// </summary>
+    private static float WriteFloatNoNotify(string key, float value)
+    {
+        PlayerPrefs.SetFloat(key, value);
+        return value;
+    }
+
+    /// <summary>Int counterpart of <see cref="WriteFloatNoNotify"/>.</summary>
+    private static int WriteIntNoNotify(string key, int value)
+    {
+        PlayerPrefs.SetInt(key, value);
         return value;
     }
 
