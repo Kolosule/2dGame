@@ -13,7 +13,7 @@ below only fail silently on screen and loudly in the log.
 
 ## 0. Setup — do this first
 
-1. **Add `ReconnectController` to the persistent `GameNetworkManager` GameObject in
+1. **Add `ReconnectController` to the persistent `NetworkManager` GameObject (the one carrying the `GameNetworkManager` script) in
    `MainMenu.unity`** (select it, **Add Component ▸ Reconnect Controller**). **This is required,
    not optional.** `ReconnectController` is what `GameNetworkManager.TryBeginReconnect` looks for
    on drop; without it, every drop falls straight through to the plain "Disconnected" menu state —
@@ -96,7 +96,7 @@ Testable without 20 peers.
 
 | # | Do | Expect | Fails if |
 |---|---|---|---|
-| 11 | Temporarily set `GameNetworkManager.maxPlayers` to **2** in the Inspector (on the persistent `GameNetworkManager` GameObject in `MainMenu.unity`). Fill the session with 2 players, then disconnect one of them (don't let them reconnect yet). While their seat is held, attempt to connect a **third**, unrelated peer. Then reconnect the original disconnected player | The third peer is **refused** a connection while the seat is held (2 active + 1 held = at cap). The original player can still get back in — their token is recognized regardless of the cap | The third peer is let in anyway (held seats aren't counted against the cap); or the original player is refused on rejoin (their own held seat is blocking them, which shouldn't happen — a known token is always accepted) |
+| 11 | Temporarily set `GameNetworkManager.maxPlayers` to **2** in the Inspector (on the persistent `NetworkManager` GameObject in `MainMenu.unity`). Fill the session with 2 players, then disconnect one of them (don't let them reconnect yet). While their seat is held, attempt to connect a **third**, unrelated peer. Then reconnect the original disconnected player | The third peer is **refused** a connection while the seat is held (2 active + 1 held = at cap). The original player can still get back in — their token is recognized regardless of the cap | The third peer is let in anyway (held seats aren't counted against the cap); or the original player is refused on rejoin (their own held seat is blocking them, which shouldn't happen — a known token is always accepted) |
 
 **Set `maxPlayers` back to 20 when you're done.** Leaving it at 2 will make every subsequent test in
 this guide (or any other playtest) look like the server is full.
