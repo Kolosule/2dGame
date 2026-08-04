@@ -507,8 +507,23 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
     {
         // The ONLY place that accepts/refuses connections (future ban list / lockout goes here).
-        // The player cap itself is enforced by Fusion via StartGameArgs.PlayerCount.
-        request.Accept();
+        //
+        // A held (disconnected) slot RESERVES its seat, which Fusion's PlayerCount cannot express —
+        // Fusion frees its own slot the instant a player drops. So the real cap is enforced here,
+        // while StartGameArgs.PlayerCount stays at maxPlayers as a backstop. Since every held slot
+        // was previously an active one, active + held <= maxPlayers holds by construction.
+        bool known = reconnectRegistry.Has(IdentityTokenCodec.ToHex(token));
+
+        if (ReconnectPolicy.CanAdmit(known, runner.ActivePlayers.Count(), reconnectRegistry.HeldCount, maxPlayers))
+        {
+            request.Accept();
+        }
+        else
+        {
+            Debug.Log($"🚪 Refusing connection: session full " +
+                      $"({runner.ActivePlayers.Count()} active + {reconnectRegistry.HeldCount} held / {maxPlayers}).");
+            request.Refuse();
+        }
     }
 
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason)
