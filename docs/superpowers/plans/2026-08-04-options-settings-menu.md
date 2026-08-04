@@ -1408,7 +1408,7 @@ Expected: **no output at all** (exit code 1 from grep).
 - [ ] **Step 5: Run the whole-surface compile gate**
 
 Same command as Task 2 Step 2.
-Expected: exit code 0. The warning count should **drop** — several deleted public fields were contributing `CS0649`-adjacent noise; note the new baseline for later tasks.
+Expected: exit code 0, **warning count unchanged**. Every deleted field was `public` with an initializer, so none of them was producing a `CS0649` ("never assigned") to begin with — deleting them removes source lines, not warnings. If the count moves in either direction, investigate before continuing rather than adopting the new number as a baseline.
 
 - [ ] **Step 6: Commit**
 
@@ -1476,35 +1476,9 @@ In `Assets/Scripts/Player/PlayerCameraShakeHandler.cs`, replace the body of `Tri
     }
 ```
 
-- [ ] **Step 2: Honour the setting in the manual shake entry point too**
+**Leave `TriggerShakeManual` (lines 143-154) exactly as it is.** It has zero callers repo-wide, and the spec names only the damage path as this setting's consumer — wiring a preference into an entry point nothing calls is speculative. When something starts calling it, that change carries the scale with it.
 
-Still in `PlayerCameraShakeHandler.cs`, replace `TriggerShakeManual` (currently lines 143-154) with:
-
-```csharp
-    /// <summary>
-    /// Manually trigger camera shake (can be called from other scripts). Honours the client-local
-    /// camera-shake preference for the same reason the damage path does: "shake off" has to mean
-    /// no shake, whichever entry point requested it.
-    /// </summary>
-    public void TriggerShakeManual(float intensity, float duration)
-    {
-        float userScale = SettingsStore.CameraShakeIntensity;
-        if (userScale <= 0f)
-            return;
-
-        if (playerCamera == null)
-        {
-            FindPlayerCamera();
-        }
-
-        if (playerCamera != null)
-        {
-            playerCamera.TriggerShake(intensity * userScale, duration);
-        }
-    }
-```
-
-- [ ] **Step 3: Gate damage numbers on the setting**
+- [ ] **Step 2: Gate damage numbers on the setting**
 
 In `Assets/Scripts/Player/HitFeedback.cs`, change line 45 from:
 
@@ -1520,12 +1494,12 @@ to:
         if (damageNumberPrefab != null && SettingsStore.ShowDamageNumbers)
 ```
 
-- [ ] **Step 4: Run the whole-surface compile gate**
+- [ ] **Step 3: Run the whole-surface compile gate**
 
 Same command as Task 2 Step 2.
-Expected: exit code 0, warning count matching the new baseline from Task 4.
+Expected: exit code 0, warning count matching the baseline confirmed in Task 4.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add "Assets/Scripts/Player/PlayerCameraShakeHandler.cs" "Assets/Scripts/Player/HitFeedback.cs"
@@ -1599,9 +1573,6 @@ public class SettingsPanel : MonoBehaviour
     [SerializeField] private TMP_Text musicValueLabel;
     [SerializeField] private TMP_Text sfxValueLabel;
     [SerializeField] private TMP_Text uiValueLabel;
-    [Tooltip("Shown while no AudioMixer is assigned to SettingsService — the sliders persist but " +
-             "are silent until the audio system ships. Optional.")]
-    [SerializeField] private GameObject audioInertNotice;
     [SerializeField] private Button audioResetButton;
 
     [Header("Gameplay")]
@@ -1752,9 +1723,6 @@ public class SettingsPanel : MonoBehaviour
 
         if (damageNumbersToggle != null)
             damageNumbersToggle.SetIsOnWithoutNotify(SettingsStore.ShowDamageNumbers);
-
-        if (audioInertNotice != null)
-            audioInertNotice.SetActive(SettingsService.Mixer == null);
 
         suppressCallbacks = false;
     }
@@ -2121,7 +2089,7 @@ Create `Assets/Scripts/UI/VideoSettingsSection.cs.meta` with guid `f6f33289b9c54
 - [ ] **Step 2: Run the whole-surface compile gate**
 
 Same command as Task 2 Step 2. This is the first gate that includes `SettingsPanel.cs` from Task 6.
-Expected: exit code 0. New `CS0649` warnings are expected and legitimate — every `[SerializeField]` in `SettingsPanel` and `VideoSettingsSection` is assigned in the Unity Inspector, not in code. Count them and attribute each to a specific field; the total increase should equal the number of new serialized fields (32).
+Expected: exit code 0. New `CS0649` warnings are expected and legitimate — every `[SerializeField]` in `SettingsPanel` and `VideoSettingsSection` is assigned in the Unity Inspector, not in code. Count them and attribute each to a specific field; the total increase should equal the number of new serialized fields **without an initializer** — 22 on `SettingsPanel` plus 9 on `VideoSettingsSection` = **31**. `confirmSeconds` has an initializer (`= 10f`) and therefore raises no warning.
 
 - [ ] **Step 3: Commit both UI files together**
 
@@ -2297,7 +2265,7 @@ Canvas
 └── SettingsRoot            (ACTIVE — SettingsPanel + VideoSettingsSection components go HERE)
     └── SettingsWindow      (this is panelRoot; starts inactive, toggled by the panel)
         ├── TabBar          (AudioTabButton, VideoTabButton, GameplayTabButton)
-        ├── AudioTab        (4 sliders + 4 value labels + AudioInertNotice + AudioResetButton)
+        ├── AudioTab        (4 sliders + 4 value labels + AudioResetButton)
         ├── VideoTab        (ResolutionDropdown, DisplayModeDropdown, VSyncToggle,
         │                    FpsCapDropdown, VideoResetButton)
         ├── GameplayTab     (CameraShakeSlider + label, DamageNumbersToggle,
@@ -2310,11 +2278,11 @@ State the critical constraint prominently: **`SettingsPanel` must be on `Setting
 
 2. **Field-by-field wiring table**, each row: field name → what to drag in → required or optional.
 
-`SettingsPanel` (23 serialized fields), in declaration order:
+`SettingsPanel` (22 serialized fields), in declaration order:
 `panelRoot` (→ SettingsWindow, **required**), `closeButton`, `audioTabButton`, `videoTabButton`,
 `gameplayTabButton`, `audioTab`, `videoTab`, `gameplayTab`, `masterSlider`, `musicSlider`,
 `sfxSlider`, `uiSlider`, `masterValueLabel` *(optional)*, `musicValueLabel` *(optional)*,
-`sfxValueLabel` *(optional)*, `uiValueLabel` *(optional)*, `audioInertNotice` *(optional)*,
+`sfxValueLabel` *(optional)*, `uiValueLabel` *(optional)*,
 `audioResetButton`, `cameraShakeSlider`, `cameraShakeValueLabel` *(optional)*,
 `damageNumbersToggle`, `gameplayResetButton`, `video` (→ the `VideoSettingsSection` component on
 SettingsRoot, **required**).
@@ -2359,7 +2327,7 @@ Your final report must list, explicitly and separately:
 
 ## Notes for the reviewer
 
-- **The audio sliders do nothing audible on delivery.** That is the spec's Decision 7, not an incomplete implementation. `SettingsService.Mixer` is null until the (unwritten) audio-system spec ships an `AudioMixer` exposing `MasterVolume` / `MusicVolume` / `SfxVolume` / `UiVolume`. The optional `audioInertNotice` object exists so the UI can say so.
+- **The audio sliders do nothing audible on delivery.** That is the spec's Decision 7, not an incomplete implementation. `SettingsService.Mixer` is null until the (unwritten) audio-system spec ships an `AudioMixer` exposing `MasterVolume` / `MusicVolume` / `SfxVolume` / `UiVolume`. `Mixer` is the one deliberately-unconsumed piece of surface on this branch (the pre-flight review kept it and cut the other two): without it there is no seam for the sliders to apply through and the spec decision is unimplementable.
 - **No test covers `SettingsStore` or `SettingsService` directly.** Both are thin adapters over process-global engine state (`PlayerPrefs`, `Screen`, `QualitySettings`); a test writing to `PlayerPrefs` would corrupt the developer's real settings and reconnection identity token. Everything with a decision in it was deliberately pushed into `Game.Settings.Core`, which is fully tested.
 - **`Screen.SetResolution` is called even when the stored values equal the current ones** (at boot, every launch). This is harmless — Unity no-ops an identical request — and keeping it unconditional means there is exactly one code path that establishes display state.
 - **One known edge case, deliberately left alone.** `SettingsPanel` holds a single `onClosed`
