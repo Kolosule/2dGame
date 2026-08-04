@@ -34,6 +34,25 @@ public class LobbyServerState
         return team;
     }
 
+    /// <summary>
+    /// Adds (or re-seats) the player on a SPECIFIC team — a reconnecting player reclaiming the team
+    /// they held when they dropped, bypassing balanced auto-assign. An invalid team falls back to
+    /// PlayerJoined. Returns the seated team.
+    /// </summary>
+    public int PlayerJoinedOnTeam(int id, int team)
+    {
+        if (team != 1 && team != 2) return PlayerJoined(id);
+
+        if (players.TryGetValue(id, out var existing))
+        {
+            existing.Team = team;
+            return team;
+        }
+
+        players[id] = new Entry { Name = LobbyProtocol.PlaceholderName(id), Team = team };
+        return team;
+    }
+
     public void PlayerLeft(int id) => players.Remove(id);
 
     /// <summary>Sanitizes and stores; an empty sanitize result keeps the current name. True if changed.</summary>

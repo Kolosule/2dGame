@@ -100,6 +100,18 @@ public class PlayerBuffs : NetworkBehaviour
         TotalDepositedValue += points;
     }
 
+    /// <summary>
+    /// SERVER: set the deposited total outright when restoring a reconnecting player. Separate from
+    /// ServerAddDepositedValue because restore is an assignment, not an accumulation, and 0 is a
+    /// legal restored value. Called from the Runner.Spawn callback, before replication, so the
+    /// rejoiner's first snapshot already carries their tiers.
+    /// </summary>
+    public void ServerRestoreDeposited(int total)
+    {
+        if (!HasStateAuthority || total < 0) return;
+        TotalDepositedValue = total;
+    }
+
     /// <summary>Priority position of a buff in this player's loadout, or -1 if not equipped.</summary>
     private int PositionOf(BuffId id)
     {

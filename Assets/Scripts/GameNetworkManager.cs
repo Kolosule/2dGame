@@ -309,16 +309,62 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     // ============================
 
     /// <summary>
-    /// Server-only: add the player to the lobby roster with a balanced auto-assigned team and
-    /// mirror it into LobbyTeamChoices (read by NetworkedSpawnManager). Runs for mid-match
-    /// late joiners too, so they spawn on a balanced team without a lobby round-trip.
+    /// Server-only: seat the player in the lobby roster and mirror the result into the handoff
+    /// dictionaries NetworkedSpawnManager reads. Runs for mid-match late joiners too.
+    ///
+    /// A reconnecting player (a token matching a held slot) reclaims their held team, name, and
+    /// loadout instead of being auto-assigned, and their progression is parked in pendingRestores
+    /// for the spawn to consume. Restoration deliberately flows through the SAME three dictionaries
+    /// as a normal join, so the spawn path needs no reconnect-specific branch and the lobby
+    /// team-pick is skipped implicitly rather than by a special case.
     /// </summary>
-    private void ServerHandleJoin(PlayerRef player)
+    private void ServerHandleJoin(NetworkRunner runner, PlayerRef player)
     {
+        string token = IdentityTokenCodec.ToHex(runner.GetPlayerConnectionToken(player));
+
+        if (reconnectRegistry.TryClaim(token, out ReconnectHeldSlot held))
+        {
+            int heldTeam = serverLobby.PlayerJoinedOnTeam(player.PlayerId, held.Team);
+            serverLobby.SetNickname(player.PlayerId, held.DisplayName);
+
+            LobbyTeamChoices.Set(player, heldTeam);
+            LobbyNicknameChoices.Set(player, held.DisplayName);
+            if (held.LoadoutOrder != null && held.LoadoutOrder.Length > 0)
+                LobbyLoadoutChoices.Set(player, held.LoadoutOrder);
+
+            pendingRestores[player] = held;
+
+            Debug.Log($"🔄 Player {player.PlayerId} reconnected — restored to team {heldTeam} " +
+                      $"with {held.TotalDepositedValue} deposited.");
+
+            if (!gameStarting) BroadcastLobby();
+            return;
+        }
+
         int team = serverLobby.PlayerJoined(player.PlayerId);
         LobbyTeamChoices.Set(player, team);
         LobbyNicknameChoices.Set(player, LobbyProtocol.PlaceholderName(player.PlayerId));
         if (!gameStarting) BroadcastLobby();
+    }
+
+    /// <summary>
+    /// Server-only. Hands the spawn path a reconnecting player's parked state exactly once. Returns
+    /// false (and null) for a normal joiner.
+    /// </summary>
+    public bool TryConsumeRestore(PlayerRef player, out ReconnectHeldSlot slot)
+    {
+        if (!pendingRestores.TryGetValue(player, out slot)) return false;
+        pendingRestores.Remove(player);
+        return true;
+    }
+
+    /// <summary>
+    /// Server-only. Puts a consumed restore back when the spawn it was consumed for failed, so the
+    /// spawn manager's existing retry path still restores the player.
+    /// </summary>
+    public void ReturnRestore(PlayerRef player, ReconnectHeldSlot slot)
+    {
+        if (slot != null) pendingRestores[player] = slot;
     }
 
     /// <summary>
@@ -385,7 +431,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         // DO NOT SPAWN PLAYER HERE — NetworkedSpawnManager in the Gameplay scene handles it.
         if (runner.IsServer)
-            ServerHandleJoin(player);
+            ServerHandleJoin(runner, player);
     }
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)

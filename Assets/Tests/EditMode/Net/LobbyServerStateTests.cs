@@ -88,4 +88,35 @@ public class LobbyServerStateTests
         Assert.AreEqual(5, snap.Players[1].Id);
         Assert.AreEqual("Player 5", snap.Players[1].Name);
     }
+
+    [Test]
+    public void PlayerJoinedOnTeam_SeatsAReconnectorOnTheirHeldTeam_BypassingAutoBalance()
+    {
+        var s = new LobbyServerState();
+        s.PlayerJoined(1); // team 1
+        s.PlayerJoined(2); // team 2
+        s.PlayerJoined(3); // team 1  -> auto-balance would put id 4 on team 2
+
+        Assert.AreEqual(1, s.PlayerJoinedOnTeam(4, 1));
+        Assert.AreEqual(1, s.TeamOf(4));
+        Assert.AreEqual(4, s.PlayerCount);
+    }
+
+    [Test]
+    public void PlayerJoinedOnTeam_InvalidTeam_FallsBackToBalancedAutoAssign()
+    {
+        var s = new LobbyServerState();
+        Assert.AreEqual(1, s.PlayerJoinedOnTeam(1, 0));  // 0-0 tie -> team 1
+        Assert.AreEqual(2, s.PlayerJoinedOnTeam(2, 7));  // 1-0 -> team 2
+    }
+
+    [Test]
+    public void PlayerJoinedOnTeam_ExistingPlayer_IsMovedToTheHeldTeam()
+    {
+        var s = new LobbyServerState();
+        s.PlayerJoined(1);                 // team 1
+        Assert.AreEqual(2, s.PlayerJoinedOnTeam(1, 2));
+        Assert.AreEqual(2, s.TeamOf(1));
+        Assert.AreEqual(1, s.PlayerCount); // not duplicated
+    }
 }

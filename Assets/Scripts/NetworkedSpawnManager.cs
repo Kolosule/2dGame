@@ -179,20 +179,33 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         }
 
         spawnedPlayers.Add(player);
+
+        // A reconnecting player's held state is parked on GameNetworkManager until their avatar
+        // exists (join and spawn can be a whole scene load apart). Consume it once, here, so both
+        // the spawn callback and the stats registration below can use it.
+        ReconnectHeldSlot restore = null;
+        if (GameNetworkManager.Instance != null)
+            GameNetworkManager.Instance.TryConsumeRestore(player, out restore);
+
         int team = AssignTeam(player, choice);
 
         Vector3 spawnPosition = GetSpawnPosition(team);
-        SpawnPlayer(Runner, player, spawnPosition, team);
+        SpawnPlayer(Runner, player, spawnPosition, team, restore);
 
         if (MatchStatsManager.Instance != null)
         {
             if (!LobbyNicknameChoices.TryGet(player, out string name) || string.IsNullOrEmpty(name))
                 name = LobbyProtocol.PlaceholderName(player.PlayerId);
-            MatchStatsManager.Instance.RegisterPlayer(player.PlayerId, team, name);
+
+            if (restore != null)
+                MatchStatsManager.Instance.RestoreEntry(player.PlayerId, team, name, restore);
+            else
+                MatchStatsManager.Instance.RegisterPlayer(player.PlayerId, team, name);
         }
     }
 
-    private void SpawnPlayer(NetworkRunner runner, PlayerRef player, Vector3 spawnPosition, int team)
+    private void SpawnPlayer(NetworkRunner runner, PlayerRef player, Vector3 spawnPosition, int team,
+                             ReconnectHeldSlot restore)
     {
         if (playerPrefab == null)
         {
@@ -206,7 +219,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             spawnPosition,
             Quaternion.identity,
             player,
-            (runner, obj) => OnPlayerSpawned(runner, obj, team)
+            (runner, obj) => OnPlayerSpawned(runner, obj, team, restore)
         );
 
         if (spawnedObject == null)
@@ -219,10 +232,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
                 if (team == 1) team1Count--;
                 else if (team == 2) team2Count--;
             }
+            // Park the restore again so the retry still restores them.
+            if (restore != null && GameNetworkManager.Instance != null)
+                GameNetworkManager.Instance.ReturnRestore(player, restore);
         }
     }
 
-    private void OnPlayerSpawned(NetworkRunner runner, NetworkObject obj, int team)
+    private void OnPlayerSpawned(NetworkRunner runner, NetworkObject obj, int team, ReconnectHeldSlot restore)
     {
         // Register this object as the player's canonical player-object. Fusion replicates the
         // association to every peer, so Runner.TryGetPlayerObject(playerRef) resolves on clients
@@ -241,9 +257,18 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         // Initialise the player's buff loadout from their lobby choice (host-authoritative).
         PlayerBuffs buffs = obj.GetComponent<PlayerBuffs>();
-        if (buffs != null && LobbyLoadoutChoices.TryGet(obj.InputAuthority, out byte[] order))
-            buffs.ServerInitLoadout(order);
-        // If no lobby choice, PlayerBuffs.Spawned applies the config default order.
+        if (buffs != null)
+        {
+            if (LobbyLoadoutChoices.TryGet(obj.InputAuthority, out byte[] order))
+                buffs.ServerInitLoadout(order);
+            // If no lobby choice, PlayerBuffs.Spawned applies the config default order.
+
+            // Reconnect: restore earned progression HERE, in the pre-replication spawn callback, so
+            // the rejoiner's very first snapshot already carries their buff tiers. There is no frame
+            // in which they are visible and interactive at tier 0, and no RPC ordering to reason about.
+            if (restore != null)
+                buffs.ServerRestoreDeposited(restore.TotalDepositedValue);
+        }
     }
     #endregion
 
