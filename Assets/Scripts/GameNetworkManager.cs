@@ -41,6 +41,11 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private LobbyServerState serverLobby = new LobbyServerState();
     private bool gameStarting = false;
 
+    // The session name we are actually connected to. Reconnect retries against THIS rather than
+    // re-reading the sessionName field, so a future server browser cannot silently send a
+    // reconnecting player to the wrong server. See the spec's session-identity section.
+    private string connectedSessionName;
+
     // Last roster snapshot decoded on a client. Cached so the return-to-lobby scene load can
     // re-apply it if the broadcast arrived before lobbyUI was re-acquired (avoids empty roster).
     private LobbyStateSnapshot pendingLobbySnapshot;
@@ -119,13 +124,17 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             SessionName = sessionName,
             PlayerCount = maxPlayers,
             SceneManager = sceneManager,
-            ObjectProvider = objectProvider
+            ObjectProvider = objectProvider,
+            // Stable per-install identity, so a rejoining player is recognisable across a new
+            // PlayerRef. Sent on every connect — there is no separate "reconnect mode" on the wire.
+            ConnectionToken = PlayerIdentity.TokenBytes
         };
 
         var result = await runner.StartGame(args);
 
         if (result.Ok)
         {
+            connectedSessionName = args.SessionName;
             EnterLobbyUI();
         }
         else
@@ -147,13 +156,17 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             SessionName = sessionName,
             PlayerCount = maxPlayers,
             SceneManager = sceneManager,
-            ObjectProvider = objectProvider
+            ObjectProvider = objectProvider,
+            // Stable per-install identity, so a rejoining player is recognisable across a new
+            // PlayerRef. Sent on every connect — there is no separate "reconnect mode" on the wire.
+            ConnectionToken = PlayerIdentity.TokenBytes
         };
 
         var result = await runner.StartGame(args);
 
         if (result.Ok)
         {
+            connectedSessionName = args.SessionName;
             EnterLobbyUI();
         }
         else
