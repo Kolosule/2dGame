@@ -88,6 +88,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         runner.AddCallbacks(this);
 
         LobbyTeamChoices.Clear();
+        LobbyNicknameChoices.Clear();
         LobbyLoadoutChoices.Clear();
         serverLobby = new LobbyServerState();
         gameStarting = false;
@@ -292,6 +293,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         int team = serverLobby.PlayerJoined(player.PlayerId);
         LobbyTeamChoices.Set(player, team);
+        LobbyNicknameChoices.Set(player, LobbyProtocol.PlaceholderName(player.PlayerId));
         if (!gameStarting) BroadcastLobby();
     }
 
@@ -362,6 +364,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             serverLobby.PlayerLeft(player.PlayerId);
             LobbyTeamChoices.Remove(player);
+            LobbyNicknameChoices.Remove(player);
             LobbyLoadoutChoices.Remove(player);
             if (!gameStarting) BroadcastLobby();
         }
@@ -386,6 +389,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         LobbyTeamChoices.Clear();
+        LobbyNicknameChoices.Clear();
         LobbyLoadoutChoices.Clear();
         serverLobby = new LobbyServerState();
         gameStarting = false;
@@ -438,8 +442,11 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             {
                 if (data.Array == null) return;
                 if (!LobbyProtocol.TryDecodeNickname(data.Array, data.Offset, data.Count, out string name)) return;
-                if (serverLobby.SetNickname(player.PlayerId, name) && !gameStarting)
-                    BroadcastLobby();
+                if (serverLobby.SetNickname(player.PlayerId, name))
+                {
+                    LobbyNicknameChoices.Set(player, name);
+                    if (!gameStarting) BroadcastLobby();
+                }
                 return;
             }
 
@@ -544,6 +551,21 @@ public static class LobbyTeamChoices
     public static void Remove(PlayerRef player) => choices.Remove(player);
     public static void Clear() => choices.Clear();
     public static int Count => choices.Count;
+}
+
+/// <summary>
+/// Per-player display name collected during the lobby (placeholder on join, updated on nickname
+/// change), keyed by PlayerRef, parallel to LobbyTeamChoices. Survives the menu -> gameplay scene
+/// load. NetworkedSpawnManager reads this to register each player's MatchStatsManager entry.
+/// </summary>
+public static class LobbyNicknameChoices
+{
+    private static readonly Dictionary<PlayerRef, string> choices = new Dictionary<PlayerRef, string>();
+
+    public static void Set(PlayerRef player, string name) => choices[player] = name;
+    public static bool TryGet(PlayerRef player, out string name) => choices.TryGetValue(player, out name);
+    public static void Remove(PlayerRef player) => choices.Remove(player);
+    public static void Clear() => choices.Clear();
 }
 
 /// <summary>

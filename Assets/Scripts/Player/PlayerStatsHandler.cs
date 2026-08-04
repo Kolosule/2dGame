@@ -57,6 +57,11 @@ public class PlayerStatsHandler : NetworkBehaviour
     // landing inside the window. Never networked; cleared on respawn.
     private readonly HitCooldownLedger hitLedger = new HitCooldownLedger();
 
+    // Most recent attacker on this life, for kill attribution in Die(). Non-networked and safe:
+    // it is written and consumed within the same synchronous server call (ServerApplyDamage ->
+    // Die()), never read across a tick boundary, so it needs no resimulation safety.
+    private NetworkId lastAttackerId;
+
     // Cached for the respawn teleport: NetworkRigidbody2D.Teleport bumps the teleport key so
     // proxies snap to the respawn point instead of interpolating across the map.
     private NetworkRigidbody2D netRb;
@@ -163,6 +168,8 @@ public class PlayerStatsHandler : NetworkBehaviour
             return;
         }
 
+        lastAttackerId = attackerId;
+
         CurrentHealth -= damage;
         CurrentHealth = Mathf.Max(0, CurrentHealth);
 
@@ -181,6 +188,8 @@ public class PlayerStatsHandler : NetworkBehaviour
         if (!HasStateAuthority) return;
 
         IsDead = true;
+
+        ReportDeathToStats();
 
         // Decide where we will respawn NOW, so the camera transition and the respawn teleport
         // target the exact same point (see RespawnPosition).
@@ -202,6 +211,29 @@ public class PlayerStatsHandler : NetworkBehaviour
 
         // Start respawn timer (simulation-path TickTimer, evaluated in FixedUpdateNetwork)
         RespawnTimer = TickTimer.CreateFromSeconds(Runner, respawnDelay);
+    }
+
+    /// <summary>
+    /// SERVER: mirrors this death into the scoreboard (self death, and the killer's kill if the
+    /// last hit resolves to a real player who is not this same player). An attacker NetworkId
+    /// that fails to resolve (environmental damage, the default path from RPC_TakeDamage) or that
+    /// resolves to a non-player NetworkObject (an AI enemy) credits no kill to anyone --
+    /// RecordKill's own IsRealPlayer guard on the manager side handles the AI case.
+    /// </summary>
+    private void ReportDeathToStats()
+    {
+        if (MatchStatsManager.Instance == null) return;
+
+        PlayerRef self = Object.InputAuthority;
+        MatchStatsManager.Instance.SetDead(self.PlayerId, true);
+        MatchStatsManager.Instance.RecordDeath(self);
+
+        if (Runner.TryFindObject(lastAttackerId, out NetworkObject attackerObj) && attackerObj != null)
+        {
+            PlayerRef attacker = attackerObj.InputAuthority;
+            if (attacker != self)
+                MatchStatsManager.Instance.RecordKill(attacker);
+        }
     }
 
     /// <summary>
@@ -262,6 +294,9 @@ public class PlayerStatsHandler : NetworkBehaviour
         IsDead = false;
         SpawnImmunityTimer = TickTimer.CreateFromSeconds(Runner, spawnImmunityDuration); // Reset spawn immunity
         hitLedger.Clear(); // fresh life, no stale attacker cooldowns
+
+        if (MatchStatsManager.Instance != null)
+            MatchStatsManager.Instance.SetDead(Object.InputAuthority.PlayerId, false);
 
         // Teleport to the position chosen at death (RespawnPosition), so it matches where the
         // camera already transitioned to. Go through NetworkRigidbody2D.Teleport so proxies snap

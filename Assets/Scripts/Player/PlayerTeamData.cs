@@ -43,6 +43,13 @@ public class PlayerTeamData : NetworkBehaviour
 
         // Apply immediately on the authority; remote clients get it via OnChangedRender.
         OnTeamChanged();
+
+        // Mirror into the central stats table so the scoreboard can group by team regardless of
+        // AoI distance. Harmless no-op on the very first call at spawn (before RegisterPlayer has
+        // created the entry) -- RegisterPlayer sets the initial Team directly from the already-
+        // resolved team int, so this mirror only matters for a LATER reassignment.
+        if (MatchStatsManager.Instance != null)
+            MatchStatsManager.Instance.SetTeam(Object.InputAuthority.PlayerId, TeamUtil.ToNumber(team));
     }
 
     /// <summary>Render-time callback: refresh the team color from the networked value.</summary>

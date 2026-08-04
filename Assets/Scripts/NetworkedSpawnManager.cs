@@ -174,6 +174,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         Vector3 spawnPosition = GetSpawnPosition(team);
         SpawnPlayer(Runner, player, spawnPosition, team);
+
+        if (MatchStatsManager.Instance != null)
+        {
+            if (!LobbyNicknameChoices.TryGet(player, out string name) || string.IsNullOrEmpty(name))
+                name = LobbyProtocol.PlaceholderName(player.PlayerId);
+            MatchStatsManager.Instance.RegisterPlayer(player.PlayerId, team, name);
+        }
     }
 
     private void SpawnPlayer(NetworkRunner runner, PlayerRef player, Vector3 spawnPosition, int team)

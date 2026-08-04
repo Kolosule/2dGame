@@ -1,5 +1,6 @@
 using Fusion;
 using UnityEngine;
+using Game.Stats.Core;
 
 /// <summary>
 /// Manages flag state and interactions for Capture the Flag mode
@@ -58,6 +59,10 @@ public class Flag : NetworkBehaviour
     // Local references
     private GameObject carrierGameObject; // RENAMED from 'carrier' to avoid conflict
     private GameObject markedCarrier;      // who currently shows the flag icon on THIS peer
+
+    // Non-networked, server-only: sub-second remainder for flag-carry-time reporting. Reset to 0
+    // whenever the flag is not being carried, so a later pickup starts clean.
+    private float carrySecondsRemainder;
 
     // Flag states
     public enum FlagState
@@ -145,9 +150,14 @@ public class Flag : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// SERVER: three responsibilities per tick -- (1) drop the flag if its carrier's player object
+    /// has vanished without dying (disconnect/crash guard), (2) accumulate flag-carry-time stats
+    /// while the flag is actively carried during live play, and (3) auto-return a dropped flag
+    /// once its countdown elapses.
+    /// </summary>
     public override void FixedUpdateNetwork()
     {
-        // SERVER: auto-return a dropped flag once its countdown elapses.
         if (!HasStateAuthority) return;
 
         // Carrier disconnect/crash: death drops the flag via PlayerStatsHandler.Die(), but a
@@ -160,10 +170,22 @@ public class Flag : NetworkBehaviour
             DropFlag();
         }
 
+        if (CurrentState == FlagState.Carried && CarrierPlayerRef != PlayerRef.None &&
+            MatchManager.Instance != null && MatchManager.Instance.IsPlayActive)
+        {
+            int wholeSeconds = FlagCarryAccumulator.Tick(ref carrySecondsRemainder, Runner.DeltaTime);
+            if (wholeSeconds > 0 && MatchStatsManager.Instance != null)
+                MatchStatsManager.Instance.RecordFlagCarrySeconds(CarrierPlayerRef, wholeSeconds);
+        }
+        else
+        {
+            carrySecondsRemainder = 0f;
+        }
+
         if (CurrentState == FlagState.Dropped && AutoReturnTimer.Expired(Runner))
         {
             AutoReturnTimer = default;
-            ReturnFlag();
+            ReturnFlag(); // no attribution: an auto-return is not a player action
         }
     }
 
@@ -194,7 +216,7 @@ public class Flag : NetworkBehaviour
             case FlagState.Dropped:
                 // Own team returns a dropped flag straight home; the enemy steals it (carries it).
                 if (playerTeam.Team == TeamUtil.Normalize(owningTeam))
-                    ReturnFlag();
+                    ReturnFlag(playerNetworkObject.InputAuthority);
                 else
                     PickupFlag(player, playerNetworkObject.InputAuthority);
                 break;
@@ -302,9 +324,11 @@ public class Flag : NetworkBehaviour
     }
 
     /// <summary>
-    /// SERVER: Return flag to home position
+    /// SERVER: Return flag to home position. returner is the player who touched the dropped flag
+    /// to return it; default (unattributed) for the auto-return timer and the raw RPC path, which
+    /// have no verified player action behind them.
     /// </summary>
-    public void ReturnFlag()
+    public void ReturnFlag(PlayerRef returner = default)
     {
         if (!HasStateAuthority) return;
 
@@ -330,6 +354,9 @@ public class Flag : NetworkBehaviour
         CurrentState = FlagState.AtHome;
         CarrierPlayerRef = PlayerRef.None;
         transform.position = HomePosition;
+
+        if (MatchStatsManager.Instance != null)
+            MatchStatsManager.Instance.RecordFlagReturn(returner);
 
         // Notify clients, and re-check captures for any carrier already parked in a base
         // (this flag returning home may complete a pending capture).

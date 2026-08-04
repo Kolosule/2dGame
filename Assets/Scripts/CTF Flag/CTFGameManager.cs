@@ -103,11 +103,13 @@ public class CTFGameManager : NetworkBehaviour
         if (baseTeam == Team.Team1 &&
             team2Flag.IsCarriedBy(carrier) && team1Flag.State == Flag.FlagState.AtHome)
         {
+            if (MatchStatsManager.Instance != null) MatchStatsManager.Instance.RecordCapture(carrier);
             MatchManager.Instance.ReportCapture(Team.Team1);
         }
         else if (baseTeam == Team.Team2 &&
             team1Flag.IsCarriedBy(carrier) && team2Flag.State == Flag.FlagState.AtHome)
         {
+            if (MatchStatsManager.Instance != null) MatchStatsManager.Instance.RecordCapture(carrier);
             MatchManager.Instance.ReportCapture(Team.Team2);
         }
     }
