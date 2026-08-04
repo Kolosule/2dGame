@@ -4,6 +4,8 @@ using Fusion.Addons.Physics;
 using Fusion.Sockets;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Game.Match.Core;
 
 /// <summary>
 /// Boot + transport + server-side lobby glue. Players land in a single 20-player lobby
@@ -40,6 +42,15 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private PooledNetworkObjectProvider objectProvider;
     private LobbyServerState serverLobby = new LobbyServerState();
     private bool gameStarting = false;
+
+    // Server-only. Token -> state preserved for players who dropped mid-match, held for the REST OF
+    // THE MATCH (no timer) and released in BeginReturnToLobby / OnShutdown.
+    private ReconnectRegistry reconnectRegistry = new ReconnectRegistry();
+
+    // Server-only. A claimed hold, parked between OnPlayerJoined (which reclaims it) and the spawn
+    // that consumes it — the two can be a whole scene load apart for a mid-match rejoin.
+    private readonly Dictionary<PlayerRef, ReconnectHeldSlot> pendingRestores =
+        new Dictionary<PlayerRef, ReconnectHeldSlot>();
 
     // The session name we are actually connected to. Reconnect retries against THIS rather than
     // re-reading the sessionName field, so a future server browser cannot silently send a
@@ -345,6 +356,12 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public void BeginReturnToLobby()
     {
         if (runner == null || !runner.IsServer) return;
+
+        // The match is over: every hold expires here. This is the whole reason the reconnect design
+        // needs no grace TickTimer — the match boundary is the timer.
+        reconnectRegistry.Clear();
+        pendingRestores.Clear();
+
         gameStarting = false;
         _ = runner.LoadScene(SceneRef.FromIndex(menuSceneIndex));
     }
@@ -375,12 +392,85 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         if (runner.IsServer)
         {
+            // FIRST: preserve their state while the lobby records and the avatar still exist.
+            ServerCaptureForReconnect(runner, player);
+
             serverLobby.PlayerLeft(player.PlayerId);
             LobbyTeamChoices.Remove(player);
             LobbyNicknameChoices.Remove(player);
             LobbyLoadoutChoices.Remove(player);
+            pendingRestores.Remove(player);
             if (!gameStarting) BroadcastLobby();
         }
+    }
+
+    /// <summary>
+    /// Server-only. Preserves a mid-match leaver's earned state, keyed by their connection token, so
+    /// a rejoin can restore it (docs/superpowers/specs/2026-07-29-reconnection-design.md).
+    ///
+    /// ORDERING INVARIANT: this must run while the leaver's avatar still exists, because the
+    /// deposited value is read off it. GameNetworkManager registers its callbacks in Start() on the
+    /// persistent object, long before NetworkedSpawnManager.Spawned() registers the callback that
+    /// despawns the avatar, so this always runs first on the same runner. The existing JOIN path
+    /// already depends on the same invariant (ServerHandleJoin must fill LobbyTeamChoices before
+    /// TrySpawnPlayer reads it), so it is load-bearing in both directions — the LogError below is
+    /// the tripwire if it ever changes.
+    /// </summary>
+    private void ServerCaptureForReconnect(NetworkRunner runner, PlayerRef player)
+    {
+        // Only while a match is actually being played. A lobby drop (no MatchManager at all) and a
+        // PostMatch/Intermission drop release fully, exactly as before this feature: there is
+        // nothing worth preserving, and reserving seats in a lobby would lock out real joiners.
+        if (MatchManager.Instance == null) return;
+        if (!MatchRules.PreservesDisconnectState(MatchManager.Instance.Phase)) return;
+
+        // GetPlayerConnectionToken is server-only and returns null when the client sent no token;
+        // ToHex turns anything malformed into "", which the registry refuses to key on.
+        string token = IdentityTokenCodec.ToHex(runner.GetPlayerConnectionToken(player));
+        if (string.IsNullOrEmpty(token)) return;
+
+        // Dropped again before their avatar ever spawned (e.g. during the gameplay scene load):
+        // re-hold the still-unconsumed restore instead of reading an avatar that never existed.
+        if (pendingRestores.TryGetValue(player, out ReconnectHeldSlot pending))
+        {
+            reconnectRegistry.Capture(token, pending);
+            return;
+        }
+
+        var slot = new ReconnectHeldSlot
+        {
+            Team = LobbyTeamChoices.TryGet(player, out int team) ? team : serverLobby.TeamOf(player.PlayerId),
+            DisplayName = LobbyNicknameChoices.TryGet(player, out string name) && !string.IsNullOrEmpty(name)
+                ? name
+                : LobbyProtocol.PlaceholderName(player.PlayerId),
+            // Without this the rejoiner silently reverts to BuffLoadoutConfig's default priority
+            // order, because LobbyLoadoutChoices.Remove runs moments from now.
+            LoadoutOrder = LobbyLoadoutChoices.TryGet(player, out byte[] order) ? order : null
+        };
+
+        if (runner.TryGetPlayerObject(player, out NetworkObject avatar) && avatar != null)
+        {
+            PlayerBuffs buffs = avatar.GetComponent<PlayerBuffs>();
+            if (buffs != null) slot.TotalDepositedValue = buffs.TotalDeposited;
+        }
+        else
+        {
+            Debug.LogError($"❌ ServerCaptureForReconnect: no avatar for Player {player.PlayerId} — " +
+                           "callback order changed; their deposited value will NOT be restored.");
+        }
+
+        if (MatchStatsManager.Instance != null &&
+            MatchStatsManager.Instance.TryGetEntry(player.PlayerId, out PlayerStatEntry entry))
+        {
+            slot.Kills = entry.Kills;
+            slot.Deaths = entry.Deaths;
+            slot.Captures = entry.Captures;
+            slot.CoinsDeposited = entry.CoinsDeposited;
+            slot.FlagCarrySeconds = entry.FlagCarrySeconds;
+            slot.FlagReturns = entry.FlagReturns;
+        }
+
+        reconnectRegistry.Capture(token, slot);
     }
 
     public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
@@ -393,6 +483,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // The live-coin registry is server-only static state; clear it so a restarted session
         // doesn't inherit stale (destroyed) coin references or a bogus live count.
         CoinRegistry.Clear();
+        reconnectRegistry.Clear();
+        pendingRestores.Clear();
 
         if (lobbyUI != null) lobbyUI.Hide();
         if (menuUI != null)

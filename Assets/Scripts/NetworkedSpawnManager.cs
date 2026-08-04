@@ -128,7 +128,16 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         }
 
         if (runner.TryGetPlayerObject(player, out NetworkObject playerObject))
+        {
+            // A disconnect costs exactly what a death costs: scatter carried coins back into the
+            // world at the last position, mirroring PlayerStatsHandler.Die. Without this a leaving
+            // carrier deletes their coins from the economy entirely.
+            NetworkedPlayerInventory inventory = playerObject.GetComponent<NetworkedPlayerInventory>();
+            if (inventory != null)
+                inventory.OnPlayerDeath(playerObject.transform.position);
+
             runner.Despawn(playerObject);
+        }
 
         if (playerTeams.TryGetValue(player, out int team))
         {
