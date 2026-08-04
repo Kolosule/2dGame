@@ -16,6 +16,10 @@ public class MainMenuUI : MonoBehaviour
     [SerializeField] private Button hostButton;
     [SerializeField] private TMP_Text statusText;
 
+    [Header("Reconnect (optional — the status line alone works without these)")]
+    [SerializeField] private GameObject reconnectPanel;
+    [SerializeField] private Button cancelReconnectButton;
+
     [Header("Wiring")]
     [SerializeField] private GameNetworkManager networkManager;
 
@@ -38,6 +42,16 @@ public class MainMenuUI : MonoBehaviour
 
         if (hostButton != null) hostButton.onClick.AddListener(() => Connect(asHost: true));
         else Debug.LogError("❌ MainMenuUI: Host button not assigned!");
+
+        if (cancelReconnectButton != null)
+        {
+            cancelReconnectButton.onClick.AddListener(() =>
+            {
+                if (networkManager != null) networkManager.CancelReconnect();
+            });
+        }
+
+        if (reconnectPanel != null) reconnectPanel.SetActive(false);
 
         ShowStatus("");
     }
@@ -87,5 +101,22 @@ public class MainMenuUI : MonoBehaviour
     {
         if (joinButton != null) joinButton.interactable = !busy;
         if (hostButton != null) hostButton.interactable = !busy;
+    }
+
+    /// <summary>
+    /// Reconnecting state: the retry loop's message on the status line, Join/Host disabled, and the
+    /// optional reconnect panel (with its Cancel button) shown. Call Show() first — Show resets busy.
+    /// </summary>
+    public void ShowReconnecting(string message)
+    {
+        if (reconnectPanel != null) reconnectPanel.SetActive(true);
+        SetBusy(true);
+        ShowStatus(message);
+    }
+
+    public void HideReconnecting()
+    {
+        if (reconnectPanel != null) reconnectPanel.SetActive(false);
+        SetBusy(false);
     }
 }

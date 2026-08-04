@@ -128,7 +128,16 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         }
 
         if (runner.TryGetPlayerObject(player, out NetworkObject playerObject))
+        {
+            // A disconnect costs exactly what a death costs: scatter carried coins back into the
+            // world at the last position, mirroring PlayerStatsHandler.Die. Without this a leaving
+            // carrier deletes their coins from the economy entirely.
+            NetworkedPlayerInventory inventory = playerObject.GetComponent<NetworkedPlayerInventory>();
+            if (inventory != null)
+                inventory.OnPlayerDeath(playerObject.transform.position);
+
             runner.Despawn(playerObject);
+        }
 
         if (playerTeams.TryGetValue(player, out int team))
         {
@@ -167,23 +176,49 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             // an unexpected late joiner with no recorded choice. AssignTeam auto-balances them.
             Debug.LogWarning($"⚠️ No lobby team choice for Player {player.PlayerId} - auto-balancing");
             choice = NoTeamChoice;
+
+            // Ordering tripwire (the join-side twin of ServerCaptureForReconnect's). An outstanding
+            // hold for this player means GameNetworkManager.OnPlayerJoined has NOT run for them, so
+            // the hold will never be claimed: they are about to be auto-balanced onto an arbitrary
+            // team with none of their state restored, while their held seat stays reserved forever.
+            if (GameNetworkManager.Instance != null &&
+                GameNetworkManager.Instance.ServerHasUnclaimedHold(player))
+            {
+                Debug.LogError($"❌ Player {player.PlayerId} has no lobby team choice but still has an " +
+                               "unclaimed reconnect hold — callback order changed; GameNetworkManager must " +
+                               "register its callbacks before NetworkedSpawnManager. Restored state is lost " +
+                               "and their held slot will never be released.");
+            }
         }
 
         spawnedPlayers.Add(player);
+
+        // A reconnecting player's held state is parked on GameNetworkManager until their avatar
+        // exists (join and spawn can be a whole scene load apart). Consume it once, here, so both
+        // the spawn callback and the stats registration below can use it.
+        ReconnectHeldSlot restore = null;
+        if (GameNetworkManager.Instance != null)
+            GameNetworkManager.Instance.TryConsumeRestore(player, out restore);
+
         int team = AssignTeam(player, choice);
 
         Vector3 spawnPosition = GetSpawnPosition(team);
-        SpawnPlayer(Runner, player, spawnPosition, team);
+        SpawnPlayer(Runner, player, spawnPosition, team, restore);
 
         if (MatchStatsManager.Instance != null)
         {
             if (!LobbyNicknameChoices.TryGet(player, out string name) || string.IsNullOrEmpty(name))
                 name = LobbyProtocol.PlaceholderName(player.PlayerId);
-            MatchStatsManager.Instance.RegisterPlayer(player.PlayerId, team, name);
+
+            if (restore != null)
+                MatchStatsManager.Instance.RestoreEntry(player.PlayerId, team, name, restore);
+            else
+                MatchStatsManager.Instance.RegisterPlayer(player.PlayerId, team, name);
         }
     }
 
-    private void SpawnPlayer(NetworkRunner runner, PlayerRef player, Vector3 spawnPosition, int team)
+    private void SpawnPlayer(NetworkRunner runner, PlayerRef player, Vector3 spawnPosition, int team,
+                             ReconnectHeldSlot restore)
     {
         if (playerPrefab == null)
         {
@@ -197,7 +232,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             spawnPosition,
             Quaternion.identity,
             player,
-            (runner, obj) => OnPlayerSpawned(runner, obj, team)
+            (runner, obj) => OnPlayerSpawned(runner, obj, team, restore)
         );
 
         if (spawnedObject == null)
@@ -210,10 +245,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
                 if (team == 1) team1Count--;
                 else if (team == 2) team2Count--;
             }
+            // Park the restore again so the retry still restores them.
+            if (restore != null && GameNetworkManager.Instance != null)
+                GameNetworkManager.Instance.ReturnRestore(player, restore);
         }
     }
 
-    private void OnPlayerSpawned(NetworkRunner runner, NetworkObject obj, int team)
+    private void OnPlayerSpawned(NetworkRunner runner, NetworkObject obj, int team, ReconnectHeldSlot restore)
     {
         // Register this object as the player's canonical player-object. Fusion replicates the
         // association to every peer, so Runner.TryGetPlayerObject(playerRef) resolves on clients
@@ -232,9 +270,18 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         // Initialise the player's buff loadout from their lobby choice (host-authoritative).
         PlayerBuffs buffs = obj.GetComponent<PlayerBuffs>();
-        if (buffs != null && LobbyLoadoutChoices.TryGet(obj.InputAuthority, out byte[] order))
-            buffs.ServerInitLoadout(order);
-        // If no lobby choice, PlayerBuffs.Spawned applies the config default order.
+        if (buffs != null)
+        {
+            if (LobbyLoadoutChoices.TryGet(obj.InputAuthority, out byte[] order))
+                buffs.ServerInitLoadout(order);
+            // If no lobby choice, PlayerBuffs.Spawned applies the config default order.
+
+            // Reconnect: restore earned progression HERE, in the pre-replication spawn callback, so
+            // the rejoiner's very first snapshot already carries their buff tiers. There is no frame
+            // in which they are visible and interactive at tier 0, and no RPC ordering to reason about.
+            if (restore != null)
+                buffs.ServerRestoreDeposited(restore.TotalDepositedValue);
+        }
     }
     #endregion
 

@@ -89,6 +89,39 @@ public class MatchStatsManager : NetworkBehaviour
         });
     }
 
+    /// <summary>
+    /// SERVER: recreate a reconnecting player's roster entry under their NEW PlayerId, carrying the
+    /// counters saved when they dropped.
+    ///
+    /// Slots are indexed by PlayerId and a rejoiner always gets a different one, so the old row
+    /// cannot simply be kept: it stays behind, invisible (the scoreboard filters on
+    /// Runner.ActivePlayers) and fully overwritten by RegisterPlayer if that id is ever reassigned.
+    /// </summary>
+    public void RestoreEntry(int playerId, int team, string displayName, ReconnectHeldSlot slot)
+    {
+        if (!HasStateAuthority || slot == null) return;
+        if (!RosterIndex.TryResolve(playerId, RosterCapacity, out int index))
+        {
+            Debug.LogError($"❌ MatchStatsManager.RestoreEntry: playerId {playerId} exceeds " +
+                            $"RosterCapacity ({RosterCapacity}); this player's restored stats will not be tracked.");
+            return;
+        }
+
+        Entries.Set(index, new PlayerStatEntry
+        {
+            Active = true,
+            Team = (byte)team,
+            DisplayName = displayName ?? string.Empty,
+            IsDead = false,
+            Kills = slot.Kills,
+            Deaths = slot.Deaths,
+            Captures = slot.Captures,
+            CoinsDeposited = slot.CoinsDeposited,
+            FlagCarrySeconds = slot.FlagCarrySeconds,
+            FlagReturns = slot.FlagReturns
+        });
+    }
+
     /// <summary>SERVER: mirrors a team reassignment after the entry already exists (e.g. a team switch).</summary>
     public void SetTeam(int playerId, int team)
     {
