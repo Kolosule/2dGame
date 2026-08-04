@@ -62,7 +62,7 @@ in.
 | 4 | **Reset:** health (full), position (team spawn), velocity/physics, active buff timers. Coins in hand are **scattered at the drop point**, exactly as on death. The carried flag is **always dropped immediately**. |
 | 5 | **The avatar is despawned on disconnect, not frozen.** A drop is treated as a death you don't respawn from yet. No frozen zombie to shoot or body-block, no replication cost for an absent player. |
 | 6 | **Rejoin spawns at the team spawn with full health and empty hands** — the existing respawn condition, with restored team and progression. No last-position restore, so dropping cannot be used to escape a fight. |
-| 7 | **Client auto-retries 5 times** with 1/2/4/8/8 s backoff (~23 s), then falls back to the main menu. A Cancel button exits the loop at any point. |
+| 7 | **Client auto-retries 5 times** with 1/2/4/8/8 s backoff (23 s of waiting), then falls back to the main menu. A Cancel button exits the loop at any point. Each attempt also carries a 15 s wall-clock deadline (added during implementation — without it a `StartGame` that never completes parks the loop forever), so the worst case before the menu is ~98 s, not 23. |
 | 8 | **A duplicate token on a live connection is ignored, not enforced.** The newcomer is seated as a brand-new player; nobody is kicked and nobody is refused. |
 | 9 | **The token is an identity hint, not a credential.** It unlocks only state the holder already earned this match. Accepted risk on a private server; called out rather than papered over. |
 | 10 | **The hold applies only while a match is actually running.** Lobby-phase and PostMatch-phase drops release fully, as today. |
@@ -200,13 +200,17 @@ any new sequencing primitive.
 has a `LobbyTeamChoices` entry when they arrive, and a mid-match joiner is pulled into the running
 Gameplay scene by Fusion's scene sync rather than through the lobby Start gate.
 
-### One adjacent fix this requires
+### An adjacent fix this spec claimed, retracted during implementation
 
-[`OnSceneLoadDone`](../../../Assets/Scripts/GameNetworkManager.cs:492) early-returns unless the
-loaded scene is the menu, and `lobbyUI` is hidden only by the server's `LoadGameplayScene()`. A
-client that joins mid-match therefore keeps the lobby panel drawn on top of gameplay. This is
-pre-existing, but reconnection turns a rare path into the common one, so hiding `lobbyUI` on a
-gameplay scene-load is in scope for this work.
+An earlier draft of this section asserted that `OnSceneLoadDone` early-returning on a non-menu
+scene leaves a mid-match joiner with the lobby panel drawn on top of gameplay, and scoped a fix
+for it into this work. **That was wrong, and the fix was reverted.** Only `GameNetworkManager`,
+`GameSettingsManager`, and `TeamManager` call `DontDestroyOnLoad`; the menu canvas does not, so
+`LobbyScreenUI` is destroyed by the gameplay scene load and there is no panel left to hide. Any
+`lobbyUI.Hide()` on that path is a no-op against a Unity fake-null reference.
+
+Recorded here rather than deleted because the claim is the kind a future reader would otherwise
+re-derive and re-fix.
 
 ## Preserved vs reset contract
 
@@ -242,7 +246,9 @@ deliberate `runner.Shutdown()` (`OnDestroy`, `OnApplicationQuit`, and any future
 button). `OnDisconnectedFromServer` and `OnShutdown` branch on it: set → today's behavior (menu +
 status), clear → hand off to the retry loop.
 
-**The loop.** 5 attempts, backoff 1 / 2 / 4 / 8 / 8 seconds (~23 s total). Each attempt is a
+**The loop.** 5 attempts, backoff 1 / 2 / 4 / 8 / 8 seconds (23 s of waiting), plus a 15 s
+wall-clock deadline per attempt so a `StartGame` that never returns cannot park the loop
+indefinitely — worst case ~98 s before the menu. Each attempt is a
 `StartClient()` against the same session name with the same identity token. Success ends the loop —
 the server does the rest, and the client needs no special-case code. Exhaustion lands on the
 existing terminal state: `menuUI.ShowStatus("Could not reconnect: {reason}")`, `SetBusy(false)`.
@@ -395,7 +401,7 @@ Unity + Photon Fusion — the authoritative check is manual play, per project co
 | Stats / score contribution preserved? | Yes; the stats row is copied into the rejoiner's new `PlayerId` slot, and team score was never rewound. |
 | Health on rejoin? | Full. Rejoin is a respawn at the team spawn. |
 | Avatar despawned or frozen? | Despawned. A drop is a death you don't respawn from yet. |
-| Auto-retry attempts and backoff? | 5 attempts, 1/2/4/8/8 s (~23 s), Cancel available, then the main menu. |
+| Auto-retry attempts and backoff? | 5 attempts, 1/2/4/8/8 s of backoff plus a 15 s per-attempt deadline (~98 s worst case), Cancel available, then the main menu. |
 | Duplicate token on a live connection? | Ignored — seated as a new player, nobody kicked. |
 | Single fixed session? | Confirmed; the retry target is stored rather than re-read, for forward compatibility. |
 | Host migration? | Confirmed out of scope; server death ends the match. |
