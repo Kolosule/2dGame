@@ -639,7 +639,7 @@ Create the four test `.meta` files with the Step 3 template and these guids: `Re
 
 - [ ] **Step 8: Run the harness to verify the tests pass**
 
-Rebuild and run the harness. Expected: every assertion passes (24 assertions mirroring the 21 NUnit cases across the five files, counting `[TestCase]` rows individually). Report the exact count.
+Rebuild and run the harness. Expected: every assertion passes. Count the NUnit cases yourself — counting each `[TestCase]` row individually, the five files hold **35 cases** (`ReconnectRegistryTests` 6, `ReconnectPolicyTests` 4, `ReconnectBackoffTests` 10, `IdentityTokenCodecTests` 9, the appended `MatchRulesTests` block 6). Your harness must mirror every one. Report your own counted totals for both the cases and the assertions; if your count disagrees with 35, trust your count and say so.
 
 - [ ] **Step 9: Commit**
 
