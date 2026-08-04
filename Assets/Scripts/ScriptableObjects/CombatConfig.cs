@@ -41,9 +41,6 @@ public class CombatConfig : ScriptableObject
     public bool territorialAdvantageEnabled = true;
 
     [Header("Visual Feedback")]
-    [Tooltip("Show damage numbers")]
-    public bool showDamageNumbers = true;
-
     [Tooltip("Damage number prefab")]
     public GameObject damageNumberPrefab;
 
