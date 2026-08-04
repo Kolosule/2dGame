@@ -52,5 +52,17 @@ namespace Game.Match.Core
         /// only way a match ends.
         /// </summary>
         public static bool ResolvesAsDrawOnTimerExpiry(MatchPhase phase) => phase == MatchPhase.SuddenDeath;
+
+        /// <summary>
+        /// A disconnect in this phase preserves the player's state for a rejoin. True while the
+        /// match is being played (Warmup, Countdown, Live, SuddenDeath); false once it is decided
+        /// (PostMatch, Intermission), where the return-to-lobby scene reload is about to reset
+        /// everything anyway.
+        ///
+        /// The lobby case — no match at all — is "MatchManager.Instance == null" and is handled by
+        /// the caller, since this assembly cannot see the manager.
+        /// </summary>
+        public static bool PreservesDisconnectState(MatchPhase phase) =>
+            phase != MatchPhase.PostMatch && phase != MatchPhase.Intermission;
     }
 }

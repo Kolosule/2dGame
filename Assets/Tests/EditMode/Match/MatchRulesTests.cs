@@ -77,4 +77,18 @@ public class MatchRulesTests
     {
         Assert.AreEqual(expected, MatchRules.ResolvesAsDrawOnTimerExpiry(phase));
     }
+
+    // A drop preserves state only while the match is actually being played. Once it is decided
+    // (PostMatch/Intermission) the scene reload is about to reset everything anyway, so holding
+    // state that is seconds from deletion buys nothing.
+    [TestCase(MatchPhase.Warmup, true)]
+    [TestCase(MatchPhase.Countdown, true)]
+    [TestCase(MatchPhase.Live, true)]
+    [TestCase(MatchPhase.SuddenDeath, true)]
+    [TestCase(MatchPhase.PostMatch, false)]
+    [TestCase(MatchPhase.Intermission, false)]
+    public void PreservesDisconnectState_FalseOnceTheMatchIsDecided(MatchPhase phase, bool expected)
+    {
+        Assert.AreEqual(expected, MatchRules.PreservesDisconnectState(phase));
+    }
 }
