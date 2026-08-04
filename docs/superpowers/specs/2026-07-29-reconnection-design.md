@@ -93,12 +93,24 @@ The GUID is minted on first access and never rotated. It is sent on **every** co
 client, and reconnect attempt alike — so there is no "reconnect mode" on the wire; the server
 simply notices that a token matches a held slot.
 
-**Editor caveat (required, not optional):** Unity Multiplayer Play Mode virtual players share the
-project's `PlayerPrefs` store (on Windows, one registry key derived from company + product name),
-so every local test peer would otherwise present the *identical* GUID. Under `UNITY_EDITOR` the key
-is salted with the virtual-player index, giving each peer a distinct identity. Without this, local
-multi-peer testing of this feature exercises the duplicate-token path 100% of the time and never
-the path being tested.
+**Local-testing caveat (required, not optional):** `PlayerPrefs` is per-*product*, not per-process —
+on Windows it is a single registry key derived from company + product name — so any two clients on
+one machine present the *identical* GUID by default. That includes Unity Multiplayer Play Mode
+virtual players and two copies of the same standalone build.
+
+Two salts address it: `UNITY_EDITOR` appends a flat `.editor`, and a `-identitySuffix <value>`
+command-line argument gives each build its own key (following the existing
+`NetworkBootMode.Resolve` command-line pattern). The suffix must be **stable across relaunches of
+the same peer** — a per-process salt would mint a new identity on every restart and break exactly
+the reconnect-after-relaunch case worth testing.
+
+**MPPM is therefore not a usable test route for this feature.** An earlier draft of this spec
+claimed the editor key is salted with the virtual-player index; it is not, because that would
+require depending on the MPPM package's API, which this project could not verify was resolvable.
+The flat `.editor` salt only separates *the editor* from *a build* — every MPPM virtual player in
+one editor still shares one identity and so exercises the duplicate-token path 100% of the time.
+The working local route is **two standalone builds launched with different `-identitySuffix`
+values**, or one build plus the editor.
 
 ### `ReconnectRegistry` — the server-side hold
 
@@ -309,7 +321,9 @@ added. The only new wire traffic is `RestoreEntry` writing a stats row that woul
   is seated as a brand-new player. Nobody is kicked and nobody is refused. The alternatives are both
   worse here: refusing locks a real player out over a GUID collision, and replacing lets anyone with
   a copied GUID boot another player. Degrading to today's behavior is the safe failure mode for a
-  hint that was never a credential.
+  hint that was never a credential. Note this is also what every MPPM virtual player hits — see the
+  local-testing caveat above — so during in-editor multi-peer testing "nothing restored" is the
+  expected result, not a defect.
 - **Token missing or malformed** (fresh install, cleared prefs, a client that sends nothing) —
   treated as no token: normal join, no restore. The feature is strictly additive.
 - **Server process dies** — every client's `OnShutdown` fires, the retry loop runs and fails against
