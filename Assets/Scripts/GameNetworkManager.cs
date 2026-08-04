@@ -40,6 +40,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private NetworkRunner runner;
     private NetworkSceneManagerDefault sceneManager;
     private PooledNetworkObjectProvider objectProvider;
+    private RunnerSimulatePhysics2D simulatePhysics;
+    private NetworkInputProvider inputProvider;
     private LobbyServerState serverLobby = new LobbyServerState();
     private bool gameStarting = false;
 
@@ -56,6 +58,14 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     // re-reading the sessionName field, so a future server browser cannot silently send a
     // reconnecting player to the wrong server. See the spec's session-identity section.
     private string connectedSessionName;
+
+    // Drop detection. A shutdown we caused (quit, app close) must NOT trigger the retry loop, and
+    // neither must a first connect that never succeeded — that keeps today's "Connection failed"
+    // behavior on the menu.
+    private bool intentionalDisconnect = false;
+    private bool hasBeenConnected = false;
+    private bool startedAsClient = false;
+    private ReconnectController reconnectController;
 
     // Last roster snapshot decoded on a client. Cached so the return-to-lobby scene load can
     // re-apply it if the broadcast arrived before lobbyUI was re-acquired (avoids empty roster).
@@ -74,34 +84,15 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
         Instance = this;
+        reconnectController = GetComponent<ReconnectController>();
     }
 
     void Start()
     {
         if (Instance != this) return;
         DontDestroyOnLoad(gameObject);
-        runner = gameObject.AddComponent<NetworkRunner>();
 
-        // Fusion steps Physics2D inside the network tick (required for NetworkRigidbody2D prediction).
-        // ClientPhysicsSimulation defaults to Disabled, which means CLIENTS never call
-        // Physics.Simulate() and so never integrate their own rigidbody forward — SimulateForward
-        // enables client-side prediction of the local player's position.
-        var simulatePhysics = gameObject.AddComponent<RunnerSimulatePhysics2D>();
-        simulatePhysics.ClientPhysicsSimulation = ClientPhysicsSimulation.SimulateForward;
-
-        // Pool high-churn networked prefabs (projectiles) instead of Instantiate/Destroy each shot.
-        objectProvider = gameObject.AddComponent<PooledNetworkObjectProvider>();
-
-        // One scene manager for the lifetime of the runner. Created here (not per StartGame call)
-        // so a failed connect + retry doesn't stack duplicate components on this GameObject.
-        sceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>();
-
-        // Register the single input source.
-        var inputProvider = gameObject.AddComponent<NetworkInputProvider>();
-        runner.AddCallbacks(inputProvider);
-
-        // Receive lobby callbacks (player join/leave, reliable lobby data).
-        runner.AddCallbacks(this);
+        BuildRunner();
 
         LobbyTeamChoices.Clear();
         LobbyNicknameChoices.Clear();
@@ -123,12 +114,58 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (lobbyUI == null) Debug.LogError("❌ LobbyScreenUI not assigned!");
     }
 
+    /// <summary>
+    /// Creates the runner and every component bound to it. Called once at Start, and again per
+    /// reconnect attempt: a NetworkRunner that has shut down CANNOT be restarted, so a reconnect
+    /// must rebuild the whole stack rather than calling StartGame on the dead one.
+    /// </summary>
+    public void BuildRunner()
+    {
+        runner = gameObject.AddComponent<NetworkRunner>();
+
+        // Fusion steps Physics2D inside the network tick (required for NetworkRigidbody2D prediction).
+        // ClientPhysicsSimulation defaults to Disabled, which means CLIENTS never call
+        // Physics.Simulate() and so never integrate their own rigidbody forward — SimulateForward
+        // enables client-side prediction of the local player's position.
+        simulatePhysics = gameObject.AddComponent<RunnerSimulatePhysics2D>();
+        simulatePhysics.ClientPhysicsSimulation = ClientPhysicsSimulation.SimulateForward;
+
+        // Pool high-churn networked prefabs (projectiles) instead of Instantiate/Destroy each shot.
+        objectProvider = gameObject.AddComponent<PooledNetworkObjectProvider>();
+
+        // One scene manager for the lifetime of the runner.
+        sceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>();
+
+        // Register the single input source.
+        inputProvider = gameObject.AddComponent<NetworkInputProvider>();
+        runner.AddCallbacks(inputProvider);
+
+        // Receive lobby callbacks (player join/leave, reliable lobby data). Registered HERE, before
+        // any gameplay-scene component can register, which is the ordering invariant the join and
+        // leave paths both depend on (see ServerCaptureForReconnect).
+        runner.AddCallbacks(this);
+    }
+
+    /// <summary>
+    /// Destroys the runner and its bound components. Unity defers Destroy to end of frame, so a
+    /// caller MUST wait one frame before calling BuildRunner or it will stack duplicates.
+    /// </summary>
+    public void TeardownRunner()
+    {
+        if (runner != null) { runner.Shutdown(); Destroy(runner); runner = null; }
+        if (simulatePhysics != null) { Destroy(simulatePhysics); simulatePhysics = null; }
+        if (objectProvider != null) { Destroy(objectProvider); objectProvider = null; }
+        if (sceneManager != null) { Destroy(sceneManager); sceneManager = null; }
+        if (inputProvider != null) { Destroy(inputProvider); inputProvider = null; }
+    }
+
     // ============================
     // Connection entry points (menuUI buttons call these)
     // ============================
 
     public async void StartHost()
     {
+        startedAsClient = false;
         var args = new StartGameArgs()
         {
             GameMode = GameMode.Host, // AutoHostOrClient creates separate sessions — never use it here
@@ -161,6 +198,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public async void StartClient()
     {
+        startedAsClient = true;
         var args = new StartGameArgs()
         {
             GameMode = GameMode.Client,
@@ -193,6 +231,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     async void StartServer()
     {
+        startedAsClient = false;
         var args = new StartGameArgs()
         {
             GameMode = GameMode.Server,
@@ -208,6 +247,76 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             Debug.Log("✅ Dedicated server started — waiting for players.");
         else
             Debug.LogError($"❌ Server failed to start: {result.ShutdownReason}");
+    }
+
+    public int MenuSceneIndex => menuSceneIndex;
+
+    /// <summary>
+    /// One reconnect attempt against the session we were actually in, with the same identity token.
+    /// Requires a freshly built runner (see TeardownRunner/BuildRunner). Does not touch the menu UI —
+    /// ReconnectController owns the overlay while the loop runs.
+    /// </summary>
+    public async System.Threading.Tasks.Task<bool> TryReconnectAsync()
+    {
+        if (runner == null) return false;
+
+        startedAsClient = true;
+        intentionalDisconnect = false;
+
+        var args = new StartGameArgs()
+        {
+            GameMode = GameMode.Client,
+            SessionName = string.IsNullOrEmpty(connectedSessionName) ? sessionName : connectedSessionName,
+            PlayerCount = maxPlayers,
+            SceneManager = sceneManager,
+            ObjectProvider = objectProvider,
+            ConnectionToken = PlayerIdentity.TokenBytes
+        };
+
+        var result = await runner.StartGame(args);
+        return result.Ok;
+    }
+
+    /// <summary>
+    /// Re-point at the menu scene's UI after a LOCAL (non-networked) scene load, which raises no
+    /// Fusion OnSceneLoadDone. Same body as the return-to-lobby re-acquire, factored out so the two
+    /// paths cannot drift.
+    /// </summary>
+    public void ReacquireMenuUI()
+    {
+        menuUI = FindFirstObjectByType<MainMenuUI>(FindObjectsInactive.Include);
+        lobbyUI = FindFirstObjectByType<LobbyScreenUI>(FindObjectsInactive.Include);
+
+        if (menuUI != null) menuUI.SetNetworkManager(this);
+        if (lobbyUI != null) lobbyUI.SetNetworkManager(this);
+    }
+
+    public void ShowReconnectingUI(string message)
+    {
+        if (lobbyUI != null) lobbyUI.Hide();
+        if (menuUI != null)
+        {
+            menuUI.Show();
+            menuUI.ShowReconnecting(message);
+        }
+    }
+
+    public void HideReconnectingUI(string message)
+    {
+        if (menuUI != null)
+        {
+            menuUI.Show();
+            menuUI.HideReconnecting();
+            menuUI.ShowStatus(message);
+        }
+    }
+
+    /// <summary>A reconnect attempt succeeded: drop the overlay and re-enter the normal lobby flow.</summary>
+    public void OnReconnectSucceeded()
+    {
+        connectedSessionName = string.IsNullOrEmpty(connectedSessionName) ? sessionName : connectedSessionName;
+        if (menuUI != null) menuUI.HideReconnecting();
+        EnterLobbyUI();
     }
 
     private void EnterLobbyUI()
@@ -415,11 +524,13 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
+        intentionalDisconnect = true;
         if (runner != null) runner.Shutdown();
     }
 
     void OnApplicationQuit()
     {
+        intentionalDisconnect = true;
         if (runner != null) runner.Shutdown();
     }
 
@@ -519,6 +630,17 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         reconnectRegistry.Capture(token, slot);
     }
 
+    public void OnConnectedToServer(NetworkRunner runner)
+    {
+        hasBeenConnected = true;
+    }
+
+    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
+    {
+        Debug.LogWarning($"⚠️ Disconnected from server: {reason}");
+        TryBeginReconnect(reason.ToString());
+    }
+
     public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
     {
         // Pooled instances belong to the session that just died — drop them so a
@@ -529,8 +651,18 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // The live-coin registry is server-only static state; clear it so a restarted session
         // doesn't inherit stale (destroyed) coin references or a bogus live count.
         CoinRegistry.Clear();
+
         reconnectRegistry.Clear();
         pendingRestores.Clear();
+
+        LobbyTeamChoices.Clear();
+        LobbyNicknameChoices.Clear();
+        LobbyLoadoutChoices.Clear();
+        serverLobby = new LobbyServerState();
+        gameStarting = false;
+
+        // An unexpected client drop hands off to the retry loop, which owns the UI from here.
+        if (TryBeginReconnect(shutdownReason.ToString())) return;
 
         if (lobbyUI != null) lobbyUI.Hide();
         if (menuUI != null)
@@ -538,17 +670,32 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             menuUI.Show();
             menuUI.ShowStatus($"Disconnected: {shutdownReason}");
         }
-
-        LobbyTeamChoices.Clear();
-        LobbyNicknameChoices.Clear();
-        LobbyLoadoutChoices.Clear();
-        serverLobby = new LobbyServerState();
-        gameStarting = false;
     }
 
-    public void OnConnectedToServer(NetworkRunner runner) { }
+    /// <summary>
+    /// True when the retry loop took over. Only for a CLIENT that actually got connected and did not
+    /// quit on purpose: a dedicated server, a host, and a failed first connect all keep today's
+    /// straight-to-the-menu behavior.
+    ///
+    /// Fusion may raise OnDisconnectedFromServer, OnShutdown, or both for one drop, so this is
+    /// called from both and BeginReconnect is idempotent.
+    /// </summary>
+    private bool TryBeginReconnect(string reason)
+    {
+        if (intentionalDisconnect || !hasBeenConnected || !startedAsClient) return false;
+        if (reconnectController == null) return false;
 
-    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
+        reconnectController.BeginReconnect(reason);
+        return true;
+    }
+
+    /// <summary>Marks the next shutdown as ours, so it goes to the menu instead of the retry loop.</summary>
+    public void MarkIntentionalDisconnect() => intentionalDisconnect = true;
+
+    public void CancelReconnect()
+    {
+        if (reconnectController != null) reconnectController.Cancel();
+    }
 
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
     {
@@ -671,18 +818,19 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // Only care about arriving back in the menu scene (the return-to-lobby path). The gameplay
         // load has a different build index and is handled by the gameplay-side managers.
         if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex != menuSceneIndex)
+        {
+            // A player pulled into a RUNNING match — a mid-match late joiner, or a reconnecting
+            // player — never went through LoadGameplayScene's lobbyUI.Hide(), so without this the
+            // lobby panel stays drawn on top of gameplay. Pre-existing, but reconnection turns a
+            // rare path into the common one.
+            if (lobbyUI != null) lobbyUI.Hide();
+            if (menuUI != null) menuUI.Hide();
             return;
+        }
 
         // The persistent GameNetworkManager's serialized menu/lobby refs died with the previous
         // menu scene instance; re-acquire the new ones.
-        menuUI = FindFirstObjectByType<MainMenuUI>(FindObjectsInactive.Include);
-        lobbyUI = FindFirstObjectByType<LobbyScreenUI>(FindObjectsInactive.Include);
-
-        // The reloaded scene's UI holds serialized refs to the duplicate GameNetworkManager that
-        // the dup-guard just destroyed; re-point them at this persistent instance or their buttons
-        // call into a destroyed object and do nothing.
-        if (menuUI != null) menuUI.SetNetworkManager(this);
-        if (lobbyUI != null) lobbyUI.SetNetworkManager(this);
+        ReacquireMenuUI();
 
         if (menuUI != null) menuUI.Hide();   // skip the Join/Host screen — we are still connected
         if (lobbyUI != null) lobbyUI.Show();
