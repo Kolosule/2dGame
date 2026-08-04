@@ -89,6 +89,12 @@ public class ReconnectController : MonoBehaviour
                 // The abandoned task may still complete later (fire-and-forget) — that is accepted;
                 // there is no cancellation path for an in-flight Fusion StartGame.
                 Debug.LogWarning($"⚠️ Reconnect attempt {attempt} timed out after {AttemptTimeoutSeconds}s — moving on.");
+
+                // Tear it down NOW, not after the next backoff wait. A merely-slow attempt that
+                // completes during that wait is a live, successful connection: the server claims the
+                // held slot and may spawn the avatar, and the next attempt then throws it all away —
+                // burning a genuine reconnect.
+                net.TeardownRunner();
                 continue;
             }
 
@@ -105,7 +111,9 @@ public class ReconnectController : MonoBehaviour
         }
 
         loop = null;
-        yield return FallBackToMenu("Could not reconnect. Returning to the menu.");
+        // The drop reason is the single most useful diagnostic after a ~23s wait, so carry it into
+        // the terminal message (the spec's "Could not reconnect: {reason}").
+        yield return FallBackToMenu($"Could not reconnect: {reason}");
     }
 
     private IEnumerator FallBackToMenu(string message)

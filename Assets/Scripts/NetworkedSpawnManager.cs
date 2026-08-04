@@ -176,6 +176,19 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             // an unexpected late joiner with no recorded choice. AssignTeam auto-balances them.
             Debug.LogWarning($"⚠️ No lobby team choice for Player {player.PlayerId} - auto-balancing");
             choice = NoTeamChoice;
+
+            // Ordering tripwire (the join-side twin of ServerCaptureForReconnect's). An outstanding
+            // hold for this player means GameNetworkManager.OnPlayerJoined has NOT run for them, so
+            // the hold will never be claimed: they are about to be auto-balanced onto an arbitrary
+            // team with none of their state restored, while their held seat stays reserved forever.
+            if (GameNetworkManager.Instance != null &&
+                GameNetworkManager.Instance.ServerHasUnclaimedHold(player))
+            {
+                Debug.LogError($"❌ Player {player.PlayerId} has no lobby team choice but still has an " +
+                               "unclaimed reconnect hold — callback order changed; GameNetworkManager must " +
+                               "register its callbacks before NetworkedSpawnManager. Restored state is lost " +
+                               "and their held slot will never be released.");
+            }
         }
 
         spawnedPlayers.Add(player);

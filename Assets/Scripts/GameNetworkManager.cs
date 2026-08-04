@@ -38,6 +38,11 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private static readonly ReliableKey StartMatchKey = ReliableKey.FromInts(0x53545254, 0, 0, 0);    // "STRT"
 
     private NetworkRunner runner;
+    // The runner and every component bound to it live on their OWN child GameObject, never on this
+    // one. NetworkRunner.Shutdown defaults to destroyGameObject:true and Fusion calls it internally
+    // on a real disconnect, so a shared GameObject would let a genuine drop destroy
+    // GameNetworkManager and ReconnectController (with its in-flight retry coroutine) mid-reconnect.
+    private GameObject runnerObject;
     private NetworkSceneManagerDefault sceneManager;
     private PooledNetworkObjectProvider objectProvider;
     private RunnerSimulatePhysics2D simulatePhysics;
@@ -53,6 +58,12 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     // that consumes it — the two can be a whole scene load apart for a mid-match rejoin.
     private readonly Dictionary<PlayerRef, ReconnectHeldSlot> pendingRestores =
         new Dictionary<PlayerRef, ReconnectHeldSlot>();
+
+    // Server-only. Identity token per active player, captured at JOIN. GetPlayerConnectionToken only
+    // resolves while a live simulation connection for the player still exists, which is not
+    // guaranteed inside OnPlayerLeft for an UNGRACEFUL drop — the exact case this feature exists for.
+    // Capturing at join means the leave path never has to ask a half-dead connection for it.
+    private readonly Dictionary<PlayerRef, string> tokensByPlayer = new Dictionary<PlayerRef, string>();
 
     // The session name we are actually connected to. Reconnect retries against THIS rather than
     // re-reading the sessionName field, so a future server browser cannot silently send a
@@ -121,23 +132,30 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     /// </summary>
     public void BuildRunner()
     {
-        runner = gameObject.AddComponent<NetworkRunner>();
+        // Dedicated child object so that a Fusion-internal Shutdown(destroyGameObject: true) can only
+        // ever take the runner's own GameObject — never this persistent one, which carries this
+        // manager and ReconnectController. All five components below MUST share this object: Fusion
+        // resolves the scene manager / object provider / physics stepper off the runner's GameObject.
+        runnerObject = new GameObject("NetworkRunner");
+        runnerObject.transform.SetParent(transform, false);
+
+        runner = runnerObject.AddComponent<NetworkRunner>();
 
         // Fusion steps Physics2D inside the network tick (required for NetworkRigidbody2D prediction).
         // ClientPhysicsSimulation defaults to Disabled, which means CLIENTS never call
         // Physics.Simulate() and so never integrate their own rigidbody forward — SimulateForward
         // enables client-side prediction of the local player's position.
-        simulatePhysics = gameObject.AddComponent<RunnerSimulatePhysics2D>();
+        simulatePhysics = runnerObject.AddComponent<RunnerSimulatePhysics2D>();
         simulatePhysics.ClientPhysicsSimulation = ClientPhysicsSimulation.SimulateForward;
 
         // Pool high-churn networked prefabs (projectiles) instead of Instantiate/Destroy each shot.
-        objectProvider = gameObject.AddComponent<PooledNetworkObjectProvider>();
+        objectProvider = runnerObject.AddComponent<PooledNetworkObjectProvider>();
 
         // One scene manager for the lifetime of the runner.
-        sceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>();
+        sceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
 
         // Register the single input source.
-        inputProvider = gameObject.AddComponent<NetworkInputProvider>();
+        inputProvider = runnerObject.AddComponent<NetworkInputProvider>();
         runner.AddCallbacks(inputProvider);
 
         // Receive lobby callbacks (player join/leave, reliable lobby data). Registered HERE, before
@@ -147,16 +165,27 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     }
 
     /// <summary>
-    /// Destroys the runner and its bound components. Unity defers Destroy to end of frame, so a
-    /// caller MUST wait one frame before calling BuildRunner or it will stack duplicates.
+    /// Destroys the runner's child object and everything on it. Unity defers Destroy to end of frame,
+    /// so a caller MUST wait one frame before calling BuildRunner or it will stack duplicates.
     /// </summary>
     public void TeardownRunner()
     {
-        if (runner != null) { runner.Shutdown(); Destroy(runner); runner = null; }
-        if (simulatePhysics != null) { Destroy(simulatePhysics); simulatePhysics = null; }
-        if (objectProvider != null) { Destroy(objectProvider); objectProvider = null; }
-        if (sceneManager != null) { Destroy(sceneManager); sceneManager = null; }
-        if (inputProvider != null) { Destroy(inputProvider); inputProvider = null; }
+        // Run this runner's session cleanup HERE, at the one site that knows which runner is dying.
+        // OnShutdown / OnDisconnectedFromServer ignore callbacks that arrive from an already-replaced
+        // runner, so this is the only place a deliberate teardown's cleanup is guaranteed to run.
+        ShutdownCleanup();
+
+        // destroyGameObject:false — the child object is destroyed below, deliberately and exactly once.
+        if (runner != null) runner.Shutdown(destroyGameObject: false);
+
+        runner = null;
+        simulatePhysics = null;
+        objectProvider = null;
+        sceneManager = null;
+        inputProvider = null;
+
+        if (runnerObject != null) Destroy(runnerObject);
+        runnerObject = null;
     }
 
     // ============================
@@ -440,7 +469,11 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     /// </summary>
     private void ServerHandleJoin(NetworkRunner runner, PlayerRef player)
     {
+        // Resolve the identity token ONCE, here, where the connection is unambiguously live: it keys
+        // the claim below and is remembered for the leave path (see ServerCaptureForReconnect).
         string token = IdentityTokenCodec.ToHex(runner.GetPlayerConnectionToken(player));
+        if (!string.IsNullOrEmpty(token))
+            tokensByPlayer[player] = token;
 
         if (reconnectRegistry.TryClaim(token, out ReconnectHeldSlot held))
         {
@@ -476,6 +509,23 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (!pendingRestores.TryGetValue(player, out slot)) return false;
         pendingRestores.Remove(player);
         return true;
+    }
+
+    /// <summary>
+    /// Server-only tripwire helper for the spawn path: is a reconnect hold for this player's identity
+    /// STILL outstanding? True at spawn time means ServerHandleJoin never ran for them, so their held
+    /// slot will never be claimed — leaving them simultaneously active and held, which breaks the
+    /// active + held &lt;= maxPlayers invariant the seat reservation depends on. Deliberately exposes a
+    /// single yes/no rather than the registry itself.
+    /// </summary>
+    public bool ServerHasUnclaimedHold(PlayerRef player)
+    {
+        if (runner == null || !runner.IsServer) return false;
+
+        if (!tokensByPlayer.TryGetValue(player, out string token) || string.IsNullOrEmpty(token))
+            token = IdentityTokenCodec.ToHex(runner.GetPlayerConnectionToken(player));
+
+        return reconnectRegistry.Has(token);
     }
 
     /// <summary>
@@ -527,6 +577,11 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // needs no grace TickTimer — the match boundary is the timer.
         reconnectRegistry.Clear();
         pendingRestores.Clear();
+        // tokensByPlayer is deliberately NOT cleared here: it holds identity, not match state, and
+        // its entries belong to players who are still connected. OnPlayerLeft removes each one, so it
+        // cannot grow unbounded. Clearing it at the match boundary would leave every player who
+        // carried over from the previous match with no cached token, putting the NEXT match's captures
+        // back on the unreliable leave-time GetPlayerConnectionToken this map exists to avoid.
 
         gameStarting = false;
         _ = runner.LoadScene(SceneRef.FromIndex(menuSceneIndex));
@@ -536,13 +591,13 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         if (Instance == this) Instance = null;
         intentionalDisconnect = true;
-        if (runner != null) runner.Shutdown();
+        if (runner != null) runner.Shutdown(destroyGameObject: false);
     }
 
     void OnApplicationQuit()
     {
         intentionalDisconnect = true;
-        if (runner != null) runner.Shutdown();
+        if (runner != null) runner.Shutdown(destroyGameObject: false);
     }
 
     // ============================
@@ -568,6 +623,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             LobbyNicknameChoices.Remove(player);
             LobbyLoadoutChoices.Remove(player);
             pendingRestores.Remove(player);
+            tokensByPlayer.Remove(player);
             if (!gameStarting) BroadcastLobby();
         }
     }
@@ -592,10 +648,19 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (MatchManager.Instance == null) return;
         if (!MatchRules.PreservesDisconnectState(MatchManager.Instance.Phase)) return;
 
-        // GetPlayerConnectionToken is server-only and returns null when the client sent no token;
-        // ToHex turns anything malformed into "", which the registry refuses to key on.
-        string token = IdentityTokenCodec.ToHex(runner.GetPlayerConnectionToken(player));
-        if (string.IsNullOrEmpty(token)) return;
+        // Prefer the token captured at JOIN: GetPlayerConnectionToken needs a live simulation
+        // connection, which an ungraceful drop may already have torn down by the time we get here.
+        // The live call is only a fallback (a player who somehow has no cached entry).
+        if (!tokensByPlayer.TryGetValue(player, out string token) || string.IsNullOrEmpty(token))
+            token = IdentityTokenCodec.ToHex(runner.GetPlayerConnectionToken(player));
+
+        if (string.IsNullOrEmpty(token))
+        {
+            // Silent here would make the whole feature inert and look exactly like the expected
+            // duplicate-token case, so say it out loud.
+            Debug.LogWarning($"⚠️ ServerCaptureForReconnect: no identity token for Player {player.PlayerId} — not held.");
+            return;
+        }
 
         // Dropped again before their avatar ever spawned (e.g. during the gameplay scene load):
         // re-hold the still-unconsumed restore instead of reading an avatar that never existed.
@@ -616,19 +681,30 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             LoadoutOrder = LobbyLoadoutChoices.TryGet(player, out byte[] order) ? order : null
         };
 
+        // A stats row is the proof that this player actually spawned. Without one, "no avatar" simply
+        // means they never had one (e.g. they dropped during the gameplay scene load) — which is not
+        // an ordering failure and must not be reported as one.
+        PlayerStatEntry entry = default;
+        bool everSpawned = MatchStatsManager.Instance != null &&
+                           MatchStatsManager.Instance.TryGetEntry(player.PlayerId, out entry);
+
         if (runner.TryGetPlayerObject(player, out NetworkObject avatar) && avatar != null)
         {
             PlayerBuffs buffs = avatar.GetComponent<PlayerBuffs>();
             if (buffs != null) slot.TotalDepositedValue = buffs.TotalDeposited;
         }
-        else
+        else if (everSpawned)
         {
             Debug.LogError($"❌ ServerCaptureForReconnect: no avatar for Player {player.PlayerId} — " +
                            "callback order changed; their deposited value will NOT be restored.");
         }
+        else
+        {
+            Debug.LogWarning($"⚠️ ServerCaptureForReconnect: Player {player.PlayerId} dropped before their " +
+                             "avatar spawned — team and name are held, but there is no progression to preserve.");
+        }
 
-        if (MatchStatsManager.Instance != null &&
-            MatchStatsManager.Instance.TryGetEntry(player.PlayerId, out PlayerStatEntry entry))
+        if (everSpawned)
         {
             slot.Kills = entry.Kills;
             slot.Deaths = entry.Deaths;
@@ -648,11 +724,20 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
     {
+        // Same stale-callback guard as OnShutdown: a disconnect from a runner the reconnect loop
+        // already discarded must not restart the loop on top of a live connection.
+        if (runner != this.runner) return;
+
         Debug.LogWarning($"⚠️ Disconnected from server: {reason}");
         TryBeginReconnect(reason.ToString());
     }
 
-    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
+    /// <summary>
+    /// Session state that must not survive the runner it belongs to. Called from OnShutdown for a
+    /// drop we did not cause, and directly from TeardownRunner for one we did — every operation is
+    /// idempotent, so running it from both on a single teardown is harmless.
+    /// </summary>
+    private void ShutdownCleanup()
     {
         // Pooled instances belong to the session that just died — drop them so a
         // restarted session doesn't reuse destroyed objects.
@@ -665,12 +750,23 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         reconnectRegistry.Clear();
         pendingRestores.Clear();
+        tokensByPlayer.Clear();
 
         LobbyTeamChoices.Clear();
         LobbyNicknameChoices.Clear();
         LobbyLoadoutChoices.Clear();
         serverLobby = new LobbyServerState();
         gameStarting = false;
+    }
+
+    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
+    {
+        // Fusion supports deferred shutdown, so this can arrive from a runner we already replaced —
+        // up to five of them are torn down during one reconnect loop. Acting on a stale callback
+        // would clear the LIVE session's state and restart the retry loop on a healthy connection.
+        if (runner != this.runner) return;
+
+        ShutdownCleanup();
 
         // An unexpected client drop hands off to the retry loop, which owns the UI from here.
         if (TryBeginReconnect(shutdownReason.ToString())) return;
@@ -732,6 +828,16 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason)
     {
+        // The retry loop owns the UI while it runs. Writing a terminal "Connection failed" over the
+        // attempt counter (and re-enabling Join/Host mid-loop, letting a click start a second
+        // connection on a runner the loop is about to tear down) is exactly what must not happen —
+        // and this fires on every attempt against a down server, plus on a server-side Refuse().
+        if (reconnectController != null && reconnectController.IsReconnecting)
+        {
+            Debug.LogWarning($"⚠️ Reconnect attempt failed: {reason}");
+            return;
+        }
+
         Debug.LogError($"❌ Connection failed: {reason}");
         if (menuUI != null)
         {
