@@ -19,7 +19,7 @@ public class Projectile : NetworkBehaviour
 
     [Networked] private Vector2 Direction { get; set; }
     [Networked] private float Speed { get; set; }
-    [Networked] private int Damage { get; set; }
+    [Networked] private int BaseDamage { get; set; }
     [Networked] private Team ShooterTeam { get; set; }
 
     // Networked so every peer (and every pooled reuse) applies the same visual scale.
@@ -29,12 +29,13 @@ public class Projectile : NetworkBehaviour
     private Rigidbody2D rb;
     private bool hasHit;
 
-    /// <summary>SERVER: set from PlayerCombat's spawn callback before Spawned runs.</summary>
-    public void ServerInitialize(Vector2 dir, float speed, int damage, Team team, float scale)
+    /// <summary>SERVER: set from PlayerCombat's spawn callback before Spawned runs. baseDamage is
+    /// the RAW, unresolved damage — final damage is resolved at impact against the defender.</summary>
+    public void ServerInitialize(Vector2 dir, float speed, int baseDamage, Team team, float scale)
     {
         Direction = dir.normalized;
         Speed = speed;
-        Damage = damage;
+        BaseDamage = baseDamage;
         ShooterTeam = team;
         Scale = scale > 0f ? scale : 1f;
     }
@@ -88,8 +89,10 @@ public class Projectile : NetworkBehaviour
                 NetworkId attackerId = Object.Id;
                 if (Runner.TryGetPlayerObject(Object.InputAuthority, out NetworkObject shooterObj))
                     attackerId = shooterObj.Id;
-                playerStats.ServerApplyDamage(Damage, attackerId);
-                RPC_HitFeedback(playerStats.Object.Id, other.transform.position, Damage);
+
+                int finalDamage = ResolveDamage(targetTeam, other.transform.position);
+                playerStats.ServerApplyDamage(finalDamage, attackerId);
+                RPC_HitFeedback(playerStats.Object.Id, other.transform.position, finalDamage);
                 if (stunPlayers)
                 {
                     PlayerMovement pm = other.GetComponent<PlayerMovement>();
@@ -105,8 +108,9 @@ public class Projectile : NetworkBehaviour
         if (enemy != null)
         {
             Vector2 dir = ((Vector2)other.transform.position - (Vector2)transform.position).normalized;
-            enemy.TakeDamage(Damage, dir * 5f, other.transform.position);
-            RPC_HitFeedback(enemy.Object.Id, other.transform.position, Damage);
+            int finalDamage = ResolveDamage(enemy.Team, other.transform.position);
+            enemy.TakeDamage(finalDamage, dir * 5f, other.transform.position);
+            RPC_HitFeedback(enemy.Object.Id, other.transform.position, finalDamage);
             Hit();
             return;
         }
@@ -114,6 +118,27 @@ public class Projectile : NetworkBehaviour
         // Ground / wall
         if (other.gameObject.layer == LayerMask.NameToLayer("Ground") || other.CompareTag("Wall"))
             Hit();
+    }
+
+    /// <summary>
+    /// Resolves impact damage through the unified pipeline, keyed by the DEFENDER's team and
+    /// position at the moment of impact — a defender takes more damage the farther they are from
+    /// their own base. Resolved here (not at fire time) because the defender is only known on
+    /// hit. Falls back to the raw authored base damage (with a loud one-time warning) if no
+    /// CombatConfig is assigned.
+    /// </summary>
+    private int ResolveDamage(Team defenderTeam, Vector2 defenderPos)
+    {
+        CombatConfig config = GameSettingsManager.Instance != null
+            ? GameSettingsManager.Instance.GetCombatConfig()
+            : null;
+        if (config == null)
+        {
+            CombatConfig.WarnMissingOnce();
+            return BaseDamage;
+        }
+
+        return config.ResolveDamage(BaseDamage, defenderTeam, defenderPos);
     }
 
     private void Hit()
