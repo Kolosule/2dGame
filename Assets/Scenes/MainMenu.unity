@@ -298,6 +298,8 @@ MonoBehaviour:
   joinButton: {fileID: 100075}
   hostButton: {fileID: 100095}
   statusText: {fileID: 100114}
+  reconnectPanel: {fileID: 0}
+  cancelReconnectButton: {fileID: 0}
   networkManager: {fileID: 492863698}
 --- !u!114 &100014
 MonoBehaviour:
@@ -5537,6 +5539,7 @@ GameObject:
   m_Component:
   - component: {fileID: 492863700}
   - component: {fileID: 492863698}
+  - component: {fileID: 492863701}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
@@ -5577,6 +5580,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &492863701
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 492863697}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f6af85375f24254a2d698f706c05f19, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ReconnectController
 --- !u!1 &755557554
 GameObject:
   m_ObjectHideFlags: 0
@@ -6649,8 +6664,6 @@ MonoBehaviour:
   team1Data: {fileID: 11400000, guid: 9517ac3531343d54c985383046ac7d9d, type: 2}
   team2Data: {fileID: 11400000, guid: 00dea736a97d2eb45b12b147d8455094, type: 2}
   team3Data: {fileID: 11400000, guid: 65bb79ee2921af84e94956759ba60ca9, type: 2}
-  minDamageMultiplier: 0.5
-  maxDamageMultiplier: 1.5
   aiUsesTerritory: 0
 --- !u!4 &1622506356
 Transform:

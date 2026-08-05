@@ -134,8 +134,16 @@ PolygonCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 1, y: 0.8828125}
+    newSize: {x: 1, y: 1}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
   m_Points:
-    serializedVersion: 2
     m_Paths:
     - - {x: 0.5, y: 0}
       - {x: 0.25, y: 0.433}
@@ -185,7 +193,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
   stats: {fileID: 11400000, guid: fc2373875fcf4ec59918f3d9107933d5, type: 2}
   coinPrefab: {fileID: -934654579490886913, guid: f3cda0812fd9ef74b9123ee76a91116d, type: 3}
-  coinsToDrop: 3
+  coinsToDrop: 1
   coinScatterRadius: 0.5
   _IsTelegraphing:
     _value: 0
