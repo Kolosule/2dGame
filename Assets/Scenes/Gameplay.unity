@@ -17258,7 +17258,7 @@ MonoBehaviour:
   enemySpawnRateMultiplier: 1
   goldMultiplier: 1
   experienceMultiplier: 1
-  matchTimeLimit: 1
+  matchTimeLimit: 10
   suddenDeathHardCap: 0
   autoRespawn: 1
   showMinimap: 1
