@@ -1,7 +1,16 @@
 using UnityEngine;
 
 /// <summary>
-/// Central hub for all game configuration - no code changes needed for tweaks!
+/// Host/match configuration holder: the shared config assets every gameplay system reads, plus the
+/// two server-authoritative match rules MatchManager consumes.
+///
+/// This is NOT where client preferences live. Volume, resolution, camera shake and damage numbers
+/// are client-local and belong to SettingsStore / the options menu — they are per-player, must not
+/// affect simulation, and are needed in MainMenu.unity, where this Gameplay-scene singleton does
+/// not exist. See docs/superpowers/specs/2026-07-29-options-settings-design.md.
+///
+/// The fields below are authored by whoever runs the host or dedicated server. A client must never
+/// be able to write them: they decide when the match ends for everyone.
 /// </summary>
 public class GameSettingsManager : MonoBehaviour
 {
@@ -14,33 +23,6 @@ public class GameSettingsManager : MonoBehaviour
     [Tooltip("Concentric difficulty rings applied to enemies by distance from center.")]
     [SerializeField] private DifficultyRingConfig difficultyRingConfig;
 
-    [Header("Game Rules")]
-    [Tooltip("Respawn time multiplier")]
-    [Range(0.1f, 5.0f)]
-    public float respawnTimeMultiplier = 1.0f;
-
-    [Header("Difficulty Settings")]
-    [Tooltip("Global enemy health multiplier")]
-    [Range(0.1f, 5.0f)]
-    public float enemyHealthMultiplier = 1.0f;
-
-    [Tooltip("Global enemy damage multiplier")]
-    [Range(0.1f, 5.0f)]
-    public float enemyDamageMultiplier = 1.0f;
-
-    [Tooltip("Enemy spawn rate multiplier (higher = more enemies)")]
-    [Range(0.1f, 3.0f)]
-    public float enemySpawnRateMultiplier = 1.0f;
-
-    [Header("Economy Settings")]
-    [Tooltip("Gold gain multiplier")]
-    [Range(0.1f, 5.0f)]
-    public float goldMultiplier = 1.0f;
-
-    [Tooltip("Experience gain multiplier")]
-    [Range(0.1f, 5.0f)]
-    public float experienceMultiplier = 1.0f;
-
     [Header("Match Settings")]
     [Tooltip("Match time limit in minutes (0 = no limit)")]
     public float matchTimeLimit = 0f;
@@ -49,20 +31,6 @@ public class GameSettingsManager : MonoBehaviour
              "expiry the match resolves as a draw so a headless server cannot wedge on an " +
              "unwinnable match. Leave at 0 — draws are unreachable in default play.")]
     public float suddenDeathHardCap = 0f;
-
-    [Header("Quality of Life")]
-    [Tooltip("Auto-respawn after death")]
-    public bool autoRespawn = true;
-
-    [Tooltip("Show mini-map")]
-    public bool showMinimap = true;
-
-    [Tooltip("Show damage numbers")]
-    public bool showDamageNumbers = true;
-
-    [Tooltip("Camera shake intensity")]
-    [Range(0f, 2f)]
-    public float cameraShakeIntensity = 1.0f;
 
     private void Awake()
     {
@@ -90,13 +58,5 @@ public class GameSettingsManager : MonoBehaviour
     public DifficultyRingConfig GetDifficultyRingConfig()
     {
         return difficultyRingConfig;
-    }
-
-    /// <summary>
-    /// Calculate final respawn time for a team
-    /// </summary>
-    public float GetRespawnTime(TeamData team)
-    {
-        return team.respawnDelay * respawnTimeMultiplier;
     }
 }

@@ -42,7 +42,9 @@ public class HitFeedback : MonoBehaviour
             Destroy(fx, particleLifetime);
         }
 
-        if (damageNumberPrefab != null)
+        // Client-local preference: hide the floating numbers only. The particle burst and the
+        // target hit-flash below are unaffected -- this is not a "disable hit feedback" toggle.
+        if (damageNumberPrefab != null && SettingsStore.ShowDamageNumbers)
         {
             GameObject num = Instantiate(damageNumberPrefab, hitPoint, Quaternion.identity);
             DamageNumber dn = num.GetComponent<DamageNumber>();
