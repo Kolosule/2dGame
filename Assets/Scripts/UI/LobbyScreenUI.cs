@@ -16,6 +16,11 @@ public class LobbyScreenUI : MonoBehaviour
     [SerializeField] private TMP_Text playersHeader;
     [SerializeField] private TMP_Text statusText;
 
+    [SerializeField] private Button optionsButton;
+
+    [Tooltip("Shared with MainMenuUI — one SettingsPanel instance serves both screens.")]
+    [SerializeField] private SettingsPanel settingsPanel;
+
     [Header("Team Columns")]
     [SerializeField] private Transform team1ListParent;
     [SerializeField] private Transform team2ListParent;
@@ -62,6 +67,8 @@ public class LobbyScreenUI : MonoBehaviour
         if (loadoutToggleButton != null)
             loadoutToggleButton.onClick.AddListener(ToggleLoadoutPanel);
 
+        if (optionsButton != null) optionsButton.onClick.AddListener(OpenSettings);
+
         InitLoadoutOrder();
         WireLoadoutButtons();
         RefreshLoadoutLabels();
@@ -86,7 +93,27 @@ public class LobbyScreenUI : MonoBehaviour
 
     public void Hide()
     {
+        if (settingsPanel != null) settingsPanel.Close();
         if (lobbyPanel != null) lobbyPanel.SetActive(false);
+    }
+
+    /// <summary>
+    /// Client-local settings only. Opening this does not touch the runner, the roster, or any
+    /// networked state — the lobby connection keeps running behind it.
+    /// </summary>
+    private void OpenSettings()
+    {
+        if (settingsPanel == null)
+        {
+            Debug.LogError("❌ LobbyScreenUI: settingsPanel not assigned!");
+            return;
+        }
+
+        if (lobbyPanel != null) lobbyPanel.SetActive(false);
+        settingsPanel.Open(() =>
+        {
+            if (lobbyPanel != null) lobbyPanel.SetActive(true);
+        });
     }
 
     /// <summary>

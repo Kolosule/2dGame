@@ -16,6 +16,12 @@ public class MainMenuUI : MonoBehaviour
     [SerializeField] private Button hostButton;
     [SerializeField] private TMP_Text statusText;
 
+    [SerializeField] private Button optionsButton;
+
+    [Header("Settings")]
+    [Tooltip("Shared with LobbyScreenUI — one SettingsPanel instance serves both screens.")]
+    [SerializeField] private SettingsPanel settingsPanel;
+
     [Header("Reconnect (optional — the status line alone works without these)")]
     [SerializeField] private GameObject reconnectPanel;
     [SerializeField] private Button cancelReconnectButton;
@@ -42,6 +48,8 @@ public class MainMenuUI : MonoBehaviour
 
         if (hostButton != null) hostButton.onClick.AddListener(() => Connect(asHost: true));
         else Debug.LogError("❌ MainMenuUI: Host button not assigned!");
+
+        if (optionsButton != null) optionsButton.onClick.AddListener(OpenSettings);
 
         if (cancelReconnectButton != null)
         {
@@ -81,8 +89,30 @@ public class MainMenuUI : MonoBehaviour
         networkManager = gnm;
     }
 
+    /// <summary>
+    /// Client-local settings only — nothing here touches the runner or any networked state, so it
+    /// is safe to open at any point on this screen.
+    /// </summary>
+    private void OpenSettings()
+    {
+        if (settingsPanel == null)
+        {
+            Debug.LogError("❌ MainMenuUI: settingsPanel not assigned!");
+            return;
+        }
+
+        if (menuPanel != null) menuPanel.SetActive(false);
+        settingsPanel.Open(() =>
+        {
+            if (menuPanel != null) menuPanel.SetActive(true);
+        });
+    }
+
     public void Show()
     {
+        // A connect failure can call Show() while the options window is open; close it so the two
+        // panels never stack.
+        if (settingsPanel != null) settingsPanel.Close();
         if (menuPanel != null) menuPanel.SetActive(true);
         SetBusy(false);
     }
