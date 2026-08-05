@@ -263,9 +263,20 @@ unit-testable outside Unity per the project's bundled-Roslyn workaround:
 **`Assets/Scripts/Settings/SettingsStore.cs`** — a static typed accessor over `PlayerPrefs`. Owns
 every key string, every default, and `settings.version`. Reads are served from an in-memory cache
 populated once at boot, so a consumer polling per-frame costs a field read, not a registry hit.
-Writes update the cache, write through to `PlayerPrefs`, call `PlayerPrefs.Save()`, and raise a
-single `Changed` event. Consumers (`PlayerCameraShakeHandler`, `HitFeedback`) read the cached
-property directly; they do not subscribe, because both read at the moment of use anyway.
+Writes update the cache, write through to `PlayerPrefs`, and raise a single `Changed` event.
+Consumers (`PlayerCameraShakeHandler`, `HitFeedback`) read the cached property directly; they do not
+subscribe, because both read at the moment of use anyway.
+
+**Amended 2026-08-04 after implementation review:** this section originally specified a
+`PlayerPrefs.Save()` on *every* write. That is wrong once a slider is on the other end —
+`Slider.onValueChanged` fires every frame of a drag, and `PlayerPrefs.Save()` is a synchronous flush
+of the entire key set to the Windows registry, so dragging a volume slider end to end cost on the
+order of a hundred main-thread registry flushes. The shipped design instead writes through to
+`PlayerPrefs` on each set (so the value is durable against Unity's automatic flush at application
+quit) and issues one explicit `Save()` when the options window closes. The three
+`Reset*ToDefaults` methods and `SetResolution` keep their own explicit `Save()`, since those are
+discrete one-shot actions rather than drags. The only loss window is a hard crash with the options
+window still open.
 
 **`Assets/Scripts/Settings/SettingsService.cs`** — pushes stored values into the engine. Holds the
 optional `AudioMixer` reference. Exposes `ApplyAll()`, plus per-category applies used by the panel

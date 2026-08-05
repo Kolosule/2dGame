@@ -174,10 +174,13 @@ Two precision notes on the traced call sites, for anyone re-verifying this by re
   `lobbyUI.Hide()` itself. The scene reload at the start of the sequence (next point) additionally
   means the lobby screen isn't even present to hide by the time `HideReconnectingUI` could run.
 - The MainMenu scene reload (`ReconnectController.ReconnectLoop`'s
-  `SceneManager.LoadScene(net.MenuSceneIndex)`) happens once at the **start of every reconnect
-  attempt sequence** — i.e. every time `BeginReconnect` fires, before the numbered-attempt retry loop
-  begins — not on the success path. A successful reconnect never reloads MainMenu; it's the failure
-  and mid-sequence paths that run in a freshly reloaded menu scene.
+  `SceneManager.LoadScene(net.MenuSceneIndex)`) is that coroutine's **first statement** — it runs
+  once per reconnect sequence, unconditionally, before the numbered-attempt retry loop and therefore
+  before success or failure is known. Every outcome runs in a freshly reloaded menu scene, including
+  a reconnect that succeeds on the first attempt: `OnReconnectSucceeded` shows the lobby inside that
+  already-reloaded scene. Practical consequence for this feature: the live `SettingsPanel`,
+  `MainMenuUI` and `LobbyScreenUI` instances — and any `onClosed` callback they were holding — are
+  destroyed and rebuilt by that reload, so no stale callback can survive a reconnect.
 
 ---
 
