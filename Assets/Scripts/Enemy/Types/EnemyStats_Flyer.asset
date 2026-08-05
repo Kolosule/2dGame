@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: Flyer
   maxHealth: 100
-  attackDamage: 50
+  attackDamage: 25
   attackCooldown: 0.8
   attackTelegraphDuration: 0.12
   knockbackMultiplier: 1.5
