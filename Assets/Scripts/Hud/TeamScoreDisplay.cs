@@ -8,10 +8,10 @@ using Game.Hud.Core;
 /// territory zone indicator — one surface, because they are one subject (how strong is my team's
 /// position right now).
 ///
-/// The zone indicator's displayed state FOLDS IN the unlocked Vanguard tier: a player pushing into
-/// enemy turf watches it stop reading as penalised once the team buys the debuff away, and learns
-/// the buff from the thing it changes. Kept as TeamScoreDisplay (not renamed) so the component
-/// already wired into the Gameplay scene keeps its score-text references.
+/// The zone indicator's displayed state FOLDS IN the unlocked Vanguard tier: a player standing far
+/// from their own base watches it stop reading as penalised once the team buys the vulnerability
+/// away, and learns the buff from the thing it changes. Kept as TeamScoreDisplay (not renamed) so
+/// the component already wired into the Gameplay scene keeps its score-text references.
 ///
 /// Event-driven off TeamScoreManager + MatchManager; both are runtime singletons, so subscription
 /// is deferred until Instance exists. The only per-frame work is sampling the LOCAL player's
@@ -135,8 +135,8 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
         if (teams == null) return;
 
         int tier = scoreManager.VanguardTier(localTeam);
-        float advantage = teams.GetTerritorialAdvantage(localTeam, localPlayer.position);
-        TerritoryDisplay next = TerritoryReadout.Resolve(advantage, tier);
+        float ownBaseDistance01 = teams.GetOwnBaseDistance01(localTeam, localPlayer.position);
+        TerritoryDisplay next = TerritoryReadout.Resolve(ownBaseDistance01, tier);
 
         if (zonePainted && next == zone) return;
         zone = next;
@@ -196,11 +196,11 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
         {
             case TerritoryDisplay.Penalised:
                 color = zonePenalisedColor;
-                text = "ENEMY TERRITORY  −DAMAGE";
+                text = "EXPOSED  +DAMAGE TAKEN";
                 break;
             case TerritoryDisplay.Lifted:
                 color = zoneLiftedColor;
-                text = "ENEMY TERRITORY  CLEAR";
+                text = "EXPOSED  VANGUARD SHIELDED";
                 break;
             default:
                 color = zoneClearColor;
