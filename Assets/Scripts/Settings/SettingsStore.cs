@@ -5,7 +5,17 @@ using UnityEngine;
 /// <summary>
 /// The one place raw PlayerPrefs is touched for client-local settings. Values are read once into
 /// memory at first access, so a consumer reading a property every frame costs a field read rather
-/// than a registry hit; writes update the cache, write through, and raise Changed.
+/// than a registry hit; writes update the cache and write through to PlayerPrefs immediately.
+///
+/// FLUSH CONTRACT: per-field writes (the property setters, via WriteFloat/WriteInt) do NOT call
+/// `PlayerPrefs.Save()` — only `PlayerPrefs.SetFloat`/`SetInt`, which is an in-memory write. A
+/// `Slider.onValueChanged` fires every frame of a drag, and `Save()` is a synchronous flush of the
+/// entire key set to disk (the Windows registry on this platform); doing that on every drag frame
+/// was measured at roughly a hundred flushes per drag. Instead, `SettingsPanel.Close()` issues one
+/// explicit `Save()` when the window closes, and Unity's automatic flush at application quit is the
+/// backstop if the process ends without a clean close. The batch writers — the three
+/// `Reset*ToDefaults` methods and `SetResolution` — still `Save()` explicitly and immediately, since
+/// those are one-shot actions, not drag streams.
 ///
 /// CLIENT-LOCAL ONLY. Nothing here is networked, replicated, or read by simulation code — see the
 /// networking-safety section of docs/superpowers/specs/2026-07-29-options-settings-design.md.
@@ -16,7 +26,18 @@ using UnityEngine;
 /// </summary>
 public static class SettingsStore
 {
-    /// <summary>Raised after any write. The settings UI uses it; gameplay consumers just read.</summary>
+    /// <summary>
+    /// Raised after any write. Currently DEAD SURFACE — zero subscribers repo-wide, so every
+    /// <see cref="RaiseChanged"/> call is a no-op today. Kept intentionally rather than deleted: the
+    /// settings UI (`SettingsPanel`, `VideoSettingsSection`) refreshes explicitly via
+    /// `RefreshFromStore()` per the design spec instead of subscribing, so this event is for a future
+    /// consumer that needs to react to a setting changing from somewhere other than the settings UI
+    /// itself. Note the one deliberate asymmetry: <see cref="EnsureLoaded"/>'s migration path (which
+    /// can delete and reset every key on a version bump) does NOT raise this — that path runs before
+    /// anything could plausibly be subscribed (first access, typically at boot), so it was never
+    /// exercised or tested against a subscriber. Treat that as a known gap, not a guarantee, if you
+    /// add the first subscriber.
+    /// </summary>
     public static event Action Changed;
 
     private static bool loaded;
@@ -219,18 +240,24 @@ public static class SettingsStore
         PlayerPrefs.Save();
     }
 
+    /// <summary>
+    /// Writes the cache and PlayerPrefs immediately, but deliberately does NOT flush to disk — see
+    /// the "cached, written, flushed on close" contract on the type doc comment. A `Slider`'s
+    /// `onValueChanged` fires every frame of a drag, and `PlayerPrefs.Save()` is a synchronous flush
+    /// of the entire key set; doing that on every drag frame is a per-frame main-thread stall for no
+    /// benefit, since nothing needs these values durable until the window closes.
+    /// </summary>
     private static float WriteFloat(string key, float value)
     {
         PlayerPrefs.SetFloat(key, value);
-        PlayerPrefs.Save();
         RaiseChanged();
         return value;
     }
 
+    /// <summary>Int counterpart of <see cref="WriteFloat"/> — same deferred-flush contract.</summary>
     private static int WriteInt(string key, int value)
     {
         PlayerPrefs.SetInt(key, value);
-        PlayerPrefs.Save();
         RaiseChanged();
         return value;
     }

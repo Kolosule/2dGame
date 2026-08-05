@@ -72,6 +72,9 @@ public class SettingsPanel : MonoBehaviour
             return;
         }
 
+        if (video == null)
+            Debug.LogError("❌ SettingsPanel: video not assigned! The Video tab will not function.");
+
         if (closeButton != null) closeButton.onClick.AddListener(Close);
 
         if (audioTabButton != null) audioTabButton.onClick.AddListener(() => ShowTab(0));
@@ -148,6 +151,12 @@ public class SettingsPanel : MonoBehaviour
         if (video != null) video.CancelPendingConfirm();
 
         panelRoot.SetActive(false);
+
+        // The one flush point for every per-drag/per-toggle write SettingsStore made while this
+        // window was open (see the flush contract on SettingsStore's type doc comment) — those
+        // writes update PlayerPrefs' in-memory cache immediately but do not themselves call
+        // PlayerPrefs.Save(). Closing the window is the natural "the player is done" boundary.
+        PlayerPrefs.Save();
 
         Action callback = onClosed;
         onClosed = null;

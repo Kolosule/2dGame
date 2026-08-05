@@ -217,7 +217,7 @@ public class VideoSettingsSection : MonoBehaviour
         if (suppressCallbacks) return;
 
         SettingsStore.VSync = on ? 1 : 0;
-        SettingsService.ApplyVideo();
+        SettingsService.ApplyPresentation();
         ApplyVSyncInteractability();
     }
 
@@ -227,7 +227,7 @@ public class VideoSettingsSection : MonoBehaviour
         if (index < 0 || index >= FpsCapOptions.Length) return;
 
         SettingsStore.FpsCap = FpsCapOptions[index];
-        SettingsService.ApplyVideo();
+        SettingsService.ApplyPresentation();
     }
 
     /// <summary>

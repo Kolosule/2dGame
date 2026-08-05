@@ -87,6 +87,9 @@ public class LobbyScreenUI : MonoBehaviour
 
     public void Show()
     {
+        // Symmetric with Hide() — closes the shared settings window defensively so this screen can
+        // never come up with the options window stacked over it, regardless of which path led here.
+        if (settingsPanel != null) settingsPanel.Close();
         if (lobbyPanel != null) lobbyPanel.SetActive(true);
         SetStatus("Waiting for lobby state...");
     }

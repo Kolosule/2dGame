@@ -55,6 +55,21 @@ public static class SettingsService
             SettingsStore.ResolutionHeight,
             (FullScreenMode)SettingsStore.DisplayMode);
 
+        ApplyPresentation();
+    }
+
+    /// <summary>
+    /// VSync + FPS cap only — deliberately never touches <see cref="Screen.SetResolution"/>. Callers
+    /// that change only these two values (the Video tab's VSync toggle and FPS cap dropdown) must use
+    /// this instead of <see cref="ApplyVideo"/>, which re-applies resolution/display mode from the
+    /// STORED values and would silently stomp an in-flight, unconfirmed display preview from
+    /// VideoSettingsSection's confirm prompt.
+    /// </summary>
+    public static void ApplyPresentation()
+    {
+        if (!HasDisplay) return;
+
+        SettingsStore.EnsureLoaded();
         QualitySettings.vSyncCount = SettingsStore.VSync;
 
         // Unity's "uncapped" sentinel is -1, not 0.

@@ -125,10 +125,11 @@ Both scripts gained two fields for this feature:
   only ever one options window in the scene.
 
 `MainMenuUI.OpenSettings()` hides `menuPanel` and reopens it via the `onClosed` callback;
-`LobbyScreenUI.OpenSettings()` does the same with `lobbyPanel`. Because it's a shared instance,
-`MainMenuUI.Show()` also calls `settingsPanel.Close()` defensively (so a connect failure can't leave
-the options window and the main menu stacked); `LobbyScreenUI.Hide()` does the same for the lobby
-side.
+`LobbyScreenUI.OpenSettings()` does the same with `lobbyPanel`. Because it's a shared instance, all
+four of `Show()`/`Hide()` across both screens now call `settingsPanel.Close()` defensively, so the
+options window can never be left stacked over either screen regardless of which path led there —
+including `MainMenuUI.Hide()`, which a final review found was the one path still missing it (see
+section 5 below).
 
 ---
 
@@ -154,11 +155,29 @@ side.
       running them is your gate, not something already confirmed.
 
 Not on this list: any check of what happens if the options window is still open when the lobby
-screen is hidden by a mid-lobby disconnect. That path was traced through all three call sites of
-`menuUI.Show()` in `GameNetworkManager.cs` (`ShowReconnectingUI`, `HideReconnectingUI`, and the
-generic disconnect handler) — every one of them is preceded by `lobbyUI.Hide()`, which itself closes
-the shared `settingsPanel`, and the separate reconnect-success path reloads the MainMenu scene
-outright. There's nothing to strand.
+screen is hidden by a mid-lobby disconnect. All three call sites of `menuUI.Show()` in
+`GameNetworkManager.cs` (`ShowReconnectingUI`, `HideReconnectingUI`, and the generic disconnect
+handler) were traced and found safe. But that trace was incomplete: it did not cover `menuUI.Hide()`,
+which is the fourth path into these screens and was found, on a subsequent review pass, to skip the
+defensive `settingsPanel.Close()` that every other `Show()`/`Hide()` performs. A player who opened
+Options while a connection was still resolving (the Join/Host buttons go non-interactable, but
+`optionsButton` does not) could end up with the options window stranded over the freshly-entered
+lobby once `EnterLobbyUI()` called the then-bare `menuUI.Hide()`. Fixed — `MainMenuUI.Hide()` and
+`LobbyScreenUI.Show()` (the other method that was missing it) now both close `settingsPanel`, so all
+four of `Show()`/`Hide()` across both screens close the window defensively. Nothing is stranded now.
+
+Two precision notes on the traced call sites, for anyone re-verifying this by reading the code:
+- `HideReconnectingUI` does not itself call `lobbyUI.Hide()`. That is safe, not an oversight — it can
+  only run after `ShowReconnectingUI` has already run at least once for the same reconnect sequence
+  (the retry loop calls `ShowReconnectingUI` before its first attempt and only reaches
+  `HideReconnectingUI` via `FallBackToMenu` after that), and `ShowReconnectingUI` calls
+  `lobbyUI.Hide()` itself. The scene reload at the start of the sequence (next point) additionally
+  means the lobby screen isn't even present to hide by the time `HideReconnectingUI` could run.
+- The MainMenu scene reload (`ReconnectController.ReconnectLoop`'s
+  `SceneManager.LoadScene(net.MenuSceneIndex)`) happens once at the **start of every reconnect
+  attempt sequence** — i.e. every time `BeginReconnect` fires, before the numbered-attempt retry loop
+  begins — not on the success path. A successful reconnect never reloads MainMenu; it's the failure
+  and mid-sequence paths that run in a freshly reloaded menu scene.
 
 ---
 

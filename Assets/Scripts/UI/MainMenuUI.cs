@@ -119,6 +119,10 @@ public class MainMenuUI : MonoBehaviour
 
     public void Hide()
     {
+        // Same defensive close as Show() — EnterLobbyUI calls Hide() while the options window may
+        // still be open (e.g. opened during "Connecting..."), and leaving it open here strands it
+        // over the lobby screen with a stale onClosed callback.
+        if (settingsPanel != null) settingsPanel.Close();
         if (menuPanel != null) menuPanel.SetActive(false);
     }
 
