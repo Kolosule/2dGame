@@ -43,9 +43,13 @@ public class TeamManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Damage-received modifier for a DEFENDING team. Enemies (Team3AI) and unassigned teams have
-    /// no meaningful home base and are exempt — always x1.0. Human defenders (Team1/Team2) take
-    /// the own-base-distance vulnerability, reduced by their team's Vanguard tier.
+    /// Damage-received modifier for a DEFENDING team. The rule is keyed on identity, not
+    /// intent: any defender that is not Team1 or Team2 is exempt — always x1.0 — because those
+    /// are the only teams with a meaningful home base to measure distance from. In practice
+    /// that means Team3AI and Team.None today, but the exemption is NOT structurally tied to
+    /// "being an enemy" or "being Team3AI"; a future team value that isn't Team1/Team2 is
+    /// exempt too, by construction. Human defenders (Team1/Team2) take the own-base-distance
+    /// vulnerability, reduced by their team's Vanguard tier.
     /// </summary>
     public float GetDamageReceivedModifier(Team defender, float ownBaseDistance01, int vanguardTier)
     {

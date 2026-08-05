@@ -269,6 +269,17 @@ amount.
 
 ## Territorial combat — one debuff, 3× swing
 
+> **Superseded 2026-08-05:** this section (through "Team buff catalog" below) describes the
+> pre-simplification **attacker-side** model — a quantized ×0.33/×0.67/×1.00 debuff on damage
+> *dealt*, gated at the `-0.33` advantage boundary. The 2026-08-05 meta-damage-simplification
+> branch replaced it with a **defender-side, continuous** own-base-distance vulnerability
+> (×1.0 at the defender's own base, rising smoothly to ×2.5/×1.75/×1.0 at the enemy base for
+> Vanguard tier 0/1/2). `GetTerritorialAdvantage` and `GetDamageReceivedModifier`'s old shape
+> no longer exist. See
+> `docs/superpowers/plans/2026-08-05-meta-damage-simplification.md` for the current model, and
+> `Assets/Scripts/Combat/Core/TerritorialCombat.cs` for the exact formula. Left below as a
+> historical record of the design that preceded the simplification — not current behavior.
+
 The lerped, compounding, two-sided model (finding #3) is replaced by a **single
 debuff on damage dealt**, applied only in the enemy third of the map:
 
@@ -373,6 +384,11 @@ Pacing cannot be tuned against a random drop. `Enemy.SpawnCoins` currently rolls
   currently carries `healthMult` / `damageMult` / `speedMult` only), so enemies nearer
   the hazardous centre pay out more. Integer, so the total stays exactly computable.
 
+  > **Superseded 2026-08-05:** `DifficultyRingConfig.cs` and the ring-bonus/center-distance
+  > scaling described here were deleted by the meta-damage-simplification branch. Coin drops
+  > today are exactly the fixed `coinsToDrop` per archetype prefab, with no position-based
+  > bonus — see `Enemy.ResolveEffectiveStats` in `Assets/Scripts/Enemy/Base/Enemy.cs`.
+
 Starting values, to be tuned in play: base `2` for the weakest archetype rising to
 `4` for the strongest, with ring bonus `+0` outer / `+1` middle / `+2` inner. Coin
 point value stays `1`.
@@ -409,6 +425,13 @@ strong — unlimited air jumps, 10 s stealth, dash-damage, dash-while-carrying. 
 Death is the one place everyone gets to feel them.
 
 ### Team curve — 2 steps, per-player-average thresholds
+
+> **Superseded 2026-08-05:** the "Debuff in enemy third" column below (`×0.33 / ×0.67 /
+> ×1.00`) describes the deleted attacker-side model. Under the current defender-side model
+> the same Vanguard tiers (0/1/2, same `{12, 45}` per-player-average thresholds) instead cap
+> the own-base-distance damage-taken multiplier at ×2.5 / ×1.75 / ×1.0 — see
+> `docs/superpowers/plans/2026-08-05-meta-damage-simplification.md`. The thresholds and tier
+> mechanics described here are otherwise still current.
 
 ```
 per-player-average deposited value:  12, 45
@@ -598,7 +621,11 @@ bundled-Roslyn workaround):
   including `rosterSize` of 1 and an empty team, and the boundary cases at exactly
   12 and exactly 45.
 - Vanguard's debuff formula producing exactly `0.33 / 0.67 / 1.00` at tiers 0/1/2.
-- Zone classification at the ±0.33 boundaries.
+  (**Superseded 2026-08-05** — replaced by `TerritorialCombat.ReceivedMultiplier` producing
+  `×2.5 / ×1.75 / ×1.0` at max own-base distance for tiers 0/1/2; see
+  `docs/superpowers/plans/2026-08-05-meta-damage-simplification.md`.)
+- Zone classification at the ±0.33 boundaries. (**Superseded 2026-08-05** — zone
+  classification is now continuous distance + tier, see `TeamScoreDisplay.RepaintZone`.)
 - Sudden Death's tier override returning `MaxTier` for every buff regardless of
   deposited value.
 

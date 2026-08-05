@@ -19,6 +19,10 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
+# Unity batch-test-run evidence (r.xml, r-baseline.xml, etc.) — scoped narrowly so it doesn't
+# catch legitimate tracked .xml files elsewhere in the repo (e.g. link.xml* below).
+/r*.xml
+
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
 *.blend1
 *.blend1.meta

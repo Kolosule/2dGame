@@ -4,10 +4,11 @@ using UnityEngine;
 // finalDamage = base x globalDamageMultiplier x receivedModifier(defender).
 // receivedModifier is the own-base-distance vulnerability: a DEFENDER takes more damage the
 // farther they are from their OWN base, from any attacker — enemy AI and the opposing human
-// team alike. Enemies (Team3AI) have no meaningful home base and are exempt (always x1.0).
-// Vanguard tiers reduce a team's own vulnerability: tier 0 = full malus, tier 1 = half,
-// tier 2 = none. There is no attacker-side modifier and no crit — one modifier, one side,
-// applied to the character taking the hit.
+// team alike. Only Team1/Team2 are vulnerable defenders (TeamManager.GetDamageReceivedModifier
+// exempts any defender that isn't Team1 or Team2); non-human teams have no meaningful home
+// base and are exempt (always x1.0). Vanguard tiers reduce a team's own vulnerability: tier 0
+// = full malus, tier 1 = half, tier 2 = none. There is no attacker-side modifier and no crit —
+// one modifier, one side, applied to the character taking the hit.
 // See docs/superpowers/plans/2026-08-05-meta-damage-simplification.md.
 [CreateAssetMenu(fileName = "CombatConfig", menuName = "Game/Combat Configuration")]
 public class CombatConfig : ScriptableObject

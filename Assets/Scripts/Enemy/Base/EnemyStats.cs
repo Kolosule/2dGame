@@ -7,6 +7,7 @@ public class EnemyStats : ScriptableObject
     public string enemyName = "Enemy";
 
     [Header("Combat Stats")]
+    [Min(1)]
     public int maxHealth = 10;
     public int attackDamage = 1;
     public float attackCooldown = 1f; // Time between attacks in seconds
