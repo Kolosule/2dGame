@@ -88,6 +88,17 @@ public class VideoSettingsSection : MonoBehaviour
         if (confirmPanel != null) confirmPanel.SetActive(false);
     }
 
+    private void OnDisable()
+    {
+        // Safety net for however this object ends up deactivated — including wiring nobody planned
+        // for. Update() stops running the moment that happens, so without this the revert countdown
+        // would freeze with an unconfirmed, unpersisted display change left applied indefinitely.
+        // Idempotent: CancelPendingConfirm early-returns when nothing is pending, so this cannot
+        // double-revert against an explicit CancelPendingConfirm() a caller already made (e.g.
+        // SettingsPanel.Close/ShowTab) just before this fires as a consequence of deactivation.
+        CancelPendingConfirm();
+    }
+
     private void Update()
     {
         if (!awaitingConfirm) return;

@@ -156,6 +156,11 @@ public class SettingsPanel : MonoBehaviour
 
     private void ShowTab(int index)
     {
+        // Leaving the Video tab must discard any unconfirmed display change — otherwise the revert
+        // countdown (driven by Update, which stops firing on a deactivated tab) would freeze instead
+        // of expiring, stranding the preview state until the panel is closed.
+        if (index != 1 && video != null) video.CancelPendingConfirm();
+
         if (audioTab != null) audioTab.SetActive(index == 0);
         if (videoTab != null) videoTab.SetActive(index == 1);
         if (gameplayTab != null) gameplayTab.SetActive(index == 2);
