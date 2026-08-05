@@ -1,50 +1,51 @@
 namespace Game.Combat.Core
 {
     /// <summary>
-    /// Pure territorial-combat math: ONE debuff, on ONE side (damage dealt), in ONE direction.
-    /// Replaces the old lerped two-sided model whose modifiers compounded to a 9x swing
-    /// (dealt 1.5 x received 1.5 at own base vs 0.5 x 0.5 at the enemy base) that was invisible
-    /// to players and never tuned. Two discrete states, not a gradient — that is what makes it
-    /// displayable as an icon.
+    /// Pure territorial-combat math: a DEFENDER takes more damage the farther they are from
+    /// their OWN base — from enemy AI and the opposing human team alike. Vanguard tiers reduce
+    /// a team's own vulnerability: tier 0 = full malus, tier 1 = half, tier 2 = none.
+    /// Continuous, not quantized: the malus scales smoothly with distance from 1.0x at the own
+    /// base up to a capped maximum at (or beyond) the enemy base.
+    /// Replaces the old attacker-side "enemy third" model, which was one-sided (damage DEALT
+    /// only) and quantized into two discrete states specifically for HUD legibility. This model
+    /// is defender-side and continuous; Game.Hud.Core.TerritoryReadout buckets it back down for
+    /// display without re-deriving the thresholds.
     /// Engine-free (this asmdef sets noEngineReferences) so it is testable outside Unity.
-    /// See docs/superpowers/specs/2026-07-29-coins-buffs-economy-design.md.
+    /// See docs/superpowers/plans/2026-08-05-meta-damage-simplification.md.
     /// </summary>
     public static class TerritorialCombat
     {
         /// <summary>
-        /// Territorial advantage strictly below this is the enemy third. Advantage is +1 at your own
-        /// base, -1 at the enemy base, 0 at the midpoint (TeamManager.GetTerritorialAdvantage).
-        /// The boundary is the enemy THIRD, not the midline, so midfield fighting stays neutral and
-        /// only committing deep — where the enemy flag sits — carries the tax.
+        /// Extra damage-taken fraction at maximum distance from own base, before Vanguard.
+        /// A defender at their own base always takes x1.0; at max distance with no Vanguard
+        /// (tier 0) they take x(1 + this) = x2.5.
         /// </summary>
-        public const float EnemyThirdBoundary = -0.33f;
+        public const float MaxVulnerabilityMalus = 1.5f;
 
-        /// <summary>Damage dealt multiplier inside the enemy third with Vanguard locked. Total swing ~3x.</summary>
-        public const float FullDebuff = 0.33f;
-
-        /// <summary>Vanguard's top tier. Each tier removes half of the debuff.</summary>
+        /// <summary>Vanguard's top tier. Each tier removes half of the remaining malus.</summary>
         public const int VanguardMaxTier = 2;
 
-        /// <summary>True when the attacker is deep enough in enemy territory to take the debuff.</summary>
-        public static bool InEnemyThird(float territorialAdvantage)
-        {
-            return territorialAdvantage < EnemyThirdBoundary;
-        }
-
         /// <summary>
-        /// Debuff strength after the team's Vanguard tier: 1 - 0.67 * (1 - 0.5 * tier),
-        /// giving even thirds 0.33 -> 0.665 -> 1.00 across tiers 0/1/2.
+        /// Damage-taken multiplier for a defender at the given normalized own-base distance
+        /// (0 = at their own base, 1 = at or beyond the enemy base, clamped) and Vanguard tier
+        /// (clamped to [0, VanguardMaxTier]).
         /// </summary>
-        public static float DebuffWithVanguard(int vanguardTier)
+        public static float ReceivedMultiplier(float ownBaseDistance01, int vanguardTier)
         {
-            int tier = vanguardTier < 0 ? 0 : (vanguardTier > VanguardMaxTier ? VanguardMaxTier : vanguardTier);
-            return 1f - (1f - FullDebuff) * (1f - 0.5f * tier);
+            float distance = Clamp01(ownBaseDistance01);
+            int tier = ClampTier(vanguardTier);
+            float remaining = 1f - 0.5f * tier;
+            return 1f + MaxVulnerabilityMalus * distance * remaining;
         }
 
-        /// <summary>Final damage-dealt multiplier for an attacker at the given advantage.</summary>
-        public static float DealtMultiplier(float territorialAdvantage, int vanguardTier)
+        private static float Clamp01(float value)
         {
-            return InEnemyThird(territorialAdvantage) ? DebuffWithVanguard(vanguardTier) : 1f;
+            return value < 0f ? 0f : (value > 1f ? 1f : value);
+        }
+
+        private static int ClampTier(int tier)
+        {
+            return tier < 0 ? 0 : (tier > VanguardMaxTier ? VanguardMaxTier : tier);
         }
     }
 }
