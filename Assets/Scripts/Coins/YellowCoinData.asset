@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: YellowCoinData
   m_EditorClassIdentifier: Assembly-CSharp::CoinData
   coinTeam: Team3
-  team1Value: 5
+  team1Value: 10
   team2Value: 3
   coinPrefab: {fileID: -131470651806935323, guid: b16365fc55b8bbb409715eb3dc796034, type: 3}

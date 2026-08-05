@@ -14,5 +14,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CoinData
   coinTeam: Team3
   team1Value: 2
-  team2Value: 6
+  team2Value: 12
   coinPrefab: {fileID: 8784847194437023549, guid: e217d2b2f0518cc4d8c907f4604dad9f, type: 3}
