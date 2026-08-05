@@ -22,8 +22,7 @@ public class Enemy : NetworkBehaviour
     [SerializeField] private NetworkObject coinPrefab;
 
     [Tooltip("How many coins to drop on death. AUTHORED PER ARCHETYPE, no randomness — pacing " +
-             "cannot be tuned against a random drop. Stronger archetypes drop more. The ring's " +
-             "coinDropBonus is added on top at spawn.")]
+             "cannot be tuned against a random drop. Stronger archetypes drop more.")]
     [SerializeField] private int coinsToDrop = 2;
 
     [Tooltip("How far coins should scatter from death position")]
@@ -111,33 +110,18 @@ public class Enemy : NetworkBehaviour
     }
 
     /// <summary>
-    /// Authority-only: capture home and scale base stats by the difficulty ring for
-    /// this enemy's distance from the arena center. Falls back to base stats (x1.0)
-    /// if the ring config or arena center is missing.
+    /// Authority-only: capture home and copy this enemy's base stats. Difficulty is no longer
+    /// scaled automatically by distance from a map center — it is tuned manually per-color-
+    /// prefab via each prefab's EnemyStats asset (and coinsToDrop below).
     /// </summary>
     private void ResolveEffectiveStats()
     {
         Home = transform.position;
 
-        RingTier tier = RingTier.Identity;
-        DifficultyRingConfig ringConfig = GameSettingsManager.Instance != null
-            ? GameSettingsManager.Instance.GetDifficultyRingConfig()
-            : null;
-
-        if (ringConfig != null && ArenaCenter.Instance != null)
-        {
-            float distance = Vector2.Distance(Home, ArenaCenter.Instance.Position);
-            tier = ringConfig.GetRing(distance);
-        }
-        else
-        {
-            Debug.LogWarning($"{gameObject.name}: no DifficultyRingConfig/ArenaCenter; using base stats.");
-        }
-
-        effectiveMaxHealth = Mathf.Max(1, Mathf.RoundToInt(stats.maxHealth * tier.healthMult));
-        effectiveAttackDamage = Mathf.Max(0, Mathf.RoundToInt(stats.attackDamage * tier.damageMult));
-        effectiveMoveSpeed = stats.moveSpeed * tier.speedMult;
-        effectiveCoinDrop = Mathf.Max(0, coinsToDrop + tier.coinDropBonus);
+        effectiveMaxHealth = stats.maxHealth;
+        effectiveAttackDamage = stats.attackDamage;
+        effectiveMoveSpeed = stats.moveSpeed;
+        effectiveCoinDrop = coinsToDrop;
     }
 
     /// <summary>SERVER: assign this enemy's team (called from the spawner's spawn callback).</summary>
@@ -281,15 +265,21 @@ public class Enemy : NetworkBehaviour
             return;
         }
 
-        // Calculate damage through the unified pipeline (review item #4).
+        // Calculate damage through the unified pipeline, keyed by the DEFENDER (the player being
+        // attacked): they take more damage the farther they are from their own base.
         int finalDamage = effectiveAttackDamage;
         CombatConfig config = GameSettingsManager.Instance != null
             ? GameSettingsManager.Instance.GetCombatConfig()
             : null;
         if (config != null)
         {
-            Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
-            finalDamage = config.ResolveDamage(effectiveAttackDamage, myTeam, transform.position);
+            PlayerTeamData targetTeam = player.GetComponent<PlayerTeamData>();
+            Team defenderTeam = targetTeam != null ? targetTeam.Team : Team.None;
+            finalDamage = config.ResolveDamage(effectiveAttackDamage, defenderTeam, player.transform.position);
+        }
+        else
+        {
+            CombatConfig.WarnMissingOnce();
         }
 
         // Deal damage to player, attributed to this enemy (per-attacker hit cooldown).
