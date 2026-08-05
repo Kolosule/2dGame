@@ -19,10 +19,6 @@ public class GameSettingsManager : MonoBehaviour
     [Header("Combat Configuration")]
     [SerializeField] private CombatConfig combatConfig;
 
-    [Header("Enemy Difficulty")]
-    [Tooltip("Concentric difficulty rings applied to enemies by distance from center.")]
-    [SerializeField] private DifficultyRingConfig difficultyRingConfig;
-
     [Header("Match Settings")]
     [Tooltip("Match time limit in minutes (0 = no limit)")]
     public float matchTimeLimit = 0f;
@@ -50,13 +46,5 @@ public class GameSettingsManager : MonoBehaviour
     public CombatConfig GetCombatConfig()
     {
         return combatConfig;
-    }
-
-    /// <summary>
-    /// Get the shared enemy difficulty ring configuration (may be null if unassigned).
-    /// </summary>
-    public DifficultyRingConfig GetDifficultyRingConfig()
-    {
-        return difficultyRingConfig;
     }
 }

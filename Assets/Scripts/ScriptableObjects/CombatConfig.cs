@@ -1,11 +1,15 @@
 using UnityEngine;
 
 // META-LAYER DAMAGE MODEL: every attack is resolved by ResolveDamage below.
-// finalDamage = base x globalDamageMultiplier x dealtModifier(attacker) x crit.
-// dealtModifier is the quantized territorial debuff (x0.33 in the enemy third, x1 elsewhere),
-// lifted in halves by the attacking team's Vanguard tier from TeamScoreManager. There is no
-// received-side modifier: one debuff, one side, one direction.
-// See docs/superpowers/specs/2026-07-29-coins-buffs-economy-design.md.
+// finalDamage = base x globalDamageMultiplier x receivedModifier(defender).
+// receivedModifier is the own-base-distance vulnerability: a DEFENDER takes more damage the
+// farther they are from their OWN base, from any attacker — enemy AI and the opposing human
+// team alike. Only Team1/Team2 are vulnerable defenders (TeamManager.GetDamageReceivedModifier
+// exempts any defender that isn't Team1 or Team2); non-human teams have no meaningful home
+// base and are exempt (always x1.0). Vanguard tiers reduce a team's own vulnerability: tier 0
+// = full malus, tier 1 = half, tier 2 = none. There is no attacker-side modifier and no crit —
+// one modifier, one side, applied to the character taking the hit.
+// See docs/superpowers/plans/2026-08-05-meta-damage-simplification.md.
 [CreateAssetMenu(fileName = "CombatConfig", menuName = "Game/Combat Configuration")]
 public class CombatConfig : ScriptableObject
 {
@@ -13,14 +17,6 @@ public class CombatConfig : ScriptableObject
     [Tooltip("Base damage multiplier for all attacks")]
     [Range(0.1f, 5.0f)]
     public float globalDamageMultiplier = 1.0f;
-
-    [Tooltip("Critical hit chance (0-1)")]
-    [Range(0f, 1f)]
-    public float criticalChance = 0.1f;
-
-    [Tooltip("Critical hit damage multiplier")]
-    [Range(1.0f, 5.0f)]
-    public float criticalMultiplier = 2.0f;
 
     [Header("Knockback Settings")]
     [Tooltip("Global knockback strength multiplier")]
@@ -36,8 +32,8 @@ public class CombatConfig : ScriptableObject
     public float attackSpeedMultiplier = 1.0f;
 
     [Header("Territorial Combat")]
-    [Tooltip("Enable the territorial debuff. Turning this OFF also makes the ENTIRE team-buff " +
-             "layer inert, because Vanguard exists only to lift this debuff.")]
+    [Tooltip("Enable the own-base-distance vulnerability. Turning this OFF also makes the ENTIRE " +
+             "team-buff layer inert, because Vanguard exists only to reduce this vulnerability.")]
     public bool territorialAdvantageEnabled = true;
 
     [Header("Visual Feedback")]
@@ -46,9 +42,6 @@ public class CombatConfig : ScriptableObject
 
     [Tooltip("Color for normal damage")]
     public Color normalDamageColor = Color.white;
-
-    [Tooltip("Color for critical damage")]
-    public Color criticalDamageColor = Color.red;
 
     [Tooltip("Color for territorial bonus damage")]
     public Color bonusDamageColor = Color.yellow;
@@ -62,46 +55,33 @@ public class CombatConfig : ScriptableObject
     // Not serialized: resets on domain reload, which is exactly the cadence we want for a
     // once-per-session operator warning.
     [System.NonSerialized] private bool warnedTerritoryDisabled;
-
-    /// <summary>
-    /// Calculate if an attack is a critical hit
-    /// </summary>
-    public bool RollCritical()
-    {
-        return Random.value < criticalChance;
-    }
+    private static bool warnedConfigMissing;
 
     /// <summary>
     /// Pure-math composition from an already-resolved modifier. Called by ResolveDamage;
     /// kept separate so the arithmetic is trivial to reason about.
     /// </summary>
-    public float CalculateFinalDamage(float baseDamage, float dealtModifier, bool isCritical = false)
+    public float CalculateFinalDamage(float baseDamage, float receivedModifier)
     {
         float damage = baseDamage * globalDamageMultiplier;
 
         if (territorialAdvantageEnabled)
         {
-            damage *= dealtModifier;
-        }
-
-        if (isCritical)
-        {
-            damage *= criticalMultiplier;
+            damage *= receivedModifier;
         }
 
         return damage;
     }
 
     /// <summary>
-    /// THE single entry point for all combat damage. Reads the attacker's territorial advantage and
-    /// its team's Vanguard tier, rolls crit, and composes via CalculateFinalDamage. Returns a
-    /// rounded, non-negative int. Call only on StateAuthority (the call sites already gate on it).
-    /// The defender no longer participates: the received-side modifier was deleted with the old
-    /// two-sided model.
+    /// THE single entry point for all combat damage. Reads the DEFENDER's own-base-distance
+    /// vulnerability and their team's Vanguard tier, and composes via CalculateFinalDamage.
+    /// Returns a rounded, non-negative int. Call only on StateAuthority (the call sites already
+    /// gate on it).
     /// </summary>
-    public int ResolveDamage(float baseDamage, Team attackerTeam, Vector2 attackerPos)
+    public int ResolveDamage(float baseDamage, Team defenderTeam, Vector2 defenderPos)
     {
-        float dealt = 1f;
+        float received = 1f;
 
         if (territorialAdvantageEnabled)
         {
@@ -112,10 +92,10 @@ public class CombatConfig : ScriptableObject
 
                 TeamScoreManager scores = TeamScoreManager.Instance;
                 if (scores != null && scores.Object != null && scores.Object.IsValid)
-                    vanguardTier = scores.VanguardTier(attackerTeam);
+                    vanguardTier = scores.VanguardTier(defenderTeam);
 
-                float advantage = teams.GetTerritorialAdvantage(attackerTeam, attackerPos);
-                dealt = teams.GetDamageDealtModifier(attackerTeam, advantage, vanguardTier);
+                float distance01 = teams.GetOwnBaseDistance01(defenderTeam, defenderPos);
+                received = teams.GetDamageReceivedModifier(defenderTeam, distance01, vanguardTier);
             }
         }
         else
@@ -123,21 +103,34 @@ public class CombatConfig : ScriptableObject
             WarnTerritoryDisabledOnce();
         }
 
-        bool isCritical = RollCritical();
-        float finalDamage = CalculateFinalDamage(baseDamage, dealt, isCritical);
+        float finalDamage = CalculateFinalDamage(baseDamage, received);
         return Mathf.Max(0, Mathf.RoundToInt(finalDamage));
     }
 
     /// <summary>
-    /// The old team buffs were silent no-ops whenever territorialAdvantageEnabled was false
-    /// (they were only ever multiplied in inside that flag's branch). Say so out loud instead.
+    /// The team buffs are silent no-ops whenever territorialAdvantageEnabled is false (they are
+    /// only ever multiplied in inside that flag's branch). Say so out loud instead.
     /// </summary>
     private void WarnTerritoryDisabledOnce()
     {
         if (warnedTerritoryDisabled) return;
         warnedTerritoryDisabled = true;
-        Debug.LogWarning("⚠️ CombatConfig.territorialAdvantageEnabled is FALSE — the territorial " +
-                         "debuff and the entire Vanguard team-buff layer are inert. Coin deposits " +
-                         "then buy nothing at the team level.");
+        Debug.LogWarning("⚠️ CombatConfig.territorialAdvantageEnabled is FALSE — the own-base " +
+                         "vulnerability and the entire Vanguard team-buff layer are inert. Coin " +
+                         "deposits then buy nothing at the team level.");
+    }
+
+    /// <summary>
+    /// GameSettingsManager.combatConfig is unassigned. Loud, once-per-session: this exact silent-
+    /// fallback shape (raw base damage, no global multiplier, no vulnerability, no Vanguard) is
+    /// what let the whole meta-damage layer no-op for weeks behind a green test suite.
+    /// </summary>
+    public static void WarnMissingOnce()
+    {
+        if (warnedConfigMissing) return;
+        warnedConfigMissing = true;
+        Debug.LogWarning("⚠️ GameSettingsManager.combatConfig is unassigned — combat damage is " +
+                         "falling back to raw base values: no global multiplier, no own-base " +
+                         "vulnerability, no Vanguard scaling.");
     }
 }

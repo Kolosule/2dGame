@@ -31,9 +31,6 @@ public class TeamData : ScriptableObject
     [Tooltip("Respawn delay in seconds")]
     public float respawnDelay = 3f;
 
-    [Tooltip("Should players on this team use territorial advantage?")]
-    public bool usesTerritorialAdvantage = true;
-
     [Header("Visual Settings")]
     public Sprite teamIcon;
     public Material teamMaterial;

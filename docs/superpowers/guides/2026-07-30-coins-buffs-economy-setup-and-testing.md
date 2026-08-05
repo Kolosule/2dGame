@@ -41,7 +41,7 @@ part no test can reach.
 ## 1. Blocking wiring — do these first
 
 Without §1.1 the entire Scope 2 behaviour change is inert and the Scope 4 zone indicator
-displays a penalty the game is not applying. Without §1.3 there are no Scope 4 surfaces at
+displays a penalty the game is not applying. Without §1.2 there are no Scope 4 surfaces at
 all.
 
 ### 1.1 Create a `CombatConfig` asset and assign it — **BLOCKS ALL OF SCOPE 2**
@@ -49,58 +49,33 @@ all.
 `Assets/Scenes/Gameplay.unity` currently has `GameSettingsManager.combatConfig: {fileID: 0}`,
 and **no `CombatConfig` asset exists anywhere in the project**. Consequences today:
 
-- `CombatConfig.ResolveDamage` is never called. `PlayerCombat.ResolveMeleeDamage` and
-  `ResolveProjectileDamage` fall through to raw base damage; `Enemy.DealDamage` skips the
-  pipeline entirely.
-- Therefore: no territorial debuff, no Vanguard lift, no crit, no `globalDamageMultiplier`.
-  Coin deposits buy **nothing** at the team level.
+- `CombatConfig.ResolveDamage` is never called. `PlayerCombat`'s melee/projectile damage
+  resolution and `Enemy.AttackPlayer` fall through to raw base damage — no unified pipeline
+  at all.
+- Therefore: no own-base-distance vulnerability, no Vanguard lift, no `globalDamageMultiplier`.
+  Coin deposits buy **nothing** at the team level. (There is no crit in this model — it was
+  removed along with the old attacker-side debuff.)
 - The `territorialAdvantageEnabled is FALSE` warning does **not** fire, because it lives
   inside the method that is never reached. Silence here is not evidence.
-- Meanwhile `TerritoryReadout` derives its display straight from `TerritorialCombat`, which
-  does not know the config is missing — so the HUD will read `ENEMY TERRITORY −DAMAGE`
-  while damage is actually ×1.00. **The strip lies until this asset exists.**
+- Meanwhile `TeamScoreDisplay`'s zone indicator derives its display straight from
+  `TerritorialCombat` / `TeamManager.GetOwnBaseDistance01`, which does not know the config is
+  missing — so the HUD can read `EXPOSED  +DAMAGE TAKEN` while the actual applied damage is
+  ×1.00. **The strip lies until this asset exists.**
 
 Steps:
 
 1. Project window → right-click → `Create ▸ Game ▸ Combat Configuration`.
    Save as `Assets/Settings/Combat/CombatConfig.asset`.
 2. Leave `territorialAdvantageEnabled` **ticked** (it is the default). Sensible starting
-   values: `globalDamageMultiplier 1.0`, `criticalChance 0.1`, `criticalMultiplier 2.0`.
+   value: `globalDamageMultiplier 1.0`. There is no crit setting to configure — the model
+   is one modifier (own-base-distance vulnerability), one side (the defender), full stop.
 3. Select the `GameSettingsManager` object in `Gameplay.unity` and drag the asset into
    **Combat Config**.
 4. Confirm `TeamManager`'s `team1Data` / `team2Data` are assigned and each `TeamData` has a
-   sane `basePosition` — `GetTerritorialAdvantage` returns a flat `0f` (no debuff anywhere)
-   when either is missing.
+   sane `basePosition` — `TeamManager.GetOwnBaseDistance01` returns a flat `0f` (no malus,
+   multiplier stays ×1.0) when either is missing.
 
-> Heads-up on crit: projectiles now route through `ResolveDamage`, so they crit for the
-> first time. The roll happens **once per shot at fire time**, so a piercing projectile
-> applies the same crit to every target it hits. Intended, but it is a visible change.
-
-### 1.2 Create a `DifficultyRingConfig` asset + an `ArenaCenter` — unblocks the ring coin bonus
-
-Also currently null in the scene, and **neither the asset nor an `ArenaCenter` exists**.
-`Enemy.ResolveEffectiveStats` therefore falls back to `RingTier.Identity` and logs
-`no DifficultyRingConfig/ArenaCenter; using base stats` once per enemy spawn. Scope 4's
-`coinDropBonus` is always `0`, and health/damage/speed ring scaling is inert too.
-
-1. Add an empty GameObject named `ArenaCenter` at the arena's centre in `Gameplay.unity`
-   and put the `ArenaCenter` component on it.
-2. `Create ▸ …` the `DifficultyRingConfig` asset, save under `Assets/Settings/Enemies/`.
-3. Author three rings **inner → outer** (ascending `maxDistanceFromCenter`), starting
-   values from the spec:
-
-   | Band | maxDistanceFromCenter | health/damage/speed | **coinDropBonus** |
-   |---|---|---|---|
-   | Inner | tune to your arena | > 1.0 | **2** |
-   | Middle | tune to your arena | ~1.0 | **1** |
-   | Outer | large / max | ≤ 1.0 | **0** |
-
-4. Assign it to `GameSettingsManager.difficultyRingConfig`.
-
-Until this is done, total supply is exactly `kills × coinsToDrop`, using the authored
-per-archetype values: **Red 2, Violet 2, Blue 3, Indigo 3, Orange 3, Yellow 3, Green 4**.
-
-### 1.3 Build the Scope 4 HUD surfaces
+### 1.2 Build the Scope 4 HUD surfaces
 
 Open `Assets/Scenes/Gameplay.unity`, then **`Tools ▸ Economy ▸ Build Economy HUD`**, then
 **Ctrl+S**. It is re-runnable and undo-friendly; it rebuilds only the containers it owns,
@@ -121,7 +96,7 @@ If it says `SKIPPED — no TeamScoreDisplay in scene` or `SKIPPED — no MatchPh
 scene`, stop and fix that first; the builder wires existing components, it does not create
 those two.
 
-### 1.4 Add the fourth buff icon (Flag Runner) — the builder will **not** do this for you
+### 1.3 Add the fourth buff icon (Flag Runner) — the builder will **not** do this for you
 
 `Gameplay.unity` contains exactly **3** `BuffIconDisplay` components. Flag Runner has no
 icon, so its tier, pips, progress and unlock toast are invisible.
@@ -135,7 +110,7 @@ icon, so its tier, pips, progress and unlock toast are invisible.
 4. Re-run `Tools ▸ Economy ▸ Build Economy HUD` so the new icon gets its pips, fill,
    toast-feed reference and the `"Flag Runner"` display name. Save.
 
-### 1.5 Match settings for a short test loop
+### 1.4 Match settings for a short test loop
 
 On `GameSettingsManager` in `Gameplay.unity`:
 
@@ -161,7 +136,7 @@ per-player-average thresholds equal the raw team score: T1 at 12 deposited, T2 a
 | 1 | Start a match, let the 1-minute Live timer run out without a capture | Phase → **Sudden Death**. Banner: `SUDDEN DEATH · all buffs unlocked · next capture wins`. Match timer disappears (no clock armed). | A winner is crowned from coin score, or the results panel appears |
 | 2 | Deliberately be **behind** on coins when the timer expires | Still Sudden Death, no winner | The higher coin score wins — the tiebreak was not removed |
 | 3 | In Sudden Death, capture the enemy flag | Match ends immediately, correct team in the results banner, PostMatch counts down 20s to lobby | Capture is ignored (the `ReportCapture` phase guard did not widen to Sudden Death) |
-| 4 | In Sudden Death, on the client that has banked **zero** coins: check the buff row and Team Power strip | Every pip filled on all four icons; Vanguard shows `T2 … MAX`; zone reads `ENEMY TERRITORY CLEAR` in the enemy third | Pips stay empty on the client — the phase-driven repaint is not reaching non-authority peers |
+| 4 | In Sudden Death, on the client that has banked **zero** coins: check the buff row and Team Power strip | Every pip filled on all four icons; Vanguard shows `T2 … MAX`; zone reads `EXPOSED  VANGUARD SHIELDED` (not a penalty) when standing far from your own base | Pips stay empty on the client — the phase-driven repaint is not reaching non-authority peers |
 | 5 | Capture during normal **Live** play | Ends the match exactly as before | — |
 | 6 | Set `suddenDeathHardCap = 0.5`, restart, let Live **and** the 30s cap expire | Results panel reads `It's a Draw!` | The server wedges in Sudden Death forever |
 | 7 | Reset `suddenDeathHardCap = 0`, play a full match, return to lobby, start a **second** match | Tiers are back to normal (derived from the fresh `TotalDepositedValue`), no leftover max tiers | Sudden Death's override leaked across matches |
@@ -170,23 +145,35 @@ Also confirm in Sudden Death: **enemies still move and input is still live**. Ev
 gameplay gate moved from `Phase == Live` to `IsPlayActive`; if one was missed, the arena
 freezes at the exact moment the match is supposed to be decided.
 
-### 2.2 Scope 2 — one-sided territorial debuff + Vanguard
+### 2.2 Scope 2 — own-base-distance vulnerability + Vanguard
 
-The debuff boundary is `advantage < -0.33`, i.e. roughly **the last third of the way to the
-enemy base** along the base-to-base line. Do not eyeball the midline.
+This is a **defender-side, continuous** model, not the old attacker-side two-state debuff.
+A defender's damage-taken multiplier scales smoothly with their own distance from their own
+base — ×1.0 at/near their own base, rising to a capped maximum at (or beyond) the enemy
+base — and Vanguard's tier reduces that maximum. Only Team1/Team2 are vulnerable defenders;
+enemy AI (Team3AI) and Team.None are exempt and always take ×1.0. See
+`TerritorialCombat.ReceivedMultiplier` (`Assets/Scripts/Combat/Core/TerritorialCombat.cs`):
+`1 + 1.5 * clamp01(ownBaseDistance01) * (1 - 0.5 * clampTier(vanguardTier))`.
+
+| Vanguard tier | Multiplier at own base | Multiplier at max distance (enemy base) |
+|---|---|---|
+| 0 (locked) | ×1.00 | ×2.50 |
+| 1 | ×1.00 | ×1.75 |
+| 2 (max) | ×1.00 | ×1.00 (fully lifted) |
 
 | # | Do | Expect | Fails if |
 |---|---|---|---|
-| 1 | With Vanguard locked (team score < 12 on a 1-player team), hit an enemy from your **own half** | Full damage, ×1.00 | — |
-| 2 | Same attacker, same target, now standing deep in the **enemy third** | **~1/3 damage** (×0.33). Zone indicator reads `ENEMY TERRITORY −DAMAGE` | Damage is unchanged → §1.1 was skipped, or `territorialAdvantageEnabled` is off |
-| 3 | Reverse it: have the enemy hit **you** while you stand at your own base | Their damage depends only on **where they are standing**, not on where you are | Your position changes incoming damage → the received-side modifier is still threaded somewhere |
-| 4 | Bank to 12 deposited (1-player team), then hit from the enemy third | Damage rises to **×0.665**. Vanguard milestone text shows `VANGUARD T1`, one pip filled, a `VANGUARD T1` toast fires **once** | Vanguard unlocks within seconds of the match starting → a raw threshold is being compared to the absolute team score |
-| 5 | Bank to 45 deposited, hit from the enemy third | **×1.00** — debuff fully lifted. Both pips filled, milestone reads `MAX`, zone indicator flips to `ENEMY TERRITORY CLEAR` **without you moving** | The zone indicator does not change meaning → the Vanguard fold is not wired |
+| 1 | With Vanguard locked (team score < 12 on a 1-player team), hit an enemy from **your own base** | Full damage, ×1.00 | — |
+| 2 | Same attacker, same target, now standing at the **enemy base** | **×2.5 damage**. Zone indicator reads `EXPOSED  +DAMAGE TAKEN` (double space) | Damage is unchanged → §1.1 was skipped, or `territorialAdvantageEnabled` is off |
+| 3 | Reverse it: have the enemy hit **you** while you stand at your own base | Your damage taken is ×1.0 regardless of where the attacker is standing — only the **defender's** own-base distance matters | Damage varies with the attacker's position → the modifier is keyed off the wrong side |
+| 4 | Bank to 12 deposited (1-player team), then get hit while standing at the enemy base | Damage taken drops to **×1.75**. Vanguard milestone text shows `VANGUARD T1`, one pip filled, a `VANGUARD T1` toast fires **once** | Vanguard unlocks within seconds of the match starting → a raw threshold is being compared to the absolute team score |
+| 5 | Bank to 45 deposited, get hit at the enemy base | **×1.00** — vulnerability fully lifted. Both pips filled, milestone reads `MAX`, zone indicator flips to `EXPOSED  VANGUARD SHIELDED` **without you moving** | The zone indicator does not change meaning → the Vanguard fold is not wired |
 | 6 | **Run this one with 2 players on one team.** Bank 12 total | Vanguard stays **locked** — 12/2 = 6, below the threshold. It needs **24** total | It unlocks at 12 → the roster divisor is being ignored |
 | 7 | Have a third player join **mid-match** on that team | The divisor does **not** change; already-earned tiers are stable | A tier is revoked by a late joiner → the roster freeze is not latching |
 
 Sanity-check the numbers against `TerritorialCombatTests` — it asserts exactly
-`0.33 / 0.665 / 1.00` at tiers 0/1/2 and the `-0.33` boundary from both sides.
+`×1.0 / ×1.75 / ×2.5` at the own base / half distance / max distance for tier 0, and the
+tier-0/1/2 max-distance values of `×2.5 / ×1.75 / ×1.0`.
 
 ### 2.3 Scope 3 — Flag Runner, MaxTier, 12-step curve
 
@@ -219,8 +206,8 @@ order — default `[ExtraJump, Stealth, QuickerDash, FlagRunner]`.
 
 | # | Do | Expect | Fails if |
 |---|---|---|---|
-| 1 | Kill the same enemy archetype 5× and count coins each time | Identical count every time (Red 2, Violet 2, Blue/Indigo/Orange/Yellow 3, Green 4 — plus ring bonus once §1.2 is done) | Counts vary → randomness survived |
-| 2 | After §1.2, kill the same archetype in the inner vs the outer ring | Inner drops `base + 2`, outer drops `base + 0` | Identical → the ring config or ArenaCenter is not wired |
+| 1 | Kill the same enemy archetype 5× and count coins each time | Identical count every time — a fixed `coinsToDrop` per prefab (Red 2, Violet 2, Blue/Indigo/Orange/Yellow 3, Green 4), **no position-based bonus** (see `Enemy.ResolveEffectiveStats` in `Assets/Scripts/Enemy/Base/Enemy.cs`) | Counts vary → randomness survived |
+| 2 | Kill the same archetype near the arena centre vs. far from it | Identical coin count in both spots | Counts differ → a position-based drop bonus has been reintroduced |
 | 3 | Bank coins one at a time and watch a buff icon's progress fill | Fill advances smoothly and reaches **full** exactly on the deposit that tiers it up, then resets | Fill jumps or never fills |
 | 4 | Cross a tier boundary | **One** toast, naming the buff (`Flag Runner  T2`) — not `Buff T2`, and not one per deposit | Repeated toasts → the client-side edge detector is mis-primed |
 | 5 | **Join a match already in progress** as a fresh client, with the other player at high tiers | **No** toast burst on join; pips and bars show the correct current state immediately | A volley of toasts fires → the edge detector is not priming silently on first observation |
@@ -249,22 +236,26 @@ order — default `[ExtraJump, Stealth, QuickerDash, FlagRunner]`.
 
 These are deliberate. Recording them so a future reader does not "fix" them.
 
-1. **`TerritoryReadout` can disagree with the real damage path.** It derives from
-   `TerritorialCombat` and deliberately does not consult
-   `CombatConfig.territorialAdvantageEnabled`, a null `CombatConfig`, or `TeamManager`'s
-   Team3AI exemption. So with the flag off — or with §1.1 not done — the strip shows a
-   penalty that combat is not applying. Documented in the class docstring; §1.1 closes the
-   live instance of it.
-2. **Vanguard T1 is ×0.665, not ×0.67.** `1 − 0.67 × (1 − 0.5 × tier)` with
-   `FullDebuff = 0.33` gives `0.665`. The spec's `0.67` was rounded prose.
+1. **`TeamScoreDisplay`'s zone indicator can disagree with the real damage path.** It derives
+   from `TerritorialCombat.ReceivedMultiplier` and `TeamManager.GetOwnBaseDistance01`
+   directly and deliberately does not consult `CombatConfig.territorialAdvantageEnabled`
+   or a null `CombatConfig`. So with the flag off — or with §1.1 not done — the strip shows
+   a penalty that combat is not applying. §1.1 closes the live instance of it.
+2. **The exemption from the vulnerability is keyed on "not Team1/Team2", not "is
+   Team3AI".** `TeamManager.GetDamageReceivedModifier` exempts any defender that isn't
+   Team1 or Team2 — Team3AI and Team.None both get ×1.0 today, but a new spawner that
+   defaults its team to something other than Team3 would silently become a full
+   distance-vulnerable defender. `EnemySpawner.teamID` defaults to `"Team3"` specifically
+   to keep new spawner instances on the exempt side.
 3. **A genuinely empty team retries its roster capture every tick** for as long as it stays
    empty. Two independent per-team latches are what stop a 1v0 start from permanently
    locking the other team's Vanguard at tier 0. Bounded by ≤20 players with an O(1) body.
 4. **`RPC_AddPoints` is `RpcSources.All`** — any client can inflate team score. Pre-existing;
    explicitly left alone by Scope 2. It wants its own security pass.
-5. **Projectiles now crit**, rolled once per shot at fire time, so a piercing shot crits
-   every target it hits. New behaviour from routing projectiles through the single damage
-   entry point.
+5. **There is no crit in this model.** The old attacker-side debuff (and the crit roll that
+   shipped alongside it when projectiles were routed through `ResolveDamage`) was removed
+   by the 2026-08-05 simplification. `CombatConfig` has no crit fields; `ResolveDamage` is
+   one modifier (own-base-distance vulnerability), applied to the defender, full stop.
 6. **`GameSettingsManager.GetRespawnTime` / `respawnTimeMultiplier` / `TeamData.respawnDelay`**
    remain a real dead path. Untouched on purpose — nothing in these four scopes touches
    respawns.

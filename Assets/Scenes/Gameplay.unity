@@ -17250,7 +17250,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 007d43cc15ac5bf4f98cdaf60e2d8dab, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameSettingsManager
-  combatConfig: {fileID: 0}
+  combatConfig: {fileID: 11400000, guid: b546c875cf0947be9faaee6452a68c2b, type: 2}
   difficultyRingConfig: {fileID: 0}
   respawnTimeMultiplier: 1
   enemyHealthMultiplier: 1

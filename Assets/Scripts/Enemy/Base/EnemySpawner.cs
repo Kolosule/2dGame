@@ -2,7 +2,7 @@ using UnityEngine;
 using Fusion;
 
 /// <summary>
-/// Spawner that automatically assigns team and territorial advantage to spawned enemies.
+/// Spawner that automatically assigns team to spawned enemies.
 /// The Enemy captures its own home anchor at spawn.
 /// </summary>
 public class NetworkedEnemySpawner : NetworkBehaviour
@@ -16,11 +16,7 @@ public class NetworkedEnemySpawner : NetworkBehaviour
 
     [Header("Team Configuration")]
     [Tooltip("Which team spawns from this spawner (Team1, Team2, or Team3 for AI)")]
-    [SerializeField] private string teamID = "Team1";
-
-    [Tooltip("Territorial advantage for enemies spawned here: -1 (enemy base) to +1 (own base)")]
-    [Range(-1f, 1f)]
-    [SerializeField] private float territorialAdvantage = 0f;
+    [SerializeField] private string teamID = "Team3";
 
     [Header("Debug")]
     [SerializeField] private bool showGizmo = true;
@@ -82,16 +78,15 @@ public class NetworkedEnemySpawner : NetworkBehaviour
     {
         GameObject enemyObj = enemyNetObj.gameObject;
 
-        // Assign team component values
+        // Assign team component value
         EnemyTeamComponent teamComponent = enemyObj.GetComponent<EnemyTeamComponent>();
         if (teamComponent != null)
         {
             teamComponent.teamID = teamID;
-            teamComponent.territorialAdvantage = territorialAdvantage;
         }
 
-        // Networked team so clients colorize correctly (the teamComponent fields above are
-        // server-local; they remain as the authored fallback for scene-placed enemies).
+        // Networked team so clients colorize correctly (the teamComponent field above is
+        // server-local; it remains as the authored fallback for scene-placed enemies).
         Enemy enemy = enemyObj.GetComponent<Enemy>();
         if (enemy != null)
         {
