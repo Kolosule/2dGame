@@ -25,6 +25,9 @@ public class FriendlyCollision : NetworkBehaviour
     {
         teamData = GetComponent<PlayerTeamData>();
         bodyCollider = GetComponent<Collider2D>();
+
+        if (teamData == null || bodyCollider == null)
+            Debug.LogError($"FriendlyCollision on {name} needs PlayerTeamData and Collider2D on the same GameObject.", this);
     }
 
     public override void Spawned()

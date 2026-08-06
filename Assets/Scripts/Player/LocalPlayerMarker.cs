@@ -51,6 +51,8 @@ public class LocalPlayerMarker : NetworkBehaviour
             new Vector3(0f, 0f, 0f),
         };
         mesh.triangles = new int[] { 0, 1, 2 };
+        mesh.colors = new Color[] { color, color, color };
+        mesh.uv = new Vector2[] { Vector2.zero, Vector2.zero, Vector2.zero };
         mesh.RecalculateBounds();
         meshFilter.mesh = mesh;
 
