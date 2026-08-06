@@ -1,5 +1,6 @@
 using UnityEngine;
 using Fusion;
+using Game.Combat.Core;
 
 /// <summary>
 /// Server-spawned networked projectile. Velocity is set on the server and synced by
@@ -74,14 +75,18 @@ public class Projectile : NetworkBehaviour
         if (!HasStateAuthority || hasHit) return;
 
 
-        // Player hit (skip same team)
+        // Player hit. Friendly-fire and self-hit are both gated by FriendlyFire, the same
+        // predicate PlayerCombat uses for melee, so the two damage sources agree. A friendly
+        // (or self) hit falls through without calling Hit() -- the projectile keeps travelling
+        // and can still hit an enemy behind the teammate.
         PlayerStatsHandler playerStats = other.GetComponent<PlayerStatsHandler>();
         if (playerStats != null)
         {
             PlayerTeamData pt = other.GetComponent<PlayerTeamData>();
             Team targetTeam = pt != null ? pt.Team : Team.None;
-            bool friendly = targetTeam != Team.None && targetTeam == ShooterTeam;
-            if (!friendly)
+            bool isSelf = playerStats.Object != null && playerStats.Object.InputAuthority == Object.InputAuthority;
+
+            if (FriendlyFire.CanDamagePlayer(TeamUtil.ToNumber(ShooterTeam), TeamUtil.ToNumber(targetTeam), isSelf))
             {
                 // Attribute the hit to the SHOOTER (so their next projectile respects the same
                 // per-attacker window), falling back to this projectile's own id if the shooter's

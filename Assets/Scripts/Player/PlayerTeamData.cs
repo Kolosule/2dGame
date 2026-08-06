@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using Fusion;
 
@@ -12,6 +13,12 @@ public class PlayerTeamData : NetworkBehaviour
     /// <summary>The authoritative team for this player. Replicated to all clients.</summary>
     [Networked, OnChangedRender(nameof(OnTeamChanged))]
     public Team Team { get; set; }
+
+    /// <summary>Fires whenever the networked Team changes to a real value (Team1/Team2/Team3AI),
+    /// including the initial value a late joiner receives. Never fires while Team is still None.
+    /// FriendlyCollision subscribes to re-derive teammate collision ignores; mirrors the existing
+    /// NetworkedPlayerInventory.CoinsChanged event pattern.</summary>
+    public event Action TeamChanged;
 
     [Header("Visual Feedback (Optional)")]
     [SerializeField] private SpriteRenderer spriteRenderer;
@@ -57,6 +64,7 @@ public class PlayerTeamData : NetworkBehaviour
     {
         if (Team == Team.None) return;
         ApplyTeamColor();
+        TeamChanged?.Invoke();
     }
 
     private void ApplyTeamColor()

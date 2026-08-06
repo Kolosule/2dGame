@@ -236,6 +236,8 @@ GameObject:
   - component: {fileID: 149290342099161498}
   - component: {fileID: 7177406052163348810}
   - component: {fileID: 1268178750110737226}
+  - component: {fileID: 5456284168069699256}
+  - component: {fileID: 2335626883854413168}
   m_Layer: 8
   m_Name: PlayerPrefab
   m_TagString: Player
@@ -527,6 +529,8 @@ MonoBehaviour:
   - {fileID: 7654321098765432100}
   - {fileID: 6955539971465329193}
   - {fileID: 2004737409023527185}
+  - {fileID: 5456284168069699256}
+  - {fileID: 2335626883854413168}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &3973079578160004190
 MonoBehaviour:
@@ -680,6 +684,33 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HitFlash
   spriteRenderer: {fileID: 5315627363694764139}
   flashDuration: 0.1
+--- !u!114 &5456284168069699256
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c58b8a4b52049a642ab2e7ef7ec94df6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FriendlyCollision
+--- !u!114 &2335626883854413168
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3540110564427285031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f990f6e546d27da4e80be152ec8b37b6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LocalPlayerMarker
+  markerRoot: {fileID: 0}
+  markerHeight: 2.6
+  markerColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &3710309603830550807
 GameObject:
   m_ObjectHideFlags: 0
