@@ -39,7 +39,7 @@ public class PlayerController : NetworkBehaviour
     {
         // The gameplay camera (PlayerCamera) self-finds the local player via
         // HasInputAuthority, so no explicit camera binding is needed here.
-        StartCoroutine(SetupTeammateCollisionsWhenReady());
+        // Teammate collision suppression is handled by the FriendlyCollision component.
     }
 
     public override void FixedUpdateNetwork()
@@ -91,33 +91,6 @@ public class PlayerController : NetworkBehaviour
 
             // Derive animation state AFTER movement/combat so velocity/dash/stun are current.
             if (animator != null) animator.Simulate();
-        }
-    }
-
-    // Ignore collisions between same-team players (replaces NetworkPlayerWrapper's coroutine).
-    // Local physics decision; identical on every client because team data is networked.
-    private System.Collections.IEnumerator SetupTeammateCollisionsWhenReady()
-    {
-        PlayerTeamData myTeam = GetComponent<PlayerTeamData>();
-        Collider2D myCol = GetComponent<Collider2D>();
-        if (myTeam == null || myCol == null) yield break;
-
-        float timeout = 5f;
-        while (myTeam.Team == Team.None && timeout > 0f)
-        {
-            timeout -= Time.deltaTime;
-            yield return null;
-        }
-        if (myTeam.Team == Team.None) yield break;
-
-        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        foreach (var other in players)
-        {
-            if (other == this) continue;
-            PlayerTeamData otherTeam = other.GetComponent<PlayerTeamData>();
-            Collider2D otherCol = other.GetComponent<Collider2D>();
-            if (otherTeam != null && otherCol != null && otherTeam.Team == myTeam.Team)
-                Physics2D.IgnoreCollision(myCol, otherCol, true);
         }
     }
 }
