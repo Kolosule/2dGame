@@ -245,17 +245,20 @@ public class PlayerCombat : NetworkBehaviour
                 continue;
             }
 
-            // Player hit. Skip ourselves and friendly players (no melee friendly-fire). Damage
-            // goes through ServerApplyDamage keyed by this attacker's NetworkObject id, so
-            // spawn-immunity is respected and the rapid-hit guard is per attacker — which also
-            // throttles the dash-strike's per-tick calls to one hit per 0.1s per target.
+            // Player hit. Damage goes through ServerApplyDamage keyed by this attacker's
+            // NetworkObject id, so spawn-immunity is respected and the rapid-hit guard is per
+            // attacker — which also throttles the dash-strike's per-tick calls to one hit per
+            // 0.1s per target. Friendly-fire and self-hit are both gated by FriendlyFire, the
+            // same predicate Projectile uses, so the two damage sources agree.
             PlayerStatsHandler targetPlayer = hit.GetComponent<PlayerStatsHandler>();
-            if (targetPlayer != null && targetPlayer != statsHandler)
+            if (targetPlayer != null)
             {
                 PlayerTeamData targetTeam = hit.GetComponent<PlayerTeamData>();
                 Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
                 Team otherTeam = targetTeam != null ? targetTeam.Team : Team.None;
-                if (!TeamUtil.AreEnemies(myTeam, otherTeam)) continue;
+                bool isSelf = targetPlayer == statsHandler;
+                if (!FriendlyFire.CanDamagePlayer(TeamUtil.ToNumber(myTeam), TeamUtil.ToNumber(otherTeam), isSelf))
+                    continue;
 
                 int finalDamage = ResolveMeleeDamage(otherTeam, hit.transform.position);
                 targetPlayer.ServerApplyDamage(finalDamage, Object.Id);
