@@ -58,7 +58,7 @@ existing coin/deposit/impact RPCs. Audio subscribes. It detects nothing.
 | 3 | **World SFX are positional with tight rolloff and clamped pan.** Linear rolloff reaching silence just past the camera edge; stereo pan clamped to ±0.7 so nothing is ever stuck hard in one ear. Off-screen fights are naturally quiet — **this is the distance-culling mechanism**, not a separate feature. The local player's own actions and all UI stay flat. |
 | 4 | **The audio service self-bootstraps and has zero scene wiring.** `AudioManager` creates itself via `[RuntimeInitializeOnLoadMethod(BeforeSceneLoad)]` and loads one `AudioConfig` ScriptableObject from `Resources/`, exactly mirroring [`SettingsService.ApplyAtBoot`](../../../Assets/Scripts/Settings/SettingsService.cs:33). Chosen over the project's usual scene-singleton pattern (`HitFeedback`, `GameSettingsManager`, `CTFGameManager`) specifically because unassigned scene references are this project's dominant failure mode — see `docs/scene-wiring-punch-list.md`. There is no scene reference to forget, and the service works identically in Menu, Lobby, and Gameplay with no per-scene setup. |
 | 5 | **The service is a hard no-op when `!SettingsService.HasDisplay`.** The dedicated server never allocates a voice, never loads a clip, never touches the mixer. Client-only *by construction*, not by convention — the same property `SettingsService` already has. Call sites may call unconditionally; the service swallows. |
-| 6 | **Mixer tree is `Master → { Music, SFX → { Combat, World, Enemy, Ambient }, UI }`.** The four contracted exposed parameters live on Master / Music / SFX / UI only. The four child groups under SFX exist purely for mix balance and as ducking targets, tuned in the mixer asset by the developer, never exposed to players. Chosen over adding a fifth settings slider because that would change shipped, tested settings code and bump its migration version — separate work, not a rider on this. |
+| 6 | **Mixer tree is `Master → { Music → { MusicBed }, SFX → { Combat, World, Enemy, Ambient }, Ui }`.** The four contracted exposed parameters live on Master / Music / SFX / Ui only — group names match `AudioBus` enum values exactly (`bus.ToString()`), which is why the UI group is named `Ui`, not `UI`. The `MusicBed` child of `Music` exists so snapshots can duck the looping bed without ever animating the `Music` group itself (see decision 7 and the Mixer section below) — `MusicDirector`'s two bed `AudioSource`s route there; one-shot stingers stay on `Music` directly. The four child groups under SFX exist purely for mix balance and as ducking targets, tuned in the mixer asset by the developer, never exposed to players. Chosen over adding a fifth settings slider because that would change shipped, tested settings code and bump its migration version — separate work, not a rider on this. |
 | 7 | **Snapshots may never animate one of the four exposed parameters.** Snapshot transitions and `SettingsService.ApplyAudio()` both write mixer parameters; any overlap means a transition silently stomps the player's saved volume. Snapshots touch child-group volumes only. This is a correctness rule, not a style preference. |
 | 8 | **One playback path replaces all fifteen call sites.** `Audio.PlayAt`, `Audio.Play2D`, `Audio.PlayUi`, `Audio.PlayMusic`. `AudioSource.PlayClipAtPoint` appears nowhere in the codebase after this lands. |
 | 9 | **Voices are pooled and preallocated**, never instantiated per play. Fixed pool built at boot as children of the manager; the mixer group is assigned on acquire. |
@@ -189,15 +189,23 @@ playlist (`MusicTrackId → AudioClip`), pool sizes (32 SFX / 4 UI / 2 music), t
 ```
 Master  [MasterVolume]
 ├── Music  [MusicVolume]
+│   └── MusicBed        the two looping bed AudioSources route here — never Music directly
 ├── SFX    [SfxVolume]
 │   ├── Combat      melee, projectiles, damage, death, respawn
 │   ├── World       movement, coins, flags, deposits, ambient beds
 │   ├── Enemy       all AI creature sounds
 │   └── Ambient     looping arena beds
-└── UI     [UiVolume]   menus, HUD, self-confirmations, stingers-as-UI
+└── Ui     [UiVolume]   menus, HUD, self-confirmations, stingers-as-UI
 ```
 
-Only the four bracketed parameters are exposed. Per decision 7, no snapshot animates any of them.
+Only the four bracketed parameters are exposed. Per decision 7, no snapshot animates any of them —
+which is exactly why `MusicBed` exists: a snapshot that needs to duck the looping bed under a
+stinger or Sudden Death animates `MusicBed`'s group volume, never `Music`'s (`Music` carries the
+exposed `MusicVolume` parameter, and animating it would silently overwrite the player's saved
+setting on every phase transition). One-shot stingers (`VictoryStinger`, `DefeatStinger`,
+`DrawStinger`, and the countdown/match cues on the Music bus) stay routed to `Music` directly via
+their `SoundCue.bus` — they are not beds, do not crossfade, and are unaffected by the `MusicBed`
+duck.
 
 **Snapshots**
 
@@ -205,10 +213,11 @@ Only the four bracketed parameters are exposed. Per decision 7, no snapshot anim
 |---|---|---|
 | `Default` | Neutral. | 0.5 s |
 | `Menu` | Combat / World / Enemy muted, Ambient down 12 dB. | 0.5 s |
-| `SuddenDeath` | Enemy −6 dB, Ambient −9 dB, music bed group +2 dB. | 1.5 s |
-| `Stinger` | Music bed −6 dB, Enemy / Ambient −12 dB for 2.5 s, then return to `Default`. | 0.2 s in, 1.0 s out |
+| `SuddenDeath` | Enemy −6 dB, Ambient −9 dB, `MusicBed` +2 dB. | 1.5 s |
+| `Stinger` | `MusicBed` −6 dB, Enemy / Ambient −12 dB for 2.5 s, then return to `Default`. | 0.2 s in, 1.0 s out |
 
-All four move child-group volumes only. `AudioMixer.TransitionToSnapshots` with explicit times.
+All four move child-group volumes only — `MusicBed`, `Combat`, `World`, `Enemy`, `Ambient` — never
+`Master`, `Music`, `SFX`, or `Ui`. `AudioMixer.TransitionToSnapshots` with explicit times.
 
 ## Networking
 

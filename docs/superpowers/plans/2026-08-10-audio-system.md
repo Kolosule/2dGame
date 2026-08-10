@@ -3066,13 +3066,26 @@ Create `Assets/Audio/GameMixer.mixer` (**Assets → Create → Audio Mixer**) wi
 ```
 Master
 ├── Music
+│   └── MusicBed
 ├── SFX
 │   ├── Combat
 │   ├── World
 │   ├── Enemy
 │   └── Ambient
-└── UI
+└── Ui
 ```
+
+**Group names are case-sensitive and must match exactly** — `AudioManager.CacheMixerGroups` and
+`MusicDirector.CreateSource` resolve groups by `AudioBus.ToString()`, which for the UI bus
+produces `"Ui"`, not `"UI"`. A group literally named `UI` will not resolve: `CacheMixerGroups`
+logs an error, every UI cue's `outputAudioMixerGroup` stays null, and the `UiVolume` slider does
+nothing for any of them. The Task 11 test `EveryBankEntry_RoutesToAGroupThatExistsInTheMixer`
+will go red on this — if it does, the fix is the mixer group's name, not the test.
+
+`MusicBed` is a **new** child of `Music`, added specifically so Step 4's snapshots can duck the
+looping bed without ever animating `Music` itself (which carries the exposed `MusicVolume`
+parameter — see the Critical note in Step 4). `MusicDirector.cs`'s two bed `AudioSource`s already
+route to `AudioBus.MusicBed` in code; this step is what makes that resolve to a real group.
 
 Expose exactly four parameters, right-clicking each group's **Volume** in the inspector → *Expose … to script*, then renaming them in the **Exposed Parameters** dropdown to **exactly**:
 
@@ -3081,22 +3094,28 @@ Expose exactly four parameters, right-clicking each group's **Volume** in the in
 | Master | `MasterVolume` |
 | Music | `MusicVolume` |
 | SFX | `SfxVolume` |
-| UI | `UiVolume` |
+| Ui | `UiVolume` |
 
-Do **not** expose the volume of `Combat`, `World`, `Enemy`, or `Ambient`.
+Do **not** expose the volume of `MusicBed`, `Combat`, `World`, `Enemy`, or `Ambient`.
 
 - [ ] **Step 4: Author the four snapshots**
 
 Create snapshots named **exactly** `Default`, `Menu`, `SuddenDeath`, `Stinger`.
 
-| Snapshot | Combat | World | Enemy | Ambient | Music |
+| Snapshot | Combat | World | Enemy | Ambient | MusicBed |
 |---|---|---|---|---|---|
 | `Default` | 0 dB | 0 dB | 0 dB | 0 dB | 0 dB |
 | `Menu` | −80 dB | −80 dB | −80 dB | −12 dB | 0 dB |
 | `SuddenDeath` | 0 dB | 0 dB | −6 dB | −9 dB | +2 dB |
 | `Stinger` | 0 dB | 0 dB | −12 dB | −12 dB | −6 dB |
 
-**Critical (spec decision 7):** none of these snapshots may touch the Master, Music, SFX, or UI *group* volumes — those four carry the exposed parameters, and a snapshot transition would silently overwrite the player's saved setting on every phase change. The `Music` column above is the music **bed group's** own volume within the Music bus, not the exposed `MusicVolume` parameter. If the mixer layout makes that distinction impossible, add a `MusicBed` child group under `Music` and animate that instead.
+**Critical (spec decision 7):** none of these snapshots may touch the Master, Music, SFX, or Ui
+*group* volumes — those four carry the exposed parameters, and a snapshot transition would
+silently overwrite the player's saved setting on every phase change. The last column above
+targets the `MusicBed` group's own volume (a child of `Music`, authored in Step 3 specifically
+for this), **never** the `Music` group itself. This is not optional or layout-dependent: animate
+`Music` here and every phase transition permanently stomps the player's saved music volume, with
+no error and no test catching it until Task 13's manual multi-peer pass.
 
 - [ ] **Step 5: Author the sound bank**
 
@@ -3128,6 +3147,24 @@ Create `Assets/Audio/MainSoundBank.asset` (**Assets → Create → Audio → Sou
 Create `Assets/Resources/AudioConfig.asset` (**Assets → Create → Audio → Audio Config**; the `Resources` folder name is load-bearing — `AudioManager.Bootstrap` does `Resources.Load<AudioConfig>("AudioConfig")`, so the file must be named `AudioConfig` and sit directly in a folder named `Resources`).
 
 Assign: `mixer` = `GameMixer`, `bank` = `MainSoundBank`, one `musicTracks` entry per `MusicTrackId` except `None`. Leave `sfxVoices` 32, `uiVoices` 4, `defaultWorldMaxDistance` 14, `maxPan` 0.7, `musicCrossfadeSeconds` 1.5.
+
+- [ ] **Step 6b: Verify `heavyHitDamageThreshold` survived on the scene's `HitFeedback` component**
+
+`Task 8` added `[SerializeField] private int heavyHitDamageThreshold = 25;` to `HitFeedback`
+(`Assets/Scripts/Player/HitFeedback.cs`), but the `HitFeedback` instance in
+`Assets/Scenes/Gameplay.unity` predates that field and was never re-saved, so it does not carry a
+value for it in the scene YAML. A `[SerializeField]` absent from a scene's serialized data
+deserializes to C#'s default (`0`), not the field's inline initializer — this project has hit
+this exact footgun before (see `docs/superpowers/specs/2026-07-29-individual-buff-layer.md`'s
+`SerializeField-absent-from-YAML-deserializes-to-0` note). If it lands at `0`,
+`damage >= heavyHitDamageThreshold` is true for every hit, so **`HitConfirmHeavy` plays on every
+hit and the plain `HitConfirm` cue becomes permanently unreachable** — silently wasting the
+sourced/licensed clip Step 5 requires you to author for it.
+
+Open `Assets/Scenes/Gameplay.unity`, select the `HitFeedback` object, and confirm **Heavy Hit
+Damage Threshold** reads `25` in the Inspector. If it reads `0`, set it to `25` and save the
+scene. Commit the scene change in Step 8 alongside the rest of this task's assets if it needed
+fixing.
 
 - [ ] **Step 7: Run the integrity tests until green**
 
@@ -3192,6 +3229,7 @@ Expected: hits only inside `Assets/Scripts/Audio/` (`SoundCue.variants`, `AudioC
   - **`LandHeavy` unwired** — `PlayerAnimator` has no view of `PlayerCombat.AttackIsPound`, so a ground-pound landing plays the normal `Land` cue. `MeleeSwingHeavy` already carries the pound's audio identity on the way down.
   - **`EnemyAttack` is server-only** — `Enemy.AttackPlayer` runs on the state authority, so on a dedicated server it is silent. The replicated `EnemyTelegraph` immediately preceding it carries the counterplay information; revisit if playtest shows the attack itself needs to be heard.
   - `UiHover` is authored in the bank but unwired — the menu screens have no pointer-enter handlers (Task 10, Step 3).
+  - **`EnemySpawn` is authored in the bank (Step 5's table requires it, priority 0) but no code plays it** — no task wired it to `EnemySpawner`/`Enemy.Spawned`. Either wire it (`Enemy.Spawned()` runs on every peer, so `Audio.PlayAt(AudioCueId.EnemySpawn, transform.position)` there is a safe one-line addition) or record it here as a deliberate v1 gap like `EnemyAttack` above.
   - `WallOrLedgeScuff`, if it was cut for lack of a CC0 source.
   - The pre-ship gate: `Assets/Sound/Music/Halo Theme Song Original.mp3` and its `.meta` must be deleted before any public build.
 
