@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Fusion;
+using Game.Audio.Core;
 using Game.Combat.Core;
 
 /// <summary>
@@ -76,7 +77,7 @@ public class PlayerCombat : NetworkBehaviour
 
     // Swing state (spec 2.2): the swing is its start tick + latched aim/facing; the phase is
     // derived per tick via SwingPhase.Resolve, so it predicts and resimulates correctly.
-    [Networked] private int AttackStartTick { get; set; }
+    [Networked, OnChangedRender(nameof(OnAttackStartTickChanged))] private int AttackStartTick { get; set; }
     [Networked] private int AttackAim { get; set; }
     [Networked] private NetworkBool AttackFacingRight { get; set; }
     [Networked] private NetworkBool AttackIsPound { get; set; }
@@ -166,6 +167,25 @@ public class PlayerCombat : NetworkBehaviour
             if (AttackIsPound) playerAnimator.TriggerGroundPound();
             else playerAnimator.TriggerAttack();
         }
+    }
+
+    /// <summary>
+    /// Fires the swing whoosh on every peer the moment a new swing is latched — including the
+    /// predicting input authority, which is what makes your own melee feel instant. This is a
+    /// DIFFERENT cue from the hit confirm in HitFeedback (which arrives later, only on the
+    /// attacker, only when the swing actually connected), so a landed hit plays two distinct
+    /// sounds and a whiff plays one. There is nothing to reconcile and nothing to suppress.
+    ///
+    /// Adding OnChangedRender to an already-[Networked] property changes nothing on the wire.
+    /// </summary>
+    private void OnAttackStartTickChanged()
+    {
+        // Tick 0 is the never-swung default; a pooled or freshly spawned player must not whoosh.
+        if (AttackStartTick <= 0) return;
+
+        AudioCueId cue = AttackIsPound ? AudioCueId.MeleeSwingHeavy : AudioCueId.MeleeSwing;
+        if (HasInputAuthority) Audio.Play2D(cue);
+        else Audio.PlayAt(cue, transform.position);
     }
 
     /// <summary>Per-tick swing behaviour. Pound impulse fires exactly once on the first Active

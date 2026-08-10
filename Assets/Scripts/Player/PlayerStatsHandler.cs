@@ -2,6 +2,7 @@
 using Fusion;
 using Fusion.Addons.Physics;
 using UnityEngine;
+using Game.Audio.Core;
 using Game.Combat.Core;
 
 /// <summary>
@@ -66,6 +67,10 @@ public class PlayerStatsHandler : NetworkBehaviour
     // proxies snap to the respawn point instead of interpolating across the map.
     private NetworkRigidbody2D netRb;
 
+    // Render-side only: previous health, so OnHealthChanged can tell a hit from a heal or a
+    // respawn reset. Never read by simulation, never networked.
+    private float lastRenderedHealth = float.MaxValue;
+
     public override void Spawned()
     {
         netRb = GetComponent<NetworkRigidbody2D>();
@@ -94,6 +99,13 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     private void OnHealthChanged()
     {
+        // Victim-only, flat: "I am being hit" must be instantly distinguishable from
+        // "I am landing hits" (HitConfirm), which is why they are separate cues on separate paths.
+        // Guarded on a health DECREASE so healing and the respawn reset never trigger it.
+        if (HasInputAuthority && CurrentHealth < lastRenderedHealth)
+            Audio.Play2D(AudioCueId.TookDamage);
+        lastRenderedHealth = CurrentHealth;
+
         UpdateHealthBar();
         HealthChanged?.Invoke();
     }
@@ -265,6 +277,9 @@ public class PlayerStatsHandler : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_DisablePlayerControls()
     {
+        if (HasInputAuthority) Audio.Play2D(AudioCueId.PlayerDeath);
+        else Audio.PlayAt(AudioCueId.PlayerDeath, transform.position);
+
         SpriteRenderer sprite = GetComponentInChildren<SpriteRenderer>();
         if (sprite != null)
         {
@@ -334,6 +349,9 @@ public class PlayerStatsHandler : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_EnablePlayerControls()
     {
+        if (HasInputAuthority) Audio.Play2D(AudioCueId.PlayerRespawn);
+        else Audio.PlayAt(AudioCueId.PlayerRespawn, transform.position);
+
         SpriteRenderer sprite = GetComponentInChildren<SpriteRenderer>();
         if (sprite != null)
         {

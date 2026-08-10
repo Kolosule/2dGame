@@ -1,4 +1,5 @@
 using UnityEngine;
+using Game.Audio.Core;
 
 /// <summary>
 /// Scene singleton that plays attacker-only hit feedback: an impact particle
@@ -14,6 +15,11 @@ public class HitFeedback : MonoBehaviour
     [SerializeField] private GameObject particleBurstPrefab;
     [SerializeField] private GameObject damageNumberPrefab;
     [SerializeField] private float particleLifetime = 2f;
+
+    [Tooltip("Damage at or above which the heavier hit-confirm cue plays instead. This is a " +
+             "loudness tier, NOT a crit system — the crit multiplier was removed in the " +
+             "2026-08-05 damage-model change.")]
+    [SerializeField] private int heavyHitDamageThreshold = 25;
 
     private void Awake()
     {
@@ -36,6 +42,14 @@ public class HitFeedback : MonoBehaviour
     /// </summary>
     public void Play(GameObject target, Vector2 hitPoint, int damage)
     {
+        // This method only ever runs on the ATTACKER's client — both callers are
+        // [Rpc(..., RpcTargets.InputAuthority)] (PlayerCombat.RPC_HitFeedback,
+        // Projectile.RPC_HitFeedback), so no gating is needed here. Flat and full volume: it is
+        // the single most important cue in the game and must never fade with camera drift.
+        Audio.Play2D(damage >= heavyHitDamageThreshold
+            ? AudioCueId.HitConfirmHeavy
+            : AudioCueId.HitConfirm);
+
         if (particleBurstPrefab != null)
         {
             GameObject fx = Instantiate(particleBurstPrefab, hitPoint, Quaternion.identity);

@@ -48,9 +48,6 @@ public class CombatConfig : ScriptableObject
 
     [Header("Hit Effects")]
     public GameObject hitEffectPrefab;
-    public AudioClip hitSound;
-    [Range(0f, 1f)]
-    public float hitSoundVolume = 0.5f;
 
     // Not serialized: resets on domain reload, which is exactly the cadence we want for a
     // once-per-session operator warning.
