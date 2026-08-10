@@ -1,5 +1,6 @@
 using UnityEngine;
 using Fusion;
+using Game.Audio.Core;
 using Game.PlayerAnimation.Core;
 
 /// <summary>
@@ -61,12 +62,6 @@ public class PlayerAnimator : NetworkBehaviour
              "otherwise. Leave unset to disable the weapon track.")]
     [SerializeField] private Animator weaponAnim;
 
-    [Header("SFX (optional — null-safe)")]
-    [Tooltip("Plays jump/land one-shots. Auto-resolved from this GameObject if unset.")]
-    [SerializeField] private AudioSource audioSource;
-    [SerializeField] private AudioClip jumpClip;
-    [SerializeField] private AudioClip landClip;
-
     // Networked animation state.
     // OverrideState: the authoritative, non-locomotion pose, or AnimState.None when locomotion
     // should be derived locally. Grounded: the one locomotion input that can't be read from
@@ -91,6 +86,10 @@ public class PlayerAnimator : NetworkBehaviour
     private AnimState lastRenderedState;
     private bool sfxPrimed;
 
+    // Render-side only: previous dash state, so the cue fires on the rising edge rather than every
+    // frame of the dash. Never networked.
+    private bool wasDashingForSfx;
+
     public override void Spawned()
     {
         movement = GetComponent<PlayerMovement>();
@@ -99,7 +98,6 @@ public class PlayerAnimator : NetworkBehaviour
         // Prefer the explicitly-wired body Animator. Fallback keeps things working if
         // a future prefab variant forgets to assign it.
         if (anim == null) anim = GetComponentInChildren<Animator>();
-        if (audioSource == null) audioSource = GetComponent<AudioSource>();
 
         // A [Networked] enum defaults to 0 (= Idle), which Render would read as an authoritative
         // Idle override before the first Simulate. Seed it to None so proxies derive locomotion
@@ -227,19 +225,37 @@ public class PlayerAnimator : NetworkBehaviour
             return;
         }
 
+        // Dash edge-detection runs every frame Render() executes, independent of whether the
+        // resolved AnimState changed this frame. Sampling it only on state-change frames (as
+        // Jump/Land below do) can miss the IsDashing() edge if the anim state clears a frame
+        // before or after the movement flag does — which silences every OTHER dash once the two
+        // fall out of phase, not just an occasional one.
+        bool dashing = movement != null && movement.IsDashing();
+        if (HasInputAuthority && dashing && !wasDashingForSfx) Audio.Play2D(AudioCueId.Dash);
+        wasDashingForSfx = dashing;
+
         if (state == lastRenderedState) return;
 
-        if (audioSource != null)
-        {
-            if (state == AnimState.Jump && jumpClip != null)
-                audioSource.PlayOneShot(jumpClip);
+        // Your own movement is flat and full-volume so it always feels immediate; everyone else's
+        // is positional, so a teammate landing beside you reads as "beside you" and one across the
+        // map is culled before it costs a voice. Same cue id either way — only the path differs.
+        if (state == AnimState.Jump)
+            PlayMovementCue(AudioCueId.Jump);
 
-            bool wasAirborne = lastRenderedState == AnimState.Jump || lastRenderedState == AnimState.Fall;
-            bool nowGrounded = state == AnimState.Idle || state == AnimState.Walk;
-            if (wasAirborne && nowGrounded && landClip != null)
-                audioSource.PlayOneShot(landClip);
-        }
+        bool wasAirborne = lastRenderedState == AnimState.Jump || lastRenderedState == AnimState.Fall;
+        bool nowGrounded = state == AnimState.Idle || state == AnimState.Walk;
+        if (wasAirborne && nowGrounded)
+            PlayMovementCue(AudioCueId.Land);
 
         lastRenderedState = state;
+    }
+
+    /// <summary>Flat for the player who owns this body, positional for everyone else's copy of
+    /// it. Every peer runs this method for every player object it simulates, so exactly one peer
+    /// takes the flat path per player — there is no way to double-play.</summary>
+    private void PlayMovementCue(AudioCueId cue)
+    {
+        if (HasInputAuthority) Audio.Play2D(cue);
+        else Audio.PlayAt(cue, transform.position);
     }
 }

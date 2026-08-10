@@ -2,6 +2,7 @@ using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using Game.Audio.Core;
 
 /// <summary>
 /// The client-local options window: three tabs (Audio / Video / Gameplay), apply-on-change, and a
@@ -133,6 +134,7 @@ public class SettingsPanel : MonoBehaviour
     /// <summary>Show the window. onClosed fires when it closes, so the caller can restore itself.</summary>
     public void Open(Action closedCallback)
     {
+        Audio.PlayUi(AudioCueId.PanelOpen);
         if (panelRoot == null) return;
 
         onClosed = closedCallback;
@@ -145,6 +147,7 @@ public class SettingsPanel : MonoBehaviour
     /// <summary>Hide the window. Safe to call when it is already closed.</summary>
     public void Close()
     {
+        Audio.PlayUi(AudioCueId.PanelClose);
         if (panelRoot == null || !panelRoot.activeSelf) return;
 
         // Leaving a pending resolution unconfirmed must revert it, not strand the player in it.
@@ -187,6 +190,9 @@ public class SettingsPanel : MonoBehaviour
             if (suppressCallbacks) return;
             write(value);
             SettingsService.ApplyAudio();
+            // Audible reference while dragging a volume slider. maxConcurrent = 1 and a 40 ms dedupe
+            // window on the cue asset are what stop a drag (which fires every frame) machine-gunning.
+            Audio.PlayUi(AudioCueId.UiSliderTick);
             SetPercentLabel(label, value);
         });
     }

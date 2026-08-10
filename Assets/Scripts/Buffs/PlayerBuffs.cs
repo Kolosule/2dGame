@@ -2,6 +2,7 @@ using UnityEngine;
 using Fusion;
 using Game.Buffs.Core;
 using Game.Hud.Core;
+using Game.Audio.Core;
 
 /// <summary>
 /// Per-player, server-authoritative buff state. Tiers are DERIVED from TotalDepositedValue +
@@ -31,8 +32,41 @@ public class PlayerBuffs : NetworkBehaviour
     // so Despawned must unsubscribe via this reference rather than re-resolving the static.
     private MatchManager subscribedMatchManager;
 
-    private void OnBuffsChanged() => BuffsChanged?.Invoke();
-    private void OnStealthChanged() => StealthStateChanged?.Invoke();
+    // Render-side only: one rising-edge detector per BuffId (the loadout always holds the whole
+    // catalog per TierOf's own doc comment, regardless of what's equipped), so BuffTierUp fires
+    // once on a genuine tier crossing for ANY equipped buff, not on every deposit — most deposits
+    // land between thresholds. Reuses Game.Hud.Core.TierUpEdge, the same detector the HUD's own
+    // per-icon toast already uses, per the design spec's explicit "via the existing TierUpEdge
+    // detector" requirement. Never networked; primes silently so a late joiner or a rematch
+    // scene-reload reset never plays a false tier-up.
+    private readonly TierUpEdge[] tierEdges = new TierUpEdge[4];
+
+    private void OnBuffsChanged()
+    {
+        // Self-only: your own progression, not a broadcast. Suppressed during Sudden Death,
+        // which forces every tier to MaxTier without a real deposit — matches
+        // BuffIconDisplay.RepaintTier's identical suppression for the same case.
+        bool anyTierRose = false;
+        for (int i = 0; i < tierEdges.Length; i++)
+            if (tierEdges[i].Observe(TierOf((BuffId)i))) anyTierRose = true;
+
+        if (HasInputAuthority && anyTierRose && !SuddenDeathMaxesTiers) Audio.PlayUi(AudioCueId.BuffTierUp);
+
+        BuffsChanged?.Invoke();
+    }
+
+    private void OnStealthChanged()
+    {
+        // Flat for the stealthed player. For everyone else, a quiet shimmer on a deliberately
+        // SHORT radius (SoundCue.maxDistance on the cue asset, ~0.35x the normal world radius):
+        // opponents standing right next to you get counterplay, but the buff is not announced
+        // across the arena. That radius is the balance lever and lives in the asset, not here.
+        AudioCueId cue = IsStealthed ? AudioCueId.StealthEnter : AudioCueId.StealthExit;
+        if (HasInputAuthority) Audio.Play2D(cue);
+        else Audio.PlayAt(cue, transform.position);
+
+        StealthStateChanged?.Invoke();
+    }
 
     // TierOf now reads MatchManager.Phase (via SuddenDeathMaxesTiers) as well as
     // TotalDepositedValue, so a phase change is a tier change too — re-raise BuffsChanged on it.
@@ -68,6 +102,12 @@ public class PlayerBuffs : NetworkBehaviour
             subscribedMatchManager = MatchManager.Instance;
             subscribedMatchManager.PhaseChanged += OnMatchPhaseChanged;
         }
+
+        // Prime every tier edge at the CURRENT tier (0 for a fresh spawn, or whatever a
+        // reconnecting/restored player already has) so the first REAL tier-up after this point
+        // is reported as a rise, not silently consumed as the priming observation. Mirrors the
+        // identical priming call BuffIconDisplay.Bind already makes for the same struct.
+        for (int i = 0; i < tierEdges.Length; i++) tierEdges[i].Observe(TierOf((BuffId)i));
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)

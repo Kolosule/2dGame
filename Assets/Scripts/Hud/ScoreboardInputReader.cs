@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Game.Audio.Core;
 
 /// <summary>
 /// Local-only: reads the UI/Scoreboard action (hold Tab) and forwards press/release to the bound
@@ -35,11 +36,13 @@ public class ScoreboardInputReader : MonoBehaviour
 
     private void OnPerformed(InputAction.CallbackContext ctx)
     {
+        Audio.PlayUi(AudioCueId.PanelOpen);
         if (panel != null) panel.SetHeld(true);
     }
 
     private void OnCanceled(InputAction.CallbackContext ctx)
     {
+        Audio.PlayUi(AudioCueId.PanelClose);
         if (panel != null) panel.SetHeld(false);
     }
 }

@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using Fusion;
+using Game.Audio.Core;
 
 /// <summary>
 /// FIXED VERSION - Now properly networked for multiplayer!
@@ -68,6 +69,15 @@ public class Enemy : NetworkBehaviour
     private int effectiveAttackDamage;
     private float effectiveMoveSpeed;
     private int effectiveCoinDrop;
+
+    // Render-side only: previous health, so Render can fire the hurt cue on a damage edge without
+    // depending on a server-only code path. Never read by simulation, never networked.
+    private int lastRenderedHealth = int.MinValue;
+    private bool renderedHealthPrimed;
+
+    // Render-side only: previous telegraph state, so the cue fires on the rising edge rather than
+    // every frame the enemy spends winding up. Never networked.
+    private bool wasTelegraphing;
 
     // Home anchor captured at spawn (authority); the AI leashes to this point.
     public Vector2 Home { get; private set; }
@@ -148,6 +158,8 @@ public class Enemy : NetworkBehaviour
 
     public override void Despawned(NetworkRunner runner, bool hasState)
     {
+        Audio.PlayAt(AudioCueId.EnemyDeath, transform.position);
+
         // Event-driven count decrement (replaces the spawner's per-enemy polling coroutine).
         // ownerSpawner is set on the server only; Unity's == also guards a destroyed spawner.
         if (ownerSpawner != null)
@@ -172,6 +184,21 @@ public class Enemy : NetworkBehaviour
     public override void Render()
     {
         if (ai != null) ai.RenderVisuals();
+
+        // Hurt is derived from the replicated health rather than from RPC_TakeDamage, which is
+        // StateAuthority-targeted and therefore never runs on a client. The primed flag skips the
+        // first frame, so a spawning enemy's initial health value is not heard as a hit.
+        if (renderedHealthPrimed && CurrentHealth < lastRenderedHealth)
+            Audio.PlayAt(AudioCueId.EnemyHurt, transform.position);
+        lastRenderedHealth = CurrentHealth;
+        renderedHealthPrimed = true;
+
+        // The telegraph is the counterplay window — if it is inaudible the enemy is unfair, which
+        // is why this cue carries priority 100 and is never stolen from the voice pool.
+        bool telegraphing = IsTelegraphing;
+        if (telegraphing && !wasTelegraphing)
+            Audio.PlayAt(AudioCueId.EnemyTelegraph, transform.position);
+        wasTelegraphing = telegraphing;
     }
 
     /// <summary>
@@ -246,6 +273,8 @@ public class Enemy : NetworkBehaviour
     /// </summary>
     public void AttackPlayer(PlayerStatsHandler player)
     {
+        Audio.PlayAt(AudioCueId.EnemyAttack, transform.position);
+
         // ⭐ IMPORTANT: Only server should attack
         // Clients will see the attack results through health sync
         if (!HasStateAuthority)

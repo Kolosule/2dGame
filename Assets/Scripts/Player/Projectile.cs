@@ -1,5 +1,6 @@
 using UnityEngine;
 using Fusion;
+using Game.Audio.Core;
 using Game.Combat.Core;
 
 /// <summary>
@@ -59,6 +60,11 @@ public class Projectile : NetworkBehaviour
 
         if (HasStateAuthority && rb != null)
             rb.linearVelocity = Direction * Speed;
+
+        // Runs on every peer that has this projectile — the shooter hears it flat, everyone else
+        // positional. Pooled reuse re-runs Spawned(), so a recycled projectile still fires a cue.
+        if (HasInputAuthority) Audio.Play2D(AudioCueId.ProjectileFire);
+        else Audio.PlayAt(AudioCueId.ProjectileFire, transform.position);
     }
 
     public override void Render()
@@ -150,13 +156,18 @@ public class Projectile : NetworkBehaviour
     {
         if (hasHit) return;
         hasHit = true;
-        if (impactEffect != null) RPC_Impact(transform.position);
+        // Unconditional: this RPC now carries the impact SOUND as well as the optional VFX, and
+        // gating the send on impactEffect would silence every projectile whose prefab has no
+        // particle assigned. The VFX null-guard lives inside the RPC body, where it belongs.
+        RPC_Impact(transform.position);
         Runner.Despawn(Object);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_Impact(Vector3 position)
     {
+        Audio.PlayAt(AudioCueId.ProjectileImpact, position);
+
         if (impactEffect != null)
         {
             GameObject fx = Instantiate(impactEffect, position, Quaternion.identity);

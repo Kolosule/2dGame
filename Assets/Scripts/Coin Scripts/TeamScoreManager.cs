@@ -1,7 +1,9 @@
 using UnityEngine;
 using Fusion;
 using Game.Buffs.Core;
+using Game.Hud.Core;
 using Game.Match.Core;
+using Game.Audio.Core;
 
 /// <summary>
 /// Singleton manager that tracks team scores and derives the one team buff, Vanguard.
@@ -46,11 +48,59 @@ public class TeamScoreManager : NetworkBehaviour
 
     private void OnScoresChanged()
     {
+        // Flat, everyone. The 250 ms dedupe window on the cue asset is what stops a burst deposit
+        // (which writes the score several times in a few frames) from machine-gunning.
+        Audio.PlayUi(AudioCueId.ScoreTick);
+        CheckVanguardTierRise();
+
         ScoresChanged?.Invoke();
         TeamBuffsChanged?.Invoke();
     }
 
-    private void OnTeamBuffsChanged() => TeamBuffsChanged?.Invoke();
+    private void OnTeamBuffsChanged()
+    {
+        CheckVanguardTierRise();
+        TeamBuffsChanged?.Invoke();
+    }
+
+    // Render-side only: per-team rising-edge detectors. VanguardTier is DERIVED (score + frozen
+    // roster + phase), never stored, so this is the only way to tell "the tier moved" from "the
+    // tier was re-evaluated to the same value" — which OnScoresChanged/OnTeamBuffsChanged both do
+    // far more often than the tier actually changes. Never networked.
+    private TierUpEdge team1VanguardEdge;
+    private TierUpEdge team2VanguardEdge;
+
+    /// <summary>
+    /// Plays TeamBuffUnlocked only on a genuine Vanguard tier rise, and only to players on the
+    /// team that actually earned it — "That team only" per the design spec's catalog, not a
+    /// broadcast. Called from every path that can move a Vanguard tier: score changes, the
+    /// roster freeze, and Sudden Death maxing tiers (via the PhaseChanged subscription already
+    /// wired to OnTeamBuffsChanged) — so no rise is missed regardless of which networked value
+    /// moved it.
+    /// </summary>
+    private void CheckVanguardTierRise()
+    {
+        bool team1Rose = team1VanguardEdge.Observe(VanguardTier(Team.Team1));
+        bool team2Rose = team2VanguardEdge.Observe(VanguardTier(Team.Team2));
+        if (!team1Rose && !team2Rose) return;
+
+        Team localTeam = ResolveLocalTeam();
+        if ((team1Rose && localTeam == Team.Team1) || (team2Rose && localTeam == Team.Team2))
+            Audio.PlayUi(AudioCueId.TeamBuffUnlocked);
+    }
+
+    /// <summary>Local player's team, or Team.None if unresolved (spectator, or not yet
+    /// replicated) — matches the identical pattern already used in Flag.cs's
+    /// LocalPlayerOwnsThisFlag for the same "is this event relevant to ME" resolution.</summary>
+    private Team ResolveLocalTeam()
+    {
+        if (Runner == null) return Team.None;
+        if (!Runner.TryGetPlayerObject(Runner.LocalPlayer, out NetworkObject localObject)) return Team.None;
+        if (localObject == null) return Team.None;
+
+        PlayerTeamData teamData = localObject.GetComponent<PlayerTeamData>();
+        return teamData != null ? teamData.Team : Team.None;
+    }
 
     // Cached at subscribe time: MatchManager.Instance can already be null during scene teardown,
     // so Despawned must unsubscribe via this reference rather than re-resolving the static.
@@ -119,6 +169,12 @@ public class TeamScoreManager : NetworkBehaviour
             subscribedMatchManager = MatchManager.Instance;
             subscribedMatchManager.PhaseChanged += OnTeamBuffsChanged;
         }
+
+        // Prime both edges at their current tier (0 pre-match) so the first genuine Vanguard
+        // tier rise is reported, not consumed as the priming observation — same reasoning as
+        // PlayerBuffs.Spawned's identical fix for the per-player tier-up cue.
+        team1VanguardEdge.Observe(VanguardTier(Team.Team1));
+        team2VanguardEdge.Observe(VanguardTier(Team.Team2));
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
