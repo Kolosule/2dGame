@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using Game.Audio.Core;
 
 /// <summary>
 /// MainMenu entry screen: nickname + Join/Host + a status line for connect progress and errors.
@@ -55,6 +56,7 @@ public class MainMenuUI : MonoBehaviour
         {
             cancelReconnectButton.onClick.AddListener(() =>
             {
+                Audio.PlayUi(AudioCueId.UiBack);
                 if (networkManager != null) networkManager.CancelReconnect();
             });
         }
@@ -66,6 +68,7 @@ public class MainMenuUI : MonoBehaviour
 
     private void Connect(bool asHost)
     {
+        Audio.PlayUi(AudioCueId.UiClick);
         if (networkManager == null)
         {
             Debug.LogError("❌ MainMenuUI: networkManager not assigned!");

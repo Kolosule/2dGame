@@ -37,6 +37,8 @@ public class MusicDirector
     private MatchPhase lastPhase;
     private bool hadMatch;
 
+    private int lastCountdownSecond = -1;
+
     private AudioMixerSnapshot[] snapshotCache;
 
     public void Initialize(AudioManager owner, AudioConfig cfg)
@@ -84,6 +86,7 @@ public class MusicDirector
     {
         PollMatchState();
         AdvanceCrossfade(unscaledDeltaTime);
+        AdvanceCountdownTick();
     }
 
     /// <summary>Re-derives the plan whenever the match object or its phase changes. One reference
@@ -201,6 +204,30 @@ public class MusicDirector
         outgoing.volume = 0f;
         incoming.volume = incoming.clip != null ? 1f : 0f;
         fading = false;
+    }
+
+    /// <summary>
+    /// One tick per whole second remaining during Countdown. Derived from the networked phase
+    /// timer, so every peer counts down together without a per-second RPC. The second counter
+    /// resets whenever the phase is not Countdown, so re-entering it starts clean.
+    /// </summary>
+    private void AdvanceCountdownTick()
+    {
+        MatchManager match = MatchManager.Instance;
+        if (match == null || match.Phase != MatchPhase.Countdown)
+        {
+            lastCountdownSecond = -1;
+            return;
+        }
+
+        float? remaining = match.PhaseTimeRemaining;
+        if (!remaining.HasValue) return;
+
+        int second = Mathf.CeilToInt(remaining.Value);
+        if (second <= 0 || second == lastCountdownSecond) return;
+
+        lastCountdownSecond = second;
+        Audio.PlayUi(AudioCueId.CountdownTick);
     }
 
     private void ApplyAmbient(bool shouldRun)

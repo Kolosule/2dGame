@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using Game.Hud.Core;
+using Game.Audio.Core;
 
 /// <summary>
 /// One shared transient-notification surface for unlock moments, fed by the individual buff row
@@ -33,6 +34,7 @@ public class HudToastFeed : MonoBehaviour
     /// <summary>Queue a message. Safe to call before Awake and from any display.</summary>
     public void Show(string message)
     {
+        Audio.PlayUi(AudioCueId.ToastNotification);
         if (string.IsNullOrEmpty(message)) return;
         pending.Enqueue(message);
     }

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using Game.Audio.Core;
 
 /// <summary>
 /// Lobby screen: "Players: X/20" header, two team columns of name rows, team-switch buttons, a
@@ -60,7 +61,11 @@ public class LobbyScreenUI : MonoBehaviour
 
         if (startButton != null)
         {
-            startButton.onClick.AddListener(() => networkManager.RequestStartMatch());
+            startButton.onClick.AddListener(() =>
+            {
+                Audio.PlayUi(AudioCueId.UiClick);
+                networkManager.RequestStartMatch();
+            });
             startButton.gameObject.SetActive(false);
         }
 
@@ -187,6 +192,7 @@ public class LobbyScreenUI : MonoBehaviour
 
     private void ToggleLoadoutPanel()
     {
+        Audio.PlayUi(AudioCueId.UiToggle);
         if (loadoutPanel != null) loadoutPanel.SetActive(!loadoutPanel.activeSelf);
     }
 

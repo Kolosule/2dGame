@@ -75,6 +75,10 @@ public class Enemy : NetworkBehaviour
     private int lastRenderedHealth = int.MinValue;
     private bool renderedHealthPrimed;
 
+    // Render-side only: previous telegraph state, so the cue fires on the rising edge rather than
+    // every frame the enemy spends winding up. Never networked.
+    private bool wasTelegraphing;
+
     // Home anchor captured at spawn (authority); the AI leashes to this point.
     public Vector2 Home { get; private set; }
 
@@ -188,6 +192,13 @@ public class Enemy : NetworkBehaviour
             Audio.PlayAt(AudioCueId.EnemyHurt, transform.position);
         lastRenderedHealth = CurrentHealth;
         renderedHealthPrimed = true;
+
+        // The telegraph is the counterplay window — if it is inaudible the enemy is unfair, which
+        // is why this cue carries priority 100 and is never stolen from the voice pool.
+        bool telegraphing = IsTelegraphing;
+        if (telegraphing && !wasTelegraphing)
+            Audio.PlayAt(AudioCueId.EnemyTelegraph, transform.position);
+        wasTelegraphing = telegraphing;
     }
 
     /// <summary>
@@ -262,6 +273,8 @@ public class Enemy : NetworkBehaviour
     /// </summary>
     public void AttackPlayer(PlayerStatsHandler player)
     {
+        Audio.PlayAt(AudioCueId.EnemyAttack, transform.position);
+
         // ⭐ IMPORTANT: Only server should attack
         // Clients will see the attack results through health sync
         if (!HasStateAuthority)
