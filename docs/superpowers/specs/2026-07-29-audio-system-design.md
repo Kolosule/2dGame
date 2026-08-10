@@ -375,10 +375,10 @@ asset is auditioned, because they determine what "good" sounds like.
 | Cue | Bus | Spatial | Notes |
 |---|---|---|---|
 | `CoinPickupWorld` | World | positional | Everyone. |
-| `CoinPickupSelf` | UI | flat | Self only. Pitch rises with streak. |
+| `CoinPickupSelf` | Ui | flat | Self only. Pitch rises with streak. |
 | `DepositWorld` | World | positional | Everyone. |
-| `DepositSelf` | UI | flat | Self only. Pitch scales with points deposited. |
-| `ScoreTick` | UI | flat | 250 ms dedupe. |
+| `DepositSelf` | Ui | flat | Self only. Pitch scales with points deposited. |
+| `ScoreTick` | Ui | flat | 250 ms dedupe. |
 
 ### Flags
 
@@ -387,16 +387,16 @@ asset is auditioned, because they determine what "good" sounds like.
 | `FlagTaken` | World | positional | At the flag. |
 | `FlagDropped` | World | positional | |
 | `FlagReturned` | World | positional | |
-| `FlagPickupSelf` | UI | flat | You are now the carrier. |
-| `AlertOwnFlagTaken` | UI | **flat, distance-independent** | Decision 23. |
-| `FlagCaptured` | UI | flat | Everyone; leads into the match-end stinger. |
+| `FlagPickupSelf` | Ui | flat | You are now the carrier. |
+| `AlertOwnFlagTaken` | Ui | **flat, distance-independent** | Decision 23. |
+| `FlagCaptured` | Ui | flat | Everyone; leads into the match-end stinger. |
 
 ### Buffs
 
 | Cue | Bus | Spatial | Notes |
 |---|---|---|---|
-| `BuffTierUp` | UI | flat | Self only, via the existing `Game.Hud.Core.TierUpEdge` detector. |
-| `TeamBuffUnlocked` | UI | flat | That team only. |
+| `BuffTierUp` | Ui | flat | Self only, via the existing `Game.Hud.Core.TierUpEdge` detector. |
+| `TeamBuffUnlocked` | Ui | flat | That team only. |
 | `StealthEnter` | World | flat (self) + short-radius positional (others) | Decision 21. |
 | `StealthExit` | World | flat (self) + short-radius positional (others) | Decision 21. |
 
@@ -414,11 +414,11 @@ asset is auditioned, because they determine what "good" sounds like.
 
 | Cue | Bus | Spatial | Notes |
 |---|---|---|---|
-| `CountdownTick` | UI | flat | Per second during `Countdown`. |
-| `CountdownGo` | UI | flat | |
-| `MatchStart` | UI | flat | |
-| `SuddenDeathAlert` | UI | flat | Fires with the `SuddenDeath` snapshot transition. |
-| `MatchEnd` | UI | flat | |
+| `CountdownTick` | Ui | flat | Per second during `Countdown`. |
+| `CountdownGo` | Ui | flat | |
+| `MatchStart` | Ui | flat | |
+| `SuddenDeathAlert` | Ui | flat | Fires with the `SuddenDeath` snapshot transition. |
+| `MatchEnd` | Ui | flat | |
 | `VictoryStinger` | Music | flat | |
 | `DefeatStinger` | Music | flat | |
 | `DrawStinger` | Music | flat | Also the `Team.None` fallback. |

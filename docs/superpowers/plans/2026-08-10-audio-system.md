@@ -87,8 +87,11 @@ namespace Game.Audio.Core
     /// <summary>
     /// Mixer destination for a cue. Maps 1:1 onto AudioMixerGroup names in the mixer asset.
     /// Combat/World/Enemy/Ambient are CHILD groups of SFX -- they exist for mix balance and as
-    /// snapshot ducking targets, and are never exposed to players. Only Master/Music/SFX/UI carry
+    /// snapshot ducking targets, and are never exposed to players. Only Master/Music/SFX/Ui carry
     /// exposed parameters, and those names are fixed by SettingsService's shipped contract.
+    /// MusicBed is a child of Music for the same reason Combat/World/Enemy/Ambient are children
+    /// of SFX: it exists purely as a snapshot ducking target (the looping bed AudioSources route
+    /// here, never to Music directly), never exposed to players.
     /// </summary>
     public enum AudioBus : byte
     {
@@ -98,9 +101,12 @@ namespace Game.Audio.Core
         Ambient = 3,
         Ui = 4,
         Music = 5,
+        MusicBed = 6,
     }
 }
 ```
+
+**Post-Task-1 addendum:** `MusicBed` was not part of Task 1's original commit — it was added by the final whole-branch review's fix wave, once the mixer-ducking design in Task 12 turned out to need a real, routable child group (see that task's notes). The listing above reflects the final shipped shape, not what Task 1 committed in isolation.
 
 Create `Assets/Scripts/Audio/Core/AudioCueId.cs`:
 
@@ -3086,6 +3092,14 @@ will go red on this — if it does, the fix is the mixer group's name, not the t
 looping bed without ever animating `Music` itself (which carries the exposed `MusicVolume`
 parameter — see the Critical note in Step 4). `MusicDirector.cs`'s two bed `AudioSource`s already
 route to `AudioBus.MusicBed` in code; this step is what makes that resolve to a real group.
+
+**One more gotcha `MusicBed` introduces:** `AudioMixer.FindMatchingGroups` is a *substring* match,
+not exact — `FindMatchingGroups("Music")` will now return both `Master/Music` and
+`Master/Music/MusicBed`. `CacheMixerGroups` takes `matches[0]`, which should be the parent (Unity
+returns groups in hierarchy order), but this makes stinger routing order-dependent where it
+previously wasn't. After building the mixer, drag the `MusicVolume` slider during a
+`VictoryStinger`/`DefeatStinger` playback and confirm the stinger actually follows it — if it
+doesn't move (or the `MusicBed` duck also moves with it), the two groups resolved backwards.
 
 Expose exactly four parameters, right-clicking each group's **Volume** in the inspector → *Expose … to script*, then renaming them in the **Exposed Parameters** dropdown to **exactly**:
 
