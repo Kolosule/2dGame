@@ -40,6 +40,8 @@ public class AudioManager : MonoBehaviour
 
     private Camera listenerCamera;
 
+    private MusicDirector music;
+
     public AudioConfig Config => config;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -83,6 +85,9 @@ public class AudioManager : MonoBehaviour
         // become audible on this line and not before — see SettingsService.Mixer's doc comment.
         SettingsService.Mixer = cfg.Mixer;
         SettingsService.ApplyAudio();
+
+        music = new MusicDirector();
+        music.Initialize(this, config);
     }
 
     private void CacheMixerGroups()
@@ -119,12 +124,13 @@ public class AudioManager : MonoBehaviour
         return pool;
     }
 
-    /// <summary>Returns finished voices to their budgets. One O(pool) sweep per frame, no
-    /// allocation — cheaper and far simpler than a callback per voice.</summary>
+    /// <summary>Returns finished voices to their budgets and advances music. One O(pool) sweep per
+    /// frame, no allocation — cheaper and far simpler than a callback per voice.</summary>
     private void Update()
     {
         ReleaseFinished(sfxSources, sfxBudget);
         ReleaseFinished(uiSources, uiBudget);
+        music?.Tick(Time.unscaledDeltaTime);
     }
 
     private static void ReleaseFinished(AudioSource[] pool, VoiceBudget budget)
@@ -249,6 +255,7 @@ public class AudioManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        music?.Shutdown();
         if (Instance == this) Instance = null;
     }
 }
