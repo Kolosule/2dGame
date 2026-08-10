@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Fusion;
+using Game.Audio.Core;
 
 /// <summary>
 /// FIXED VERSION - Now properly handles coin deposits by passing NetworkObject directly!
@@ -21,10 +22,6 @@ public class NetworkedHomeBase : NetworkBehaviour
 
     [Tooltip("If not auto-deposit, which key to press (default: E)")]
     [SerializeField] private Key depositKey = Key.E;
-
-    [Header("Audio (Optional)")]
-    [Tooltip("Sound to play when coins are deposited")]
-    [SerializeField] private AudioClip depositSound;
 
     [Header("Visual Feedback (Optional)")]
     [Tooltip("Particle effect to spawn when depositing")]
@@ -250,11 +247,9 @@ public class NetworkedHomeBase : NetworkBehaviour
     private void RPC_OnDeposit(Vector3 playerPosition, int points)
     {
 
-        // Play deposit sound if assigned
-        if (depositSound != null)
-        {
-            AudioSource.PlayClipAtPoint(depositSound, transform.position);
-        }
+        // World half of a deposit: positional at the base, heard by everyone nearby. The
+        // depositing player's own chime is a separate flat cue in PlayerInventory.
+        Audio.PlayAt(AudioCueId.DepositWorld, transform.position);
 
         // Spawn deposit effect if assigned
         if (depositEffect != null)

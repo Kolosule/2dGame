@@ -1,6 +1,7 @@
 using UnityEngine;
 using Fusion;
 using System.Collections;
+using Game.Audio.Core;
 
 /// <summary>
 /// Networked coin pickup for Photon Fusion.
@@ -20,10 +21,6 @@ public class NetworkedCoinPickup : NetworkBehaviour
     [Header("Coin Properties")]
     [Tooltip("The data asset that defines this coin's values for each team")]
     [SerializeField] private CoinData coinData;
-
-    [Header("Visual Feedback (Optional)")]
-    [Tooltip("Sound to play when coin is picked up")]
-    [SerializeField] private AudioClip pickupSound;
 
     [Header("Rotation (Optional)")]
     [Tooltip("Should the coin rotate for visual effect?")]
@@ -288,11 +285,10 @@ public class NetworkedCoinPickup : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnCoinCollected(Vector3 playerPosition)
     {
-        // Play pickup sound if assigned
-        if (pickupSound != null)
-        {
-            AudioSource.PlayClipAtPoint(pickupSound, transform.position);
-        }
+        // The WORLD half of a pickup: positional, heard by everyone nearby. The collector's own
+        // confirmation is a separate, flat cue owned by PlayerInventory — two roles, one sound
+        // each, so the collector no longer hears the same clip twice.
+        Audio.PlayAt(AudioCueId.CoinPickupWorld, transform.position);
 
         // You can add particle effects here
         // Example: Instantiate(pickupEffect, transform.position, Quaternion.identity);

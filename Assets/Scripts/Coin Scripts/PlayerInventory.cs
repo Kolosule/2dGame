@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using Fusion;
+using Game.Audio.Core;
 
 /// <summary>
 /// Networked player inventory for Photon Fusion.
@@ -11,13 +12,6 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     [Header("Inventory Settings")]
     [Tooltip("Maximum number of coins player can carry at once (0 = unlimited)")]
     [SerializeField] private int maxCoins = 0; // 0 means unlimited
-
-    [Header("Audio (Optional)")]
-    [Tooltip("Sound to play when picking up a coin")]
-    [SerializeField] private AudioClip coinPickupSound;
-
-    [Tooltip("Sound to play when depositing coins")]
-    [SerializeField] private AudioClip depositSound;
 
     [Header("Death Drop Settings")]
     [Tooltip("Radius around the death position to scatter dropped coins")]
@@ -108,10 +102,9 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnCoinAdded()
     {
-        if (coinPickupSound != null && HasInputAuthority)
-        {
-            AudioSource.PlayClipAtPoint(coinPickupSound, transform.position);
-        }
+        // SELF half of a pickup: flat, on the UI bus, only for the player who collected it.
+        // CoinPickup already plays the positional world cue for everyone, including this player.
+        if (HasInputAuthority) Audio.PlayUi(AudioCueId.CoinPickupSelf);
     }
 
     /// <summary>
@@ -154,10 +147,8 @@ public class NetworkedPlayerInventory : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnCoinsDeposited()
     {
-        if (depositSound != null && HasInputAuthority)
-        {
-            AudioSource.PlayClipAtPoint(depositSound, transform.position);
-        }
+        // SELF half of a deposit. HomeBase plays the positional world cue for everyone.
+        if (HasInputAuthority) Audio.PlayUi(AudioCueId.DepositSelf);
     }
 
     /// <summary>
