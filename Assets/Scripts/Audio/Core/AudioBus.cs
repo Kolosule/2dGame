@@ -14,5 +14,6 @@ namespace Game.Audio.Core
         Ambient = 3,
         Ui = 4,
         Music = 5,
+        MusicBed = 6,
     }
 }

@@ -225,6 +225,15 @@ public class PlayerAnimator : NetworkBehaviour
             return;
         }
 
+        // Dash edge-detection runs every frame Render() executes, independent of whether the
+        // resolved AnimState changed this frame. Sampling it only on state-change frames (as
+        // Jump/Land below do) can miss the IsDashing() edge if the anim state clears a frame
+        // before or after the movement flag does — which silences every OTHER dash once the two
+        // fall out of phase, not just an occasional one.
+        bool dashing = movement != null && movement.IsDashing();
+        if (HasInputAuthority && dashing && !wasDashingForSfx) Audio.Play2D(AudioCueId.Dash);
+        wasDashingForSfx = dashing;
+
         if (state == lastRenderedState) return;
 
         // Your own movement is flat and full-volume so it always feels immediate; everyone else's
@@ -237,13 +246,6 @@ public class PlayerAnimator : NetworkBehaviour
         bool nowGrounded = state == AnimState.Idle || state == AnimState.Walk;
         if (wasAirborne && nowGrounded)
             PlayMovementCue(AudioCueId.Land);
-
-        // Dash is LOCAL-ONLY on purpose. Your own dash is the feel-critical one; a remote player's
-        // is cosmetic, and gating it on a proxy-correct read of PlayerMovement.IsDashing() would
-        // make the cue depend on dash state replicating, which nothing else here needs.
-        bool dashing = movement != null && movement.IsDashing();
-        if (HasInputAuthority && dashing && !wasDashingForSfx) Audio.Play2D(AudioCueId.Dash);
-        wasDashingForSfx = dashing;
 
         lastRenderedState = state;
     }

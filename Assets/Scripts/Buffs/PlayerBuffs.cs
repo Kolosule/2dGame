@@ -32,17 +32,23 @@ public class PlayerBuffs : NetworkBehaviour
     // so Despawned must unsubscribe via this reference rather than re-resolving the static.
     private MatchManager subscribedMatchManager;
 
-    // Render-side only: previous deposit total, so OnBuffsChanged can distinguish earning a tier
-    // from a reset. Never read by simulation, never networked.
-    private int lastRenderedDeposit;
+    // Render-side only: one rising-edge detector per BuffId (the loadout always holds the whole
+    // catalog per TierOf's own doc comment, regardless of what's equipped), so BuffTierUp fires
+    // once on a genuine tier crossing for ANY equipped buff, not on every deposit — most deposits
+    // land between thresholds. Reuses Game.Hud.Core.TierUpEdge, the same detector the HUD's own
+    // per-icon toast already uses, per the design spec's explicit "via the existing TierUpEdge
+    // detector" requirement. Never networked; primes silently so a late joiner or a rematch
+    // scene-reload reset never plays a false tier-up.
+    private readonly TierUpEdge[] tierEdges = new TierUpEdge[4];
 
     private void OnBuffsChanged()
     {
-        // Self-only: your own progression, not a broadcast. Guarded on an INCREASE so the
-        // scene-reload reset to 0 on rematch never plays a tier-up.
-        if (HasInputAuthority && TotalDepositedValue > lastRenderedDeposit)
-            Audio.PlayUi(AudioCueId.BuffTierUp);
-        lastRenderedDeposit = TotalDepositedValue;
+        // Self-only: your own progression, not a broadcast.
+        bool anyTierRose = false;
+        for (int i = 0; i < tierEdges.Length; i++)
+            if (tierEdges[i].Observe(TierOf((BuffId)i))) anyTierRose = true;
+
+        if (HasInputAuthority && anyTierRose) Audio.PlayUi(AudioCueId.BuffTierUp);
 
         BuffsChanged?.Invoke();
     }

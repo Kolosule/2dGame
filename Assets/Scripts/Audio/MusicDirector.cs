@@ -47,7 +47,7 @@ public class MusicDirector
         config = cfg;
 
         bedSources = new AudioSource[2];
-        for (int i = 0; i < 2; i++) bedSources[i] = CreateSource($"MusicBed_{i}", AudioBus.Music);
+        for (int i = 0; i < 2; i++) bedSources[i] = CreateSource($"MusicBed_{i}", AudioBus.MusicBed);
         ambientSource = CreateSource("AmbientBed", AudioBus.Ambient);
 
         CacheSnapshots();
