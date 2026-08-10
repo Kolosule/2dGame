@@ -2,6 +2,7 @@ using UnityEngine;
 using Fusion;
 using Game.Buffs.Core;
 using Game.Hud.Core;
+using Game.Audio.Core;
 
 /// <summary>
 /// Per-player, server-authoritative buff state. Tiers are DERIVED from TotalDepositedValue +
@@ -31,8 +32,33 @@ public class PlayerBuffs : NetworkBehaviour
     // so Despawned must unsubscribe via this reference rather than re-resolving the static.
     private MatchManager subscribedMatchManager;
 
-    private void OnBuffsChanged() => BuffsChanged?.Invoke();
-    private void OnStealthChanged() => StealthStateChanged?.Invoke();
+    // Render-side only: previous deposit total, so OnBuffsChanged can distinguish earning a tier
+    // from a reset. Never read by simulation, never networked.
+    private int lastRenderedDeposit;
+
+    private void OnBuffsChanged()
+    {
+        // Self-only: your own progression, not a broadcast. Guarded on an INCREASE so the
+        // scene-reload reset to 0 on rematch never plays a tier-up.
+        if (HasInputAuthority && TotalDepositedValue > lastRenderedDeposit)
+            Audio.PlayUi(AudioCueId.BuffTierUp);
+        lastRenderedDeposit = TotalDepositedValue;
+
+        BuffsChanged?.Invoke();
+    }
+
+    private void OnStealthChanged()
+    {
+        // Flat for the stealthed player. For everyone else, a quiet shimmer on a deliberately
+        // SHORT radius (SoundCue.maxDistance on the cue asset, ~0.35x the normal world radius):
+        // opponents standing right next to you get counterplay, but the buff is not announced
+        // across the arena. That radius is the balance lever and lives in the asset, not here.
+        AudioCueId cue = IsStealthed ? AudioCueId.StealthEnter : AudioCueId.StealthExit;
+        if (HasInputAuthority) Audio.Play2D(cue);
+        else Audio.PlayAt(cue, transform.position);
+
+        StealthStateChanged?.Invoke();
+    }
 
     // TierOf now reads MatchManager.Phase (via SuddenDeathMaxesTiers) as well as
     // TotalDepositedValue, so a phase change is a tier change too — re-raise BuffsChanged on it.

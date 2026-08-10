@@ -2,6 +2,7 @@ using UnityEngine;
 using Fusion;
 using Game.Buffs.Core;
 using Game.Match.Core;
+using Game.Audio.Core;
 
 /// <summary>
 /// Singleton manager that tracks team scores and derives the one team buff, Vanguard.
@@ -46,11 +47,19 @@ public class TeamScoreManager : NetworkBehaviour
 
     private void OnScoresChanged()
     {
+        // Flat, everyone. The 250 ms dedupe window on the cue asset is what stops a burst deposit
+        // (which writes the score several times in a few frames) from machine-gunning.
+        Audio.PlayUi(AudioCueId.ScoreTick);
+
         ScoresChanged?.Invoke();
         TeamBuffsChanged?.Invoke();
     }
 
-    private void OnTeamBuffsChanged() => TeamBuffsChanged?.Invoke();
+    private void OnTeamBuffsChanged()
+    {
+        Audio.PlayUi(AudioCueId.TeamBuffUnlocked);
+        TeamBuffsChanged?.Invoke();
+    }
 
     // Cached at subscribe time: MatchManager.Instance can already be null during scene teardown,
     // so Despawned must unsubscribe via this reference rather than re-resolving the static.

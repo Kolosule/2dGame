@@ -1,6 +1,7 @@
 using Fusion;
 using UnityEngine;
 using Game.Stats.Core;
+using Game.Audio.Core;
 
 /// <summary>
 /// Manages flag state and interactions for Capture the Flag mode
@@ -374,6 +375,47 @@ public class Flag : NetworkBehaviour
     private void OnStateChanged()
     {
         UpdateVisuals();
+        PlayStateCue();
+    }
+
+    /// <summary>
+    /// Fires on every peer (this is an OnChangedRender callback), so no RPC is involved and no
+    /// authority check is needed. Two layers: a positional cue at the flag for anyone nearby, and
+    /// — when it is YOUR team's flag being taken — a flat, distance-independent alert. That second
+    /// layer deliberately breaks the positional rule: it is the most match-relevant event in the
+    /// game and by definition happens far away from you.
+    /// </summary>
+    private void PlayStateCue()
+    {
+        switch (CurrentState)
+        {
+            case FlagState.Carried:
+                Audio.PlayAt(AudioCueId.FlagTaken, transform.position);
+                if (LocalPlayerOwnsThisFlag()) Audio.PlayUi(AudioCueId.AlertOwnFlagTaken);
+                break;
+
+            case FlagState.Dropped:
+                Audio.PlayAt(AudioCueId.FlagDropped, transform.position);
+                break;
+
+            case FlagState.AtHome:
+                Audio.PlayAt(AudioCueId.FlagReturned, transform.position);
+                break;
+        }
+    }
+
+    /// <summary>True when this flag belongs to the local player's own team. False for spectators
+    /// and for any player whose team has not replicated yet — fail toward not alerting.</summary>
+    private bool LocalPlayerOwnsThisFlag()
+    {
+        if (Runner == null) return false;
+        if (!Runner.TryGetPlayerObject(Runner.LocalPlayer, out NetworkObject localObject)) return false;
+        if (localObject == null) return false;
+
+        PlayerTeamData teamData = localObject.GetComponent<PlayerTeamData>();
+        if (teamData == null || teamData.Team == Team.None) return false;
+
+        return teamData.Team == OwningTeamEnum;
     }
 
     /// <summary>
@@ -388,6 +430,10 @@ public class Flag : NetworkBehaviour
         {
             if (Runner.TryGetPlayerObject(CarrierPlayerRef, out NetworkObject networkObject))
                 carrierGameObject = networkObject.gameObject;
+
+            // "You are now the carrier" — only on the carrier's own client.
+            if (Runner != null && CarrierPlayerRef == Runner.LocalPlayer)
+                Audio.PlayUi(AudioCueId.FlagPickupSelf);
         }
         else
         {

@@ -2,6 +2,7 @@ using System;
 using Fusion;
 using UnityEngine;
 using Game.Match.Core;
+using Game.Audio.Core;
 
 /// <summary>
 /// Server-authoritative match life cycle. Owns the phase enum, one reused TickTimer, and the
@@ -190,5 +191,35 @@ public class MatchManager : NetworkBehaviour
         EnterPhase(MatchPhase.PostMatch);
     }
 
-    private void OnPhaseChanged() => PhaseChanged?.Invoke();
+    private void OnPhaseChanged()
+    {
+        PlayPhaseCue(Phase);
+        PhaseChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// One-shot SFX layer for a phase change. Runs on EVERY peer, because this is the render
+    /// callback for the networked Phase — putting it in EnterPhase (state authority only) would
+    /// make it inaudible to every client on a dedicated server. Music and mixer snapshots are NOT
+    /// driven from here; MusicDirector derives those from Phase independently, which is what makes
+    /// them correct for a client that joined mid-phase.
+    /// </summary>
+    private void PlayPhaseCue(MatchPhase next)
+    {
+        switch (next)
+        {
+            case MatchPhase.Countdown:
+                Audio.PlayUi(AudioCueId.CountdownGo);
+                break;
+            case MatchPhase.Live:
+                Audio.PlayUi(AudioCueId.MatchStart);
+                break;
+            case MatchPhase.SuddenDeath:
+                Audio.PlayUi(AudioCueId.SuddenDeathAlert);
+                break;
+            case MatchPhase.PostMatch:
+                Audio.PlayUi(AudioCueId.MatchEnd);
+                break;
+        }
+    }
 }
