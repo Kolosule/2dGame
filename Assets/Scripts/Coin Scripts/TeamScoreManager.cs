@@ -169,6 +169,12 @@ public class TeamScoreManager : NetworkBehaviour
             subscribedMatchManager = MatchManager.Instance;
             subscribedMatchManager.PhaseChanged += OnTeamBuffsChanged;
         }
+
+        // Prime both edges at their current tier (0 pre-match) so the first genuine Vanguard
+        // tier rise is reported, not consumed as the priming observation — same reasoning as
+        // PlayerBuffs.Spawned's identical fix for the per-player tier-up cue.
+        team1VanguardEdge.Observe(VanguardTier(Team.Team1));
+        team2VanguardEdge.Observe(VanguardTier(Team.Team2));
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)

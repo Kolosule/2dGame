@@ -43,12 +43,14 @@ public class PlayerBuffs : NetworkBehaviour
 
     private void OnBuffsChanged()
     {
-        // Self-only: your own progression, not a broadcast.
+        // Self-only: your own progression, not a broadcast. Suppressed during Sudden Death,
+        // which forces every tier to MaxTier without a real deposit — matches
+        // BuffIconDisplay.RepaintTier's identical suppression for the same case.
         bool anyTierRose = false;
         for (int i = 0; i < tierEdges.Length; i++)
             if (tierEdges[i].Observe(TierOf((BuffId)i))) anyTierRose = true;
 
-        if (HasInputAuthority && anyTierRose) Audio.PlayUi(AudioCueId.BuffTierUp);
+        if (HasInputAuthority && anyTierRose && !SuddenDeathMaxesTiers) Audio.PlayUi(AudioCueId.BuffTierUp);
 
         BuffsChanged?.Invoke();
     }
@@ -100,6 +102,12 @@ public class PlayerBuffs : NetworkBehaviour
             subscribedMatchManager = MatchManager.Instance;
             subscribedMatchManager.PhaseChanged += OnMatchPhaseChanged;
         }
+
+        // Prime every tier edge at the CURRENT tier (0 for a fresh spawn, or whatever a
+        // reconnecting/restored player already has) so the first REAL tier-up after this point
+        // is reported as a rise, not silently consumed as the priming observation. Mirrors the
+        // identical priming call BuffIconDisplay.Bind already makes for the same struct.
+        for (int i = 0; i < tierEdges.Length; i++) tierEdges[i].Observe(TierOf((BuffId)i));
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
