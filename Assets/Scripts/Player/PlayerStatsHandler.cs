@@ -125,27 +125,6 @@ public class PlayerStatsHandler : NetworkBehaviour
     }
 
     /// <summary>
-    /// Legacy TakeDamage method (for compatibility with Enemy scripts)
-    /// Converts float to match our networked float health system
-    /// </summary>
-    public void TakeDamage(float damage)
-    {
-        // Call the RPC version
-        RPC_TakeDamage(damage);
-    }
-
-    /// <summary>
-    /// SERVER: Damages the player. Only runs on server.
-    /// Unknown-attacker path (legacy/RPC callers) — shares one cooldown bucket (key 0),
-    /// which matches the old global-cooldown behaviour for these callers.
-    /// </summary>
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void RPC_TakeDamage(float damage)
-    {
-        ServerApplyDamage(damage, default);
-    }
-
-    /// <summary>
     /// SERVER: apply damage attributed to a specific attacker (the attacking NetworkObject's
     /// id: the melee player, the shooter, or the enemy). Spawn immunity is global; the
     /// rapid-hit guard is PER ATTACKER so two players hitting in the same 0.1s both land.
@@ -216,7 +195,7 @@ public class PlayerStatsHandler : NetworkBehaviour
     /// <summary>
     /// SERVER: mirrors this death into the scoreboard (self death, and the killer's kill if the
     /// last hit resolves to a real player who is not this same player). An attacker NetworkId
-    /// that fails to resolve (environmental damage, the default path from RPC_TakeDamage) or that
+    /// that fails to resolve (environmental damage, or any other unattributed source) or that
     /// resolves to a non-player NetworkObject (an AI enemy) credits no kill to anyone --
     /// RecordKill's own IsRealPlayer guard on the manager side handles the AI case.
     /// </summary>
@@ -254,7 +233,9 @@ public class PlayerStatsHandler : NetworkBehaviour
     {
         if (flag != null && flag.IsCarriedBy(Object.InputAuthority))
         {
-            flag.DropFlagRpc();
+            // Direct call, not an RPC: this path is already server-only (DropFlagOnDeath guards
+            // on HasStateAuthority), so an RPC here only round-trips the server to itself.
+            flag.DropFlag();
             return true;
         }
         return false;

@@ -429,25 +429,6 @@ public class Flag : NetworkBehaviour
     }
 
     /// <summary>
-    /// SERVER RPC: Request to drop the flag
-    /// Called when carrier dies or manually drops
-    /// </summary>
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void DropFlagRpc()
-    {
-        DropFlag();
-    }
-
-    /// <summary>
-    /// SERVER RPC: Request to return flag
-    /// </summary>
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void ReturnFlagRpc()
-    {
-        ReturnFlag();
-    }
-
-    /// <summary>
     /// Check if a specific player is carrying this flag
     /// </summary>
     public bool IsCarriedBy(PlayerRef playerRef)
