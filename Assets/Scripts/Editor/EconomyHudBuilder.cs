@@ -122,19 +122,9 @@ public static class EconomyHudBuilder
         so.FindProperty("vanguardProgressFill").objectReferenceValue = fill;
 
         var milestone = MakeText("VanguardMilestoneText", strip.transform, 20,
-            new Color(0.80f, 0.83f, 0.90f), new Vector2(0f, -66f), new Vector2(320f, 28f),
-            "VANGUARD T0   0/12 avg");
+            new Color(0.80f, 0.83f, 0.90f), new Vector2(0f, -66f), new Vector2(420f, 28f),
+            "VANGUARD T0   0/12   +0% DAMAGE TAKEN");
         so.FindProperty("vanguardMilestoneText").objectReferenceValue = milestone;
-
-        var zoneGo = Rebuild("ZoneIndicator", strip.transform, new Vector2(0f, -96f),
-            new Vector2(24f, 24f));
-        var zoneIcon = Undo.AddComponent<Image>(zoneGo);
-        zoneIcon.color = new Color(0.62f, 0.68f, 0.78f);
-        so.FindProperty("zoneIcon").objectReferenceValue = zoneIcon;
-
-        var zoneText = MakeText("ZoneText", strip.transform, 20, new Color(0.62f, 0.68f, 0.78f),
-            new Vector2(0f, -124f), new Vector2(360f, 28f), "OWN TERRITORY");
-        so.FindProperty("zoneText").objectReferenceValue = zoneText;
 
         so.FindProperty("toastFeed").objectReferenceValue = feed;
         so.ApplyModifiedProperties();

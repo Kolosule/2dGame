@@ -2,45 +2,36 @@ using NUnit.Framework;
 using Game.Hud.Core;
 
 /// <summary>
-/// The zone indicator's displayed state folds in the team's Vanguard tier: the same distance
-/// stops reading as penalised once the team has bought the vulnerability away. That fold is the
-/// whole point of the merged Team Power strip — the buff is taught by the thing it changes.
+/// The readout folds in the team's Vanguard tier: the same distance reports a smaller penalty once
+/// the team has bought the vulnerability away. That fold is the whole point of showing the figure
+/// on the Vanguard line — the buff is taught by the thing it changes.
 /// </summary>
 public class TerritoryReadoutTests
 {
     [Test]
-    public void AtOwnBase_AlwaysReadsClear()
+    public void ExtraDamagePercentTracksTheRealMultiplier()
     {
-        Assert.AreEqual(TerritoryDisplay.Clear, TerritoryReadout.Resolve(0f, 0));
-        Assert.AreEqual(TerritoryDisplay.Clear, TerritoryReadout.Resolve(0f, 2));
+        Assert.AreEqual(0, TerritoryReadout.ExtraDamagePercent(0f, 0), "at the own base");
+        Assert.AreEqual(150, TerritoryReadout.ExtraDamagePercent(1f, 0), "max distance, no Vanguard");
+        Assert.AreEqual(75, TerritoryReadout.ExtraDamagePercent(1f, 1), "one tier halves the malus");
+        Assert.AreEqual(0, TerritoryReadout.ExtraDamagePercent(1f, 2), "fully lifted");
+        Assert.AreEqual(75, TerritoryReadout.ExtraDamagePercent(0.5f, 0), "scales continuously with distance");
     }
 
     [Test]
-    public void NearBaseThreshold_IsInclusive()
+    public void ExtraDamagePercentIsNonZeroJustOutsideTheBase()
     {
-        Assert.AreEqual(TerritoryDisplay.Clear, TerritoryReadout.Resolve(0.05f, 0), "at the threshold");
-        Assert.AreEqual(TerritoryDisplay.Penalised, TerritoryReadout.Resolve(0.051f, 0), "just past it");
+        // There is no near-base cutoff: the penalty starts accruing immediately, and the HUD is
+        // expected to say so rather than imply a flat safety zone.
+        Assert.AreEqual(2, TerritoryReadout.ExtraDamagePercent(0.01f, 0));
     }
 
     [Test]
-    public void FarFromBase_ReadsPenalisedUntilVanguardIsMaxed()
+    public void ExtraDamagePercentClampsItsInputs()
     {
-        Assert.AreEqual(TerritoryDisplay.Penalised, TerritoryReadout.Resolve(1f, 0), "locked");
-        Assert.AreEqual(TerritoryDisplay.Penalised, TerritoryReadout.Resolve(1f, 1), "half lifted is still a penalty");
-        Assert.AreEqual(TerritoryDisplay.Lifted, TerritoryReadout.Resolve(1f, 2), "fully lifted");
-    }
-
-    [Test]
-    public void MaxVanguardTier_ReadsLiftedAtAnyDistance()
-    {
-        Assert.AreEqual(TerritoryDisplay.Lifted, TerritoryReadout.Resolve(0.5f, 2));
-        Assert.AreEqual(TerritoryDisplay.Lifted, TerritoryReadout.Resolve(1f, 2));
-    }
-
-    [Test]
-    public void TiersBeyondTheMaximumStillReadAsLifted()
-    {
-        Assert.AreEqual(TerritoryDisplay.Lifted, TerritoryReadout.Resolve(1f, 5));
-        Assert.AreEqual(TerritoryDisplay.Penalised, TerritoryReadout.Resolve(1f, -1), "negative clamps to locked");
+        Assert.AreEqual(0, TerritoryReadout.ExtraDamagePercent(-1f, 0), "negative distance clamps to the base");
+        Assert.AreEqual(150, TerritoryReadout.ExtraDamagePercent(2f, 0), "past the enemy base is capped");
+        Assert.AreEqual(0, TerritoryReadout.ExtraDamagePercent(1f, 5), "tiers above the max clamp to lifted");
+        Assert.AreEqual(150, TerritoryReadout.ExtraDamagePercent(1f, -1), "negative tier clamps to locked");
     }
 }
