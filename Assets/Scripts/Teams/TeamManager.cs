@@ -61,7 +61,7 @@ public class TeamManager : MonoBehaviour
     /// A team's distance from their OWN base, normalized 0 (at base) to 1 (at or beyond the
     /// enemy base, clamped). The reference distance is the gap between the two human bases —
     /// no separate arena-bounds asset needed. Returns 0 when team/opposing data is missing.
-    /// Single source of the formula — the damage pipeline and the HUD zone readout both use it.
+    /// Single source of the formula — the damage pipeline and the HUD percentage readout both use it.
     /// </summary>
     public float GetOwnBaseDistance01(Team team, Vector2 position)
     {

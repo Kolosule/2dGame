@@ -4,19 +4,21 @@ using TMPro;
 using Game.Hud.Core;
 
 /// <summary>
-/// The merged Team Power strip: team scores, Vanguard's tier and next milestone, and the
-/// territory zone indicator — one surface, because they are one subject (how strong is my team's
-/// position right now).
+/// The merged Team Power strip: team scores, and Vanguard's tier, next milestone and the extra
+/// damage the local player is currently taking — one surface, because they are one subject (how
+/// strong is my team's position right now).
 ///
-/// The zone indicator's displayed state FOLDS IN the unlocked Vanguard tier: a player standing far
-/// from their own base watches it stop reading as penalised once the team buys the vulnerability
-/// away, and learns the buff from the thing it changes. Kept as TeamScoreDisplay (not renamed) so
-/// the component already wired into the Gameplay scene keeps its score-text references.
+/// The extra-damage percentage sits on the Vanguard line because Vanguard is what reduces it: a
+/// player watches the number fall as the team buys the vulnerability away, and learns the buff from
+/// the thing it changes. There is deliberately no in-base/out-of-base band — the underlying malus
+/// is continuous from the own base outward, so a percentage alone is the honest readout and a
+/// two-state band could only ever approximate it. Kept as TeamScoreDisplay (not renamed) so the
+/// component already wired into the Gameplay scene keeps its score-text references.
 ///
 /// Event-driven off TeamScoreManager + MatchManager; both are runtime singletons, so subscription
 /// is deferred until Instance exists. The only per-frame work is sampling the LOCAL player's
-/// position (positions are not events) and comparing the resulting band — repaints happen on band
-/// CHANGE only, so with two discrete states this costs nothing at 20 players.
+/// position (positions are not events) and comparing the resulting whole percent — repaints happen
+/// on CHANGE only, so this costs one string build per percentage point crossed.
 /// See docs/superpowers/specs/2026-07-29-coins-buffs-economy-design.md, "Feedback surfaces".
 /// </summary>
 public class TeamScoreDisplay : MonoBehaviour, IHudBindable
@@ -41,13 +43,6 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
     [Tooltip("Names the next milestone in its real unit (per-player average deposited value).")]
     [SerializeField] private TextMeshProUGUI vanguardMilestoneText;
 
-    [Header("Zone indicator")]
-    [SerializeField] private Image zoneIcon;
-    [SerializeField] private TextMeshProUGUI zoneText;
-    [SerializeField] private Color zoneClearColor = new Color(0.62f, 0.68f, 0.78f);
-    [SerializeField] private Color zonePenalisedColor = new Color(0.90f, 0.35f, 0.30f);
-    [SerializeField] private Color zoneLiftedColor = new Color(0.35f, 0.85f, 0.50f);
-
     [Header("Unlock toast")]
     [SerializeField] private HudToastFeed toastFeed;
 
@@ -64,15 +59,17 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
     private MatchManager matchManager;
 
     private TierUpEdge vanguardEdge;
-    private TerritoryDisplay zone = TerritoryDisplay.Clear;
-    private bool zonePainted;
+
+    // Last percentage rendered onto the Vanguard line. -1 means "nothing painted yet", which is
+    // distinct from a real 0% and so forces the first paint.
+    private int extraDamagePercent = -1;
 
     public void Bind(HudContext ctx)
     {
         teamData = ctx.Team;
         localTeam = ctx.Team != null ? ctx.Team.Team : Team.None;
         localPlayer = ctx.Inventory != null ? ctx.Inventory.transform : null;
-        zonePainted = false;
+        extraDamagePercent = -1;
         // Manager subscriptions happen lazily in Update once the singletons are live.
     }
 
@@ -116,18 +113,18 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
     }
 
     /// <summary>
-    /// Sample the local player's own position and repaint the zone only when the band changes.
-    /// Position is the one value here that is not event-driven, so it is read on the render path;
-    /// the band it maps to changes rarely, and everything downstream is change-gated.
+    /// Sample the local player's own position and repaint only when the whole-percent readout
+    /// changes. Position is the one value here that is not event-driven, so it is read on the
+    /// render path; everything downstream is change-gated.
     /// </summary>
     private void LateUpdate()
     {
         if (localPlayer == null || localTeam == Team.None) return;
 
-        // Wait for the score manager rather than assuming tier 0. Painting the fold from a default
-        // tier would show a late joiner a penalty their team has already bought away, then silently
+        // Wait for the score manager rather than assuming tier 0. Painting from a default tier
+        // would show a late joiner a penalty their team has already bought away, then silently
         // correct itself a frame later. Nothing is lost by waiting: Update() calls RepaintVanguard()
-        // the moment the manager resolves, and that clears zonePainted, so the first paint happens
+        // the moment the manager resolves, and that clears the cache, so the first paint happens
         // as soon as the tier is actually known.
         if (scoreManager == null) return;
 
@@ -136,12 +133,11 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
 
         int tier = scoreManager.VanguardTier(localTeam);
         float ownBaseDistance01 = teams.GetOwnBaseDistance01(localTeam, localPlayer.position);
-        TerritoryDisplay next = TerritoryReadout.Resolve(ownBaseDistance01, tier);
+        int next = TerritoryReadout.ExtraDamagePercent(ownBaseDistance01, tier);
 
-        if (zonePainted && next == zone) return;
-        zone = next;
-        zonePainted = true;
-        RepaintZone();
+        if (next == extraDamagePercent) return;
+        extraDamagePercent = next;
+        RepaintVanguard();
     }
 
     private void RepaintScores()
@@ -171,9 +167,14 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
         if (vanguardMilestoneText != null)
         {
             int next = scoreManager.NextVanguardAverage(localTeam);
-            vanguardMilestoneText.text = next > 0
-                ? $"VANGUARD T{tier}   {scoreManager.PerPlayerAverageOf(localTeam)}/{next} avg"
+            string milestone = next > 0
+                ? $"VANGUARD T{tier}   {scoreManager.PerPlayerAverageOf(localTeam)}/{next}"
                 : $"VANGUARD T{tier}   MAX";
+            // Suppressed until LateUpdate has sampled a real position, so the line never briefly
+            // claims +0% before the first sample lands.
+            vanguardMilestoneText.text = extraDamagePercent >= 0
+                ? $"{milestone}   +{extraDamagePercent}% DAMAGE TAKEN"
+                : milestone;
         }
 
         // Sudden Death maxes Vanguard for both teams at once; its banner announces that. Resolved
@@ -182,38 +183,6 @@ public class TeamScoreDisplay : MonoBehaviour, IHudBindable
         bool suddenDeath = MatchManager.Instance != null && MatchManager.Instance.AllBuffsMaxed;
         if (vanguardEdge.Observe(tier) && !suddenDeath && toastFeed != null)
             toastFeed.Show($"VANGUARD  T{tier}");
-
-        // The zone's displayed meaning folds in the tier, so force a re-evaluation next frame.
-        zonePainted = false;
-    }
-
-    private void RepaintZone()
-    {
-        Color color;
-        string text;
-
-        switch (zone)
-        {
-            case TerritoryDisplay.Penalised:
-                color = zonePenalisedColor;
-                text = "EXPOSED  +DAMAGE TAKEN";
-                break;
-            case TerritoryDisplay.Lifted:
-                color = zoneLiftedColor;
-                text = "EXPOSED  VANGUARD SHIELDED";
-                break;
-            default:
-                color = zoneClearColor;
-                text = "OWN TERRITORY";
-                break;
-        }
-
-        if (zoneIcon != null) zoneIcon.color = color;
-        if (zoneText != null)
-        {
-            zoneText.color = color;
-            zoneText.text = text;
-        }
     }
 
     private void OnDisable() => Unbind();
