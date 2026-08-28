@@ -1,7 +1,6 @@
 # Dedicated Server — Implementation & Verification Guide
 
-> **Last refreshed 2026-07-28** to match the current game (shape-based enemies, deposit-earned
-> buffs, rebuilt event-driven HUD, snapshot lobby, client-local sky) and the **live Azure host**.
+> **Gameplay guide refreshed 2026-07-28; Azure endpoint notes refreshed 2026-08-28.**
 
 This is the **Unity-Editor-side** work the agent can't run (no Unity CLI in the authoring
 environment): one-time setup, then the verification procedures for the dedicated-server topology
@@ -13,8 +12,8 @@ current-game checks that must survive the server topology (§H).
 - **This guide** — verify the server topology and gameplay behave correctly (run locally with MPPM
   or against the real host).
 - **[Azure runbook](../../azure-dedicated-server-runbook.md)** — build the Linux Dedicated Server,
-  provision the VM, deploy, and run it on Azure for the monthly weekend session (live at
-  `20.59.20.112`, systemd `gameserver`).
+  provision the VM, deploy, and run it on Azure for the monthly weekend session (static
+  `<AZURE_PUBLIC_IP>`, systemd `gameserver`).
 
 Do the setup before the matching verification. **Phase 2a will visibly break the game if its scene
 wiring (§B) is skipped** — enabling AoI culls anything not in a player's region or marked
@@ -31,8 +30,10 @@ always-interested. **Phase 2b does nothing until you add `Poolable` to the proje
    not under `Assets/Scripts/Net/` (the engine-free `Game.Net` asmdef).
 
 2. **Run the full EditMode suite:** `Window → General → Test Runner → EditMode → Run All`.
-   Expected: **152 green** across 8 suites. What each covers:
-   - **Net (28)** — the dedicated-server + lobby logic:
+   Expected: every test is green; the exact count grows as coverage is added. Examples include:
+   - **Net** — the dedicated-server + lobby logic:
+     - `DedicatedServerEndpointConfigTests` (27): defaults, command-line/environment precedence,
+       IPv4/port validation, relay-only values, missing values, and unrelated arguments.
      - `NetworkBootModeTests` (5): batch-mode → DedicatedServer, `-dedicatedServer` arg →
        DedicatedServer, interactive → Client, unrelated/null args → Client.
      - `LobbyHostPolicyTests` (7): host = lowest id / empty → NoHost / re-designation; CanStart
@@ -96,8 +97,8 @@ There are three run contexts. Pick by what you're verifying.
 
 ### C1. Against the real Azure host (closest to production)
 
-The live server is already running under systemd on Azure (`20.59.20.112`, session `PvPvERoom`,
-region `usw`). If it's deallocated, bring it up first:
+The server runs under systemd on Azure (`<AZURE_PUBLIC_IP>`, session `PvPvERoom`, region `usw`).
+If it's deallocated, bring it up first:
 
 ```bash
 az vm start -g game-rg -n game-server
@@ -117,8 +118,9 @@ Build a player (`File → Build`), then from a terminal launch it headless as th
 ```
 
 The boot resolver treats `-batchmode` (or an explicit `-dedicatedServer` arg) as the dedicated
-server. Expected in `server.log`: `✅ Dedicated server started — waiting for players.` Then join with
-Editor Play and/or extra player builds (all use the same `sessionName`, default `"PvPvERoom"`).
+server. Expected in `server.log`: a `[Network] Dedicated server listening on UDP 27015` message.
+Then join with Editor Play and/or extra player builds (all use the same `sessionName`, default
+`"PvPvERoom"`).
 
 > For an actual Linux Dedicated Server build (the artifact Azure runs), the project now has a
 > **Dedicated Server / Linux** build target/profile committed. See the runbook's Part A — the same
@@ -145,7 +147,7 @@ in any of three roles — here's how to tell which:
 
 | This process booted as… | How you can tell |
 |---|---|
-| **Dedicated server** (headless — local `-batchmode`/`-dedicatedServer`, or the Azure host) | No window, no menu, never spawns a player. `server.log` prints `✅ Dedicated server started — waiting for players.` At runtime `Runner.GameMode == Server` and, the decisive tell, `Runner.IsServer && Runner.LocalPlayer == PlayerRef.None` (the server owns **no** local player — this is exactly the guard at `GameNetworkManager.cs:456`). |
+| **Dedicated server** (headless — local `-batchmode`/`-dedicatedServer`, or the Azure host) | No window, no menu, never spawns a player. `server.log` prints the `[Network]` endpoint message. At runtime `Runner.GameMode == Server` and, the decisive tell, `Runner.IsServer && Runner.LocalPlayer == PlayerRef.None` (the server owns **no** local player). |
 | **Local machine as server + player** (solo-dev **Host** button) | You clicked **Host**; you have your own player and the **Start** button immediately. `Runner.GameMode == Host`; `Runner.IsServer` is **true** but `Runner.LocalPlayer != PlayerRef.None` (a Host owns a player, a dedicated server doesn't). |
 | **Local machine as a pure client** (**Join** button) | You clicked **Join**; you see the lobby but only the ★ host-client gets Start. `Runner.GameMode == Client`; `Runner.IsServer` is **false**. The server is some *other* process (a local headless build or the Azure host). |
 

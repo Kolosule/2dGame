@@ -13,32 +13,39 @@ That guide covers verifying the server topology; this one covers **running it on
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Region | **West US 2** (Washington) | West US (California) was capacity-locked for compute at provision time; West US 2 came up clean. Latency is ~a wash regardless — game traffic routes through the Photon **`usw` (San José)** relay, not the VM (Part F). Fine balance for a Seattle + California group |
+| Region | **West US 2** (Washington) | Direct gameplay traffic goes to this VM, so its region affects latency. West US 2 is a good balance for a Seattle + California group and had capacity when West US did not. Photon **`usw`** remains the shared discovery region and relay fallback |
 | VM size | **Standard_D8as_v5** (8 vCPU, AMD) | Older F/D families (`F8s_v2`, `D8s_v5`) were all capacity-restricted across West US regions; `D8as_v5` is a newer, abundant family with ample headroom for a 20-player tick loop. Was: `F8s_v2` for peak clock — swap back if it's ever in stock and the profiler asks for it |
 | Accelerated Networking | **On** | Free; lower latency + jitter (F-series supports it) |
 | OS | **Ubuntu 22.04 LTS** | Light, cheap; matches the Linux Dedicated Server build |
 | Scripting backend | **Mono** (used) | IL2CPP is ~faster but needs a Linux cross-compile toolchain on a Windows editor (see Part A); Mono builds clean with ample headroom for 20 players |
 | Disk | Premium SSD, **32 GB** | Build is small; you pay for the disk even while deallocated, so keep it small |
-| Public IP | **Standard static** (~$3.65/mo) | Stable SSH target across deallocations; game traffic doesn't use it (Photon relays) |
+| Public IP | **Standard static** (~$3.65/mo) | Stable direct-gameplay endpoint and SSH target across deallocations |
 | Pricing model | **Standard, NOT Spot** | Spot can be evicted mid-match and drop every player |
 | Idle handling | **Deallocate** Sun night | Compute → $0 while off; you pay only disk + static IP |
 
 **Cost estimate:** ~$17 compute for a ~50-hour weekend + ~$9/mo idle (disk + static IP) ≈
 **~$26/month**, versus your $150 credit. Comfortable headroom.
 
-### This deployment's actual values (built & running 2026-07-28)
+### Deployment values and placeholders
 
 | Thing | Value |
 |---|---|
 | Resource group | `game-rg` |
 | VM | `game-server` — Ubuntu 22.04, `Standard_D8as_v5`, **westus2** |
-| Server public IP | **`20.59.20.112`** (static — unchanged across deallocate/start) |
-| SSH login | `ssh azureuser@20.59.20.112` (key `%USERPROFILE%\.ssh\id_ed25519`, NSG locked to home IP) |
+| Server public IP | **`<AZURE_PUBLIC_IP>`** (static — unchanged across deallocate/start) |
+| SSH login | `ssh azureuser@<AZURE_PUBLIC_IP>` (key `%USERPROFILE%\.ssh\id_ed25519`, NSG locked to home IP) |
 | Build backend | **Mono** (IL2CPP needs a Linux toolchain on a Windows editor — see Part A) |
 | Build folder (PC) | `C:\Repo` |
 | Executable | `2dgame-server.x86_64` (+ `2dgame-server_Data`) |
 | Deployed to (server) | `/home/azureuser/server/` |
 | systemd service | `gameserver` (auto-restart + auto-start on boot) |
+
+Photon is still required. The server registers `PvPvERoom` with Photon and clients discover that
+session by name exactly as before; players never type the VM address. After discovery, Fusion first
+tries a direct UDP connection to the advertised Azure endpoint. If that cannot be established,
+Photon relay remains available automatically. A startup message only says direct connections are
+enabled. **Only a runtime `Direct` connection-type message proves that a particular player connected
+directly.**
 
 > Pushing a new build later → **Part H — Updating the game**.
 
@@ -82,31 +89,25 @@ That guide covers verifying the server topology; this one covers **running it on
 
 ---
 
-## ⚠️ Required first: pin the Photon region (cross-region players)
+## ⚠️ Required first: keep the Photon region pinned
 
 **Do this before building anything if you have players outside US-West (e.g. AU/JP).**
 
-Photon Fusion sessions are **region-scoped**. `PhotonAppSettings.asset` currently has
-`FixedRegion:` **blank**, which means every peer runs **Best Region** selection and joins its own
-lowest-ping regional master. With a single US-hosted server that silently breaks discovery:
-
-- The Azure **West US** server registers `PvPvERoom` in Photon's **US-West (`usw`)** master.
-- NorCal / Seattle clients also ping-select `usw` → they find the match. ✅
-- **AU / JP clients ping-select their *own* local region → they never see the session at all.** ❌
-
-To make one US server discoverable by everyone, pin **both the server build and the client build**
-to the same region. For **any** US-West Azure VM (West US / West US 2 / West US 3) that region is
-**`usw`** (US West, San José) — the Azure region and the Photon region are independent knobs, and
-`usw` stays the right pin for all of them:
+Photon Fusion sessions are **region-scoped**. `PhotonAppSettings.asset` is currently pinned to
+**`usw`**, and both the server and every client build must keep the same value. This lets all clients
+find `PvPvERoom` through Photon's US-West master, regardless of whether their eventual gameplay
+connection is direct or relayed.
 
 1. In Unity: **Fusion → Realtime Settings** (opens `PhotonAppSettings.asset`).
-2. Set **Fixed Region** to `usw`.
-3. Rebuild **and redistribute both** the dedicated-server build *and* the player build — a region
-   pin only takes effect in builds made after the change.
+2. Confirm **Fixed Region** is `usw`.
+3. If it changes, rebuild and redistribute both the dedicated-server build and player build.
 
-> Region tokens: `usw` = US West (San José, matches Azure West US), `us` = US **East** (don't use
-> for a West US VM). AU/JP players then connect to `usw` at the ~120–170 ms noted at the bottom —
-> that latency is only reachable *because* they're now pinned to the same master.
+The two region choices have different jobs:
+
+- **Photon `usw`:** session registration, discovery, and the relay path when direct UDP fails.
+- **Azure West US 2:** the destination for direct gameplay, so VM location affects direct latency.
+
+`usw` means Photon US West; `us` means US East and will not discover the same session.
 
 ---
 
@@ -180,7 +181,7 @@ SIZE=Standard_D8as_v5                   # F8s_v2 / D8s_v5 were capacity-restrict
 # Resource group
 az group create -n "$RG" -l "$LOC"
 
-# Static Standard public IP (survives deallocation → stable SSH target).
+# Static Standard public IP (survives deallocation → stable direct endpoint and SSH target).
 # NOTE: a public IP is REGIONAL — if you change $LOC later you must delete + recreate it there.
 az network public-ip create -g "$RG" -n ${VM}-ip --sku Standard --allocation-method Static -l "$LOC"
 
@@ -196,7 +197,7 @@ az vm create \
   --admin-username azureuser \
   --ssh-key-values ~/.ssh/id_ed25519.pub
 
-# Lock SSH (port 22) to your IP only — game traffic does NOT need any inbound rule (see Part F).
+# Lock SSH (port 22) to your IP only.
 # `az vm create` ALREADY created a `default-allow-ssh` rule (SSH open to *). Do NOT run
 # `az vm open-port --port 22 --priority 1000` — it collides with that rule (SecurityRuleConflict).
 # Just tighten the source of the existing rule to your IP:
@@ -204,6 +205,25 @@ az network nsg rule update \
   -g "$RG" --nsg-name ${VM}NSG -n default-allow-ssh \
   --source-address-prefixes "$MYIP"
 ```
+
+Open the Fusion gameplay port after replacing every angle-bracket placeholder:
+
+```bash
+az network nsg rule create \
+ --resource-group <RESOURCE_GROUP> \
+ --nsg-name <NSG_NAME> \
+ --name AllowFusionDirectUdp \
+ --priority 1010 \
+ --direction Inbound \
+ --access Allow \
+ --protocol Udp \
+ --source-address-prefixes '*' \
+ --source-port-ranges '*' \
+ --destination-port-ranges 27015
+```
+
+Unlike SSH, UDP 27015 must accept arbitrary player addresses, so its source is `'*'`. Keep SSH 22
+restricted to the owner's current public IP. Do not broaden the SSH rule to match the game rule.
 
 Grab the IP for later:
 ```bash
@@ -230,17 +250,17 @@ reached via `ssh`. **`scp` and `ssh` both run from the PC.**
 **On your PC 💻 — upload the tarball** (full path so the current folder doesn't matter; `scp` uses
 your SSH key, no password):
 ```bash
-scp C:\path\to\2dgame-server.tar.gz azureuser@20.59.20.112:~/
+scp C:\path\to\2dgame-server.tar.gz azureuser@<AZURE_PUBLIC_IP>:~/
 ```
 
 > Two `scp` gotchas we hit: (1) **run it on the PC, not inside an SSH session** — from the server it
 > looks for the file *on the server* and fails with *"No such file or directory."* (2) **Keep the
 > `:~/`** on the end — without the colon, `scp` silently makes a *local* file literally named
-> `azureuser@20.59.20.112` instead of uploading.
+> `azureuser@<AZURE_PUBLIC_IP>` instead of uploading.
 
 **Then log in and unpack, on the server ☁️:**
 ```bash
-ssh azureuser@20.59.20.112        # from the PC; prompt becomes azureuser@game-server:~$
+ssh azureuser@<AZURE_PUBLIC_IP>   # from the PC; prompt becomes azureuser@game-server:~$
 ```
 ```bash
 mkdir -p ~/server
@@ -257,7 +277,8 @@ ls -lh ~/server                              # expect: the exe, _Data, and .so f
 
 ## 5. Part D — Run it under systemd
 
-This keeps the server alive, restarts it on crash, and logs to journald. On the VM:
+This keeps the server alive, restarts it on crash, and logs to journald. Replace
+`<AZURE_PUBLIC_IP>` with the VM's static public IPv4 address, then run this on the VM:
 
 ```bash
 sudo tee /etc/systemd/system/gameserver.service >/dev/null <<'UNIT'
@@ -270,7 +291,7 @@ Wants=network-online.target
 Type=simple
 User=azureuser
 WorkingDirectory=/home/azureuser/server
-ExecStart=/home/azureuser/server/2dgame-server.x86_64 -batchmode -nographics -logFile /home/azureuser/server/server.log
+ExecStart=/home/azureuser/server/2dgame-server.x86_64 -batchmode -nographics -logFile /home/azureuser/server/server.log -gamePort 27015 -publicIp <AZURE_PUBLIC_IP> -publicPort 27015
 Restart=on-failure
 RestartSec=3
 
@@ -279,13 +300,46 @@ WantedBy=multi-user.target
 UNIT
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now gameserver
+sudo systemctl enable gameserver
+sudo systemctl restart gameserver
 ```
 
-Check it's up:
+The command-line values mean:
+
+- `-gamePort 27015`: listen on UDP 27015 on every IPv4 interface.
+- `-publicIp <AZURE_PUBLIC_IP>`: advertise the static Azure IPv4 address through Fusion.
+- `-publicPort 27015`: advertise UDP 27015 externally.
+
+You can use environment variables instead. Remove the three endpoint options from `ExecStart`, add
+these four `Environment` lines, and keep the Unity options:
+
+```ini
+[Service]
+Environment=GAME_PORT=27015
+Environment=PUBLIC_IP=<AZURE_PUBLIC_IP>
+Environment=PUBLIC_PORT=27015
+Environment=FUSION_RELAY_ONLY=false
+ExecStart=/home/azureuser/server/2dgame-server.x86_64 -batchmode -nographics -logFile /home/azureuser/server/server.log
+```
+
+For every setting, a command-line value wins over its environment variable. If neither is present,
+the internal port defaults to `27015`, the public port defaults to the internal port, no public IP
+is forced, and relay-only defaults to `false`.
+
+After any unit-file edit, reload systemd and restart:
+
 ```bash
+sudo systemctl daemon-reload
+sudo systemctl restart gameserver
 systemctl status gameserver --no-pager
-tail -f ~/server/server.log     # expect: "✅ Dedicated server started — waiting for players."
+journalctl -u gameserver -n 100 --no-pager
+tail -f ~/server/server.log
+```
+
+With the explicit public endpoint, expect:
+
+```text
+[Network] Dedicated server listening on UDP 27015; public endpoint <AZURE_PUBLIC_IP>:27015; direct connections enabled with relay fallback.
 ```
 
 Because it's `enable`d, the server **auto-starts whenever the VM boots** — so your weekend
@@ -308,7 +362,7 @@ ssh azureuser@$(az vm show -d -g game-rg -n game-server --query publicIps -o tsv
   'tail -n 5 ~/server/server.log'
 ```
 > **PowerShell:** the `$(…)` sub-shell won't expand — just use the literal IP:
-> `ssh azureuser@20.59.20.112 "tail -n 5 ~/server/server.log"`
+> `ssh azureuser@<AZURE_PUBLIC_IP> "tail -n 5 ~/server/server.log"`
 
 **Sunday — shut it down (stops billing):**
 ```bash
@@ -337,19 +391,96 @@ on Friday.)
 
 ---
 
-## 7. Part F — Ports / firewall (important, and reassuring)
+## 7. Part F — Direct UDP, relay fallback, and firewalls
 
-With the standard **Photon Cloud** setup this project uses, the dedicated server **connects
-outbound** to Photon's name server and relay; clients reach the session **through Photon**, not
-by connecting directly to your VM. That means:
+The dedicated server binds to `0.0.0.0:27015` by default. When `PUBLIC_IP`/`-publicIp` is set, it
+advertises that address and the public port to Fusion. Photon still registers and discovers
+`PvPvERoom`; clients do not manually enter the IP. NAT punchthrough stays enabled, so Fusion can
+attempt direct UDP and use Photon relay if direct setup fails.
 
-- **You do not need to open any inbound game port** on the NSG. Only **SSH (22)**, locked to your
-  IP (done in Part B).
-- Outbound is open by default on Azure, so the server can reach Photon with no extra rules.
+If no public IP is supplied, startup explains that Fusion may use STUN to discover a public
+endpoint. That is useful for testing, but the explicit static Azure address is more predictable.
+Neither startup message proves that a player is direct.
 
-> Only if you later switch Fusion to a **direct / public-IP server mode** (not the default here)
-> would you open the server's UDP port inbound on the NSG and point clients at the VM's IP. For
-> the current relay-based setup, leave inbound closed except SSH.
+The Azure NSG must allow inbound UDP 27015 using the `AllowFusionDirectUdp` rule from Part B.
+If Ubuntu's firewall is already enabled, also run:
+
+```bash
+sudo ufw allow 27015/udp
+sudo ufw status
+```
+
+Do **not** enable UFW automatically just for this guide. If UFW is inactive, the Azure NSG rule is
+still required. To confirm that the process is bound locally:
+
+```bash
+sudo ss -lunp | grep ':27015'
+```
+
+Each completed client join produces exactly one server-side transport message:
+
+```text
+[Network] Player 4 connected using Direct transport.
+[Network] Player 5 connected using Relayed transport.
+[Network] Player 6 connected using Unknown transport.
+```
+
+`Direct` confirms the optimization for that player. `Relayed` confirms Photon fallback. `Unknown`
+means Fusion did not report either active transport at callback time; investigate it rather than
+assuming direct connectivity.
+
+Before changing architecture when a player is not direct, check these in order:
+
+1. The Azure NSG has `AllowFusionDirectUdp` for inbound UDP 27015 from arbitrary addresses.
+2. `sudo ufw status` is inactive or allows `27015/udp`.
+3. `sudo ss -lunp | grep ':27015'` shows the server bound to the configured internal port.
+4. The static Azure public IPv4 address and public port match systemd.
+5. Startup shows the expected public endpoint. That confirms Fusion received
+   `CustomPublicAddress`; it does not prove the client connected directly.
+6. Server and client builds both use Photon `FixedRegion = usw`.
+7. Both still use session name `PvPvERoom`, so Photon discovery reaches the intended server.
+8. The joining player's runtime `ConnectionType` log says `Direct`, `Relayed`, or `Unknown`.
+
+Keep Accelerated Networking enabled on the VM. It does not open the firewall, but it reduces network
+overhead and jitter after traffic reaches Azure.
+
+### Test relay fallback
+
+The simplest controlled test is relay-only mode:
+
+1. Add bare `-relayOnly` to `ExecStart`, or set `FUSION_RELAY_ONLY=true`.
+2. Run `sudo systemctl daemon-reload && sudo systemctl restart gameserver`.
+3. Confirm startup logs `[Network] Dedicated server is using Photon relay-only mode.`
+4. Join normally through `PvPvERoom` and confirm the player log says `Relayed`.
+5. Remove `-relayOnly` (or restore `FUSION_RELAY_ONLY=false`), then reload and restart again.
+
+To test network fallback rather than the explicit switch, remove the UDP NSG rule, restart or
+reconnect a client, and inspect its new connection-type log. A new connection should use relay
+instead of losing session discovery. Recreate the NSG rule from Part B immediately afterward.
+Do not claim fallback worked unless the runtime message says `Relayed`.
+
+Test the existing reconnect flow once with a `Direct` client and once in relay-only mode: interrupt
+that client's network, restore it, and let the reconnect UI rejoin `PvPvERoom`. Treat the reconnect
+as verified only when the server prints a fresh per-player transport line.
+
+### Permanent relay-only rollback
+
+First enable relay-only in systemd and confirm relayed joins. Then remove the Azure opening:
+
+```bash
+az network nsg rule delete \
+ --resource-group <RESOURCE_GROUP> \
+ --nsg-name <NSG_NAME> \
+ --name AllowFusionDirectUdp
+```
+
+If you previously added the UFW rule, remove only that rule:
+
+```bash
+sudo ufw delete allow 27015/udp
+```
+
+Photon outbound connectivity remains required for registration, discovery, and relay.
 
 ---
 
@@ -384,10 +515,10 @@ linger.
 **2. Package + upload (PC 💻):**
 ```bash
 tar -czf 2dgame-server.tar.gz -C "C:\Repo" --exclude="*DoNotShip*" .
-scp 2dgame-server.tar.gz azureuser@20.59.20.112:~/
+scp 2dgame-server.tar.gz azureuser@<AZURE_PUBLIC_IP>:~/
 ```
 
-**3. Swap in the new build (server ☁️)** — `ssh azureuser@20.59.20.112`, then:
+**3. Swap in the new build (server ☁️)** — `ssh azureuser@<AZURE_PUBLIC_IP>`, then:
 ```bash
 sudo systemctl stop gameserver            # stop the old version (drops players)
 rm -rf ~/server && mkdir -p ~/server      # wipe old files so nothing stale survives
@@ -402,7 +533,7 @@ sudo systemctl start gameserver           # start the new version
 **4. Verify (server ☁️):**
 ```bash
 systemctl status gameserver --no-pager    # want: active (running)
-tail -n 20 ~/server/server.log            # want: ✅ Dedicated server started — waiting for players.
+tail -n 20 ~/server/server.log            # want: the [Network] endpoint startup message
 ```
 
 No systemd changes are ever needed — the service already points at `~/server` and auto-starts on
@@ -425,14 +556,19 @@ this if you're done for good.)
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `server.log` never prints the ✅ line | Not booting as server | Confirm the run command includes `-batchmode` (or `-dedicatedServer`); check `systemctl status gameserver` |
+| `server.log` never prints a `[Network]` startup line | Not booting as server | Confirm the run command includes `-batchmode` (or `-dedicatedServer`); check `systemctl status gameserver` |
 | Binary won't execute (`No such file`/lib error) | Missing base libs or not executable | `chmod +x`; `sudo apt-get install -y libc6 ca-certificates` |
 | `az vm create` fails **`SkuNotAvailable` / Capacity Restrictions** (behind an ugly Python traceback) | Region out of that VM size | Newer/abundant family (`Standard_D8as_v5`), different region, or `--zone N`; the real error hides under a `'NoneType'…error` traceback — read the `(SkuNotAvailable)` line (see Part B) |
 | `scp` says *No such file*, or a file named `azureuser@<ip>` appears | Ran `scp` from inside the SSH session, or omitted the `:~/` | Run `scp` on the **PC**, not the server; keep the `:~/` destination (see Part C) |
 | Server won't start / systemd splits the exe path | **Space** in the executable name | Rename exe + `_Data` to a space-free matching base (`2dgame-server.x86_64`); fix `ExecStart` |
 | Linux IL2CPP build fails "No Linux SDK found for x64" | Missing cross-compile toolchain on Windows | Install `com.unity.toolchain.linux-x86_64`, or use **Mono** (see Part A) |
 | Clients can't find the match | Wrong Photon App ID, **region mismatch** (Best Region on, no `usw` pin), or server not running | Server and clients must share the same Photon App ID **and the same `FixedRegion`** (see "pin the Photon region" above); check `journalctl -u gameserver` |
-| Only local (US) players find the match; AU/JP can't | `FixedRegion` blank → Best Region routes each peer to a different master | Pin `FixedRegion = usw` and rebuild **both** server and client |
+| Only local (US) players find the match; AU/JP can't | A build does not contain the shared `FixedRegion = usw` setting | Confirm the asset, then rebuild **both** server and client |
+| Server exits before registering the session | Invalid endpoint option or environment variable | Read the `[Network] Dedicated server configuration error` in `journalctl`; ports must be 1–65535, the public IP must be dotted IPv4, and relay-only accepts only `true`/`false`/`1`/`0` |
+| No local UDP listener | Wrong `-gamePort`, bind failure, or server startup failure | Run `sudo ss -lunp | grep ':27015'`; compare it with systemd and the startup log |
+| Every player logs `Relayed` | UDP blocked, wrong public endpoint, or NAT punchthrough disabled | Check the NSG, `sudo ufw status`, bound internal port, static public IP/port, systemd arguments, and that relay-only is false |
+| Player logs `Unknown` | Fusion did not report Direct or Relayed at join callback time | Check later reconnects and the other endpoint diagnostics; do not count it as Direct |
+| Direct works until the UDP rule is removed | Expected | New/reconnecting clients should use relay; confirm a `Relayed` runtime log before calling fallback successful |
 | SSH times out after a weekend | VM deallocated (expected) | `az vm start` first; the static IP is unchanged |
 | Bill higher than expected | VM left running / merely "stopped" | `az vm deallocate`; verify status reads "VM deallocated" |
 | Need the current IP | — | `az vm show -d -g game-rg -n game-server --query publicIps -o tsv` |
@@ -442,10 +578,9 @@ this if you're done for good.)
 
 ## Notes
 
-- **AU/JP latency** is inherent to a single US-West server and the NorCal-majority choice — not a
-  misconfiguration. A second region only makes sense if that group grows. Note this ~120–170 ms is
-  only *reachable* once AU/JP clients are pinned to `usw` (see "pin the Photon region"); without the
-  pin they land on a different master and can't join at all.
+- **AU/JP latency** is inherent to a single West US 2 server and the NorCal-majority choice for
+  direct traffic; relay routing also depends on Photon `usw`. A second deployment region only makes
+  sense if that group grows. Without the shared Photon region, clients cannot discover the session.
 - **VM size:** we shipped on `Standard_D8as_v5` (8 vCPU AMD) after `F8s_v2`/`D8s_v5` were capacity-
   locked across West US. For one 20-player match it has far more headroom than the tick loop needs;
   move to a higher-clock F-series only if it's in stock *and* the profiler shows the frame budget

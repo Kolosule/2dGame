@@ -117,7 +117,17 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (boot == NetworkBootKind.DedicatedServer)
         {
-            StartServer();
+            if (!DedicatedServerEndpointConfig.TryParse(
+                    Environment.GetCommandLineArgs(),
+                    out DedicatedServerEndpointConfig endpoint,
+                    out string error))
+            {
+                Debug.LogError($"[Network] Dedicated server configuration error: {error} Startup aborted.");
+                Application.Quit(1);
+                return;
+            }
+
+            StartServer(endpoint);
             return; // headless server: no menu UI
         }
 
@@ -264,7 +274,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
-    async void StartServer()
+    async void StartServer(DedicatedServerEndpointConfig endpoint)
     {
         startedAsClient = false;
         intentionalDisconnect = false;
@@ -276,15 +286,44 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             SessionName = sessionName,
             PlayerCount = maxPlayers,
             SceneManager = sceneManager,
-            ObjectProvider = objectProvider
+            ObjectProvider = objectProvider,
+            Address = NetAddress.Any(endpoint.GamePort)
         };
+
+        if (endpoint.HasPublicEndpoint)
+            args.CustomPublicAddress = NetAddress.CreateFromIpPort(endpoint.PublicIp, endpoint.PublicPort);
+
+        if (endpoint.RelayOnly)
+            args.DisableNATPunchthrough = true;
 
         var result = await runner.StartGame(args);
 
         if (result.Ok)
-            Debug.Log("✅ Dedicated server started — waiting for players.");
+            LogDedicatedServerEndpoint(endpoint);
         else
             Debug.LogError($"❌ Server failed to start: {result.ShutdownReason}");
+    }
+
+    private static void LogDedicatedServerEndpoint(DedicatedServerEndpointConfig endpoint)
+    {
+        if (endpoint.RelayOnly)
+        {
+            Debug.Log("[Network] Dedicated server is using Photon relay-only mode.");
+            return;
+        }
+
+        if (endpoint.HasPublicEndpoint)
+        {
+            Debug.Log(
+                $"[Network] Dedicated server listening on UDP {endpoint.GamePort}; public endpoint " +
+                $"{endpoint.PublicIp}:{endpoint.PublicPort}; direct connections enabled with relay fallback.");
+            return;
+        }
+
+        Debug.Log(
+            $"[Network] Dedicated server listening on UDP {endpoint.GamePort}; no public IP was supplied, " +
+            "so Fusion may use STUN to discover the public endpoint; direct connections enabled with relay " +
+            "fallback. Confirm Direct or Relayed transport from the runtime connection log.");
     }
 
     public int MenuSceneIndex => menuSceneIndex;
@@ -608,7 +647,22 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         // DO NOT SPAWN PLAYER HERE — NetworkedSpawnManager in the Gameplay scene handles it.
         if (runner.IsServer)
+        {
             ServerHandleJoin(runner, player);
+
+            // A host's local player has no remote transport. Dedicated-server players and remote
+            // host clients do, and OnPlayerJoined fires once after that connection is established.
+            if (player != runner.LocalPlayer)
+            {
+                ConnectionType connectionType = runner.GetPlayerConnectionType(player);
+                string transport = connectionType == ConnectionType.Direct
+                    ? "Direct"
+                    : connectionType == ConnectionType.Relayed
+                        ? "Relayed"
+                        : "Unknown";
+                Debug.Log($"[Network] Player {player.PlayerId} connected using {transport} transport.");
+            }
+        }
     }
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
