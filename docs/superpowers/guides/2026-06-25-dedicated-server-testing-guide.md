@@ -218,12 +218,115 @@ capture, scoring, death/respawn, return to lobby, and reconnect. Clients must re
 audio, particles, UI, and camera behavior.
 
 Use the same map, player count, enemy count, and sustained combat duration for both performance runs.
-Record results rather than inferring a gain from the code change:
+The frame-loop comparison procedure and full results table are in C6.
 
-| Build | Average server CPU | p95 tick | p99 tick | Managed memory | GC count | Log size |
-|---|---:|---:|---:|---:|---:|---:|
-| Before |  |  |  |  |  |  |
-| After |  |  |  |  |  |  |
+### C6. Why the server frame loop follows Fusion's clock
+
+A **Unity frame** is one pass through Unity's broad player loop. A **Fusion tick** is one fixed
+network-simulation step in which authoritative gameplay, networked Physics2D, input, and timers
+advance. They are different clocks. Fusion 2.0.12's default runner reads Unity's unscaled elapsed
+time once per frame and executes the simulation ticks due for that time; one slow frame can therefore
+contain more than one tick.
+
+An uncapped headless Unity process can run many ordinary frames between useful network ticks. Fusion's
+guidance for this version is to cap a dedicated server's Unity loop at the resolved server tick rate.
+`DedicatedServerFrameLoop` does that once, before the first scene loads. `GameNetworkManager.Start()`
+checks the result again before creating or starting its `NetworkRunner`; the cached check does not
+assign either setting again. If Fusion's config is missing or invalid, startup logs a clear error and
+stops instead of guessing a rate.
+
+The committed `NetworkProjectConfig.fusion` currently resolves as follows:
+
+| Fusion value | Stored selection | Resolved rate |
+|---|---:|---:|
+| Client simulation | `Client: 64` | 64 Hz |
+| Server simulation | `ServerIndex: 0` | 64 Hz |
+| Client send | `ClientSendIndex: 0` | 64 Hz |
+| Server send | `ServerSendIndex: 0` | 64 Hz |
+| Dedicated-server Unity frame target | Resolved server simulation | 64 FPS |
+| Dedicated-server VSync | Forced off | `vSyncCount = 0` |
+
+For a 64 Hz selection, Fusion 2.0.12's installed rate table is `[64, 32, 16]`. Index `0` means the
+first entry, **64 Hz**; it does not mean 20 Hz. The code validates the selection through Fusion's own
+`TickRate` API before resolving it, so a future valid config change automatically changes the server
+frame target too.
+
+The project-wide Unity **Fixed Timestep** is `0.02` seconds, or 50 Hz. It is not used here: Fusion
+owns the networked Physics2D step and its configured simulation clock is 64 Hz. Changing
+`Time.fixedDeltaTime` for this optimization would mix two independent clocks and is not required by
+the installed Fusion API.
+
+VSync waits for a monitor's refresh. A headless server has no monitor, so VSync is disabled and the
+software frame target controls pacing. This is server-only:
+
+- `-batchmode` or `-dedicatedServer` resolves to `NetworkBootKind.DedicatedServer` and applies the
+  override.
+- A normal client boot does not apply it. `SettingsService` continues to own the saved client FPS cap,
+  VSync, resolution, fullscreen mode, and audio settings.
+- The **Host** button starts from that same interactive client boot, so Host presentation settings are
+  untouched.
+- `SettingsService.HasDisplay` is false on the dedicated server, so saved local video preferences
+  cannot overwrite the server target later.
+
+Expect this once near the beginning of `server.log`, before the network endpoint message:
+
+```text
+[Server] Frame loop configured for Fusion: target frame rate 64 FPS, client simulation 64 Hz, server simulation 64 Hz, client send rate 64 Hz, server send rate 64 Hz, VSync disabled.
+```
+
+On Azure, check it with:
+
+```bash
+grep -F "[Server] Frame loop configured for Fusion" ~/server/server.log
+```
+
+That line proves which configuration was selected; it does **not** prove that an overloaded process
+actually delivered every tick. Validate the running server under the representative workload below:
+
+1. Use the same Azure VM, build type, map, player count, enemy count, and coin count for both runs.
+2. Keep clients moving, jumping, dashing, using melee and projectiles, and interacting with enemies,
+   coins, flags, death/respawn, and reconnect for several minutes.
+3. In a Development server build, capture the Unity Profiler plus Fusion Statistics. Over a steady
+   60-second interval, Fusion's `Runner.Tick`/Forward Ticks should advance by about **3,840** ticks
+   (64 x 60), with no sustained deficit. Check the client packet timing/Fusion state-receive interval
+   for the corresponding 64 Hz server send stream.
+4. Confirm `Simulation Speed` stays near 1, there are no repeated catch-up bursts, and the log has no
+   late-tick, missed-tick, frame-timing, or simulation-overload warnings.
+5. Complete the gameplay and client/Host checks in H. In particular, movement speed, physics, input,
+   match timers, `TickTimer` durations, reconnects, and client video settings must be unchanged.
+
+Record every field; lower CPU alone is not a pass:
+
+| Build | Avg CPU | Main-thread ms | Avg tick ms | p95 tick ms | p99 tick ms | Late/missed ticks | GC count | Process FPS | Actual sim Hz | Actual send Hz |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Before (uncapped) |  |  |  |  |  |  |  |  |  |  |
+| After (Fusion cap) |  |  |  |  |  |  |  |  |  |  |
+
+The optimization passes only when actual simulation remains 64 Hz, actual sending remains 64 Hz,
+gameplay is unchanged, tick stability is no worse, and unnecessary frame work decreases. If the
+exact 64 FPS target causes late or missed ticks, keep the measurements, remove the change, and
+investigate before trying headroom. Do not raise the target without comparative evidence.
+
+**Temporary uncapped comparison:** use a separate checkout of the revision before
+`DedicatedServerFrameLoop` was added and build it into a different folder. That preserves the
+previous behavior: no server code assigns `Application.targetFrameRate`, so Unity keeps its desktop
+default of `-1` (uncapped). Label that artifact **benchmark only** and never replace the production
+artifact with it. Switch back to this revision, rebuild into a clean folder, and confirm the
+`[Server] Frame loop configured for Fusion` line returns before doing the optimized run. Keeping the
+two builds separate avoids a temporary source edit being committed by mistake.
+
+**Rollback:**
+
+1. Remove `Assets/Scripts/DedicatedServerFrameLoop.cs` and the
+   `DedicatedServerFrameLoop.EnsureConfigured(boot)` guard in `GameNetworkManager.Start()`.
+2. Remove the now-unused pure policy and its tests. Do **not** change `NetworkProjectConfig.fusion`;
+   its 64 Hz simulation and send selections stay in place.
+3. Rebuild the **Linux Server** profile into a clean output folder and deploy it as described in the
+   Azure runbook.
+4. Run `sudo systemctl restart gameserver`, then inspect `systemctl status gameserver --no-pager` and
+   `~/server/server.log`.
+5. Confirm the frame-loop startup line is gone, Fusion still resolves all four rates to 64 Hz, clients
+   can join, and the actual simulation rate is still measured rather than assumed.
 
 ---
 
