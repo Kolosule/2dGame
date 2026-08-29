@@ -107,6 +107,12 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             Application.isBatchMode,
             System.Environment.GetCommandLineArgs());
 
+        if (!DedicatedServerFrameLoop.EnsureConfigured(boot))
+        {
+            Application.Quit(1);
+            return;
+        }
+
         if (boot == NetworkBootKind.DedicatedServer)
             DedicatedServerPresentation.Activate();
 
