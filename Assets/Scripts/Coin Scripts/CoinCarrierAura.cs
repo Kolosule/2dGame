@@ -34,12 +34,19 @@ public class CoinCarrierAura : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         inventory = GetComponent<NetworkedPlayerInventory>();
         buffs = GetComponent<PlayerBuffs>();
     }
 
     private void OnEnable()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         if (inventory != null) inventory.CoinsChanged += Refresh;
         Refresh();
     }

@@ -136,6 +136,12 @@ public class PlayerCamera : MonoBehaviour
     /// </summary>
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         // Get the Camera component attached to this GameObject
         cam = GetComponent<Camera>();
 

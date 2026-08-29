@@ -241,6 +241,7 @@ public class PlayerMovement : NetworkBehaviour
 
     public override void Render()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         if (rb == null) return;
         ApplyFacing();
 

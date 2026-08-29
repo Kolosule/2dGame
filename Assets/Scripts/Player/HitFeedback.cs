@@ -23,6 +23,12 @@ public class HitFeedback : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -42,6 +48,8 @@ public class HitFeedback : MonoBehaviour
     /// </summary>
     public void Play(GameObject target, Vector2 hitPoint, int damage)
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         // This method only ever runs on the ATTACKER's client — both callers are
         // [Rpc(..., RpcTargets.InputAuthority)] (PlayerCombat.RPC_HitFeedback,
         // Projectile.RPC_HitFeedback), so no gating is needed here. Flat and full volume: it is

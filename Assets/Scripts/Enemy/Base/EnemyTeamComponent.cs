@@ -33,20 +33,21 @@ public class EnemyTeamComponent : MonoBehaviour
         }
     }
 
-    /// <summary>Called by Enemy when the networked team changes: sync the string + color.</summary>
-    public void ApplyTeam(Team team)
+    /// <summary>Stores the authoritative fallback without doing presentation work.</summary>
+    public void SetTeam(Team team)
     {
         teamID = TeamUtil.ToId(team);
-        ApplyTeamColor(team);
     }
 
     private void Start()
     {
-        ApplyTeamColor(Team);
+        ApplyTeamVisual(Team);
     }
 
-    private void ApplyTeamColor(Team team)
+    /// <summary>Client presentation only: color the enemy for its replicated team.</summary>
+    public void ApplyTeamVisual(Team team)
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         if (spriteRenderer == null || TeamManager.Instance == null) return;
         TeamData teamData = TeamManager.Instance.GetTeamData(team);
         if (teamData != null)

@@ -36,6 +36,12 @@ public class MatchPhaseHud : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         HideAll();
         if (returnToLobbyButton != null)
             returnToLobbyButton.onClick.AddListener(OnReturnToLobbyClicked);

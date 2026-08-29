@@ -59,6 +59,12 @@ public class VideoSettingsSection : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         if (resolutionDropdown != null)
             resolutionDropdown.onValueChanged.AddListener(OnResolutionChanged);
 

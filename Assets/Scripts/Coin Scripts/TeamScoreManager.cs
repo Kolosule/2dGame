@@ -48,6 +48,8 @@ public class TeamScoreManager : NetworkBehaviour
 
     private void OnScoresChanged()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         // Flat, everyone. The 250 ms dedupe window on the cue asset is what stops a burst deposit
         // (which writes the score several times in a few frames) from machine-gunning.
         Audio.PlayUi(AudioCueId.ScoreTick);
@@ -59,6 +61,7 @@ public class TeamScoreManager : NetworkBehaviour
 
     private void OnTeamBuffsChanged()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         CheckVanguardTierRise();
         TeamBuffsChanged?.Invoke();
     }
@@ -162,19 +165,21 @@ public class TeamScoreManager : NetworkBehaviour
             }
         }
 
-        // VanguardTier now reads MatchManager.Phase as well as score, so a phase change is a tier
-        // change too. PhaseChanged fires on every peer via OnChangedRender — no new networking.
-        if (MatchManager.Instance != null)
+        if (!DedicatedServerPresentation.IsHeadless && MatchManager.Instance != null)
         {
+            // VanguardTier reads MatchManager.Phase as well as score, so a phase change repaints
+            // the client-side tier presentation too.
             subscribedMatchManager = MatchManager.Instance;
             subscribedMatchManager.PhaseChanged += OnTeamBuffsChanged;
         }
 
-        // Prime both edges at their current tier (0 pre-match) so the first genuine Vanguard
-        // tier rise is reported, not consumed as the priming observation — same reasoning as
-        // PlayerBuffs.Spawned's identical fix for the per-player tier-up cue.
-        team1VanguardEdge.Observe(VanguardTier(Team.Team1));
-        team2VanguardEdge.Observe(VanguardTier(Team.Team2));
+        if (!DedicatedServerPresentation.IsHeadless)
+        {
+            // Prime both edges at their current tier (0 pre-match) so the first genuine Vanguard
+            // tier rise is reported, not consumed as the priming observation.
+            team1VanguardEdge.Observe(VanguardTier(Team.Team1));
+            team2VanguardEdge.Observe(VanguardTier(Team.Team2));
+        }
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)

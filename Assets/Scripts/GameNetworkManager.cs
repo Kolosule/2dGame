@@ -103,6 +103,13 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (Instance != this) return;
         DontDestroyOnLoad(gameObject);
 
+        var boot = NetworkBootMode.Resolve(
+            Application.isBatchMode,
+            System.Environment.GetCommandLineArgs());
+
+        if (boot == NetworkBootKind.DedicatedServer)
+            DedicatedServerPresentation.Activate();
+
         BuildRunner();
 
         LobbyTeamChoices.Clear();
@@ -110,10 +117,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         LobbyLoadoutChoices.Clear();
         serverLobby = new LobbyServerState();
         gameStarting = false;
-
-        var boot = NetworkBootMode.Resolve(
-            Application.isBatchMode,
-            System.Environment.GetCommandLineArgs());
 
         if (boot == NetworkBootKind.DedicatedServer)
         {
@@ -144,8 +147,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         // Dedicated child object so that a Fusion-internal Shutdown(destroyGameObject: true) can only
         // ever take the runner's own GameObject — never this persistent one, which carries this
-        // manager and ReconnectController. All five components below MUST share this object: Fusion
-        // resolves the scene manager / object provider / physics stepper off the runner's GameObject.
+        // manager and ReconnectController. The runner-side components below MUST share this object:
+        // Fusion resolves the scene manager / object provider / physics stepper from it.
         runnerObject = new GameObject("NetworkRunner");
         runnerObject.transform.SetParent(transform, false);
 
@@ -164,9 +167,13 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // One scene manager for the lifetime of the runner.
         sceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
 
-        // Register the single input source.
-        inputProvider = runnerObject.AddComponent<NetworkInputProvider>();
-        runner.AddCallbacks(inputProvider);
+        // A dedicated server receives clients' network inputs but never samples a local keyboard,
+        // mouse, gamepad, or camera. Do not create the local input provider there.
+        if (!DedicatedServerPresentation.IsHeadless)
+        {
+            inputProvider = runnerObject.AddComponent<NetworkInputProvider>();
+            runner.AddCallbacks(inputProvider);
+        }
 
         // Receive lobby callbacks (player join/leave, reliable lobby data). Registered HERE, before
         // any gameplay-scene component can register, which is the ordering invariant the join and
@@ -975,33 +982,29 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnSceneLoadDone(NetworkRunner runner)
     {
-        // A real dedicated server (no local player) should not render or play audio. -nographics
-        // already suppresses rendering; disabling cameras/listeners avoids per-frame work and
-        // AudioListener warnings on the headless build.
-        if (runner.IsServer && runner.LocalPlayer == PlayerRef.None)
-        {
-            foreach (var cam in FindObjectsByType<Camera>(FindObjectsSortMode.None))
-                cam.enabled = false;
-            foreach (var listener in FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
-                listener.enabled = false;
-        }
+        bool isDedicatedServer = runner.IsServer && runner.LocalPlayer == PlayerRef.None;
+        if (isDedicatedServer)
+            DedicatedServerPresentation.DisableLoadedScenes();
 
         // Only care about arriving back in the menu scene (the return-to-lobby path). The gameplay
         // load has a different build index and is handled by the gameplay-side managers.
         if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex != menuSceneIndex)
             return;
 
-        // The persistent GameNetworkManager's serialized menu/lobby refs died with the previous
-        // menu scene instance; re-acquire the new ones.
-        ReacquireMenuUI();
+        if (!isDedicatedServer)
+        {
+            // The persistent GameNetworkManager's serialized menu/lobby refs died with the previous
+            // menu scene instance; re-acquire the new ones.
+            ReacquireMenuUI();
 
-        if (menuUI != null) menuUI.Hide();   // skip the Join/Host screen — we are still connected
-        if (lobbyUI != null) lobbyUI.Show();
+            if (menuUI != null) menuUI.Hide();   // skip the Join/Host screen — we are still connected
+            if (lobbyUI != null) lobbyUI.Show();
 
-        // Re-apply the last roster snapshot in case it arrived before we re-acquired lobbyUI on
-        // this return-to-lobby scene load (otherwise the returning client shows an empty roster).
-        if (lobbyUI != null && pendingLobbySnapshot != null)
-            lobbyUI.ApplyLobbyState(pendingLobbySnapshot, runner.LocalPlayer.PlayerId);
+            // Re-apply the last roster snapshot in case it arrived before we re-acquired lobbyUI on
+            // this return-to-lobby scene load (otherwise the returning client shows an empty roster).
+            if (lobbyUI != null && pendingLobbySnapshot != null)
+                lobbyUI.ApplyLobbyState(pendingLobbySnapshot, runner.LocalPlayer.PlayerId);
+        }
 
         // Server re-broadcasts the persisted roster so every client's lobby repopulates.
         if (runner.IsServer) BroadcastLobby();

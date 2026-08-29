@@ -25,6 +25,12 @@ public class LocalPlayerMarker : NetworkBehaviour
 
     public override void Spawned()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            if (markerRoot != null) markerRoot.SetActive(false);
+            return;
+        }
+
         if (markerRoot == null)
         {
             markerRoot = BuildFallbackMarker(markerColor);

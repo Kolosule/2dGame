@@ -15,6 +15,7 @@ public class ScoreboardInputReader : MonoBehaviour
 
     private void OnEnable()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         if (scoreboardAction == null || scoreboardAction.action == null) return;
         scoreboardAction.action.performed += OnPerformed;
         scoreboardAction.action.canceled += OnCanceled;

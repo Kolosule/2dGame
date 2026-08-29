@@ -128,11 +128,11 @@ public class EnemyAI : MonoBehaviour
             Debug.LogWarning($"{gameObject.name}: EnemyAI groundLayer is unassigned - jumping is disabled (enemy can never detect ground). Set it on the prefab.");
         }
 
-        if (spriteRenderer != null)
+        if (!DedicatedServerPresentation.IsHeadless && spriteRenderer != null)
         {
             originalColor = spriteRenderer.color;
         }
-        else
+        else if (!DedicatedServerPresentation.IsHeadless)
         {
             Debug.LogWarning($"{gameObject.name}: No SpriteRenderer - telegraph flash disabled.");
         }

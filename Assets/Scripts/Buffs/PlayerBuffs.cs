@@ -43,6 +43,8 @@ public class PlayerBuffs : NetworkBehaviour
 
     private void OnBuffsChanged()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         // Self-only: your own progression, not a broadcast. Suppressed during Sudden Death,
         // which forces every tier to MaxTier without a real deposit — matches
         // BuffIconDisplay.RepaintTier's identical suppression for the same case.
@@ -57,6 +59,8 @@ public class PlayerBuffs : NetworkBehaviour
 
     private void OnStealthChanged()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         // Flat for the stealthed player. For everyone else, a quiet shimmer on a deliberately
         // SHORT radius (SoundCue.maxDistance on the cue asset, ~0.35x the normal world radius):
         // opponents standing right next to you get counterplay, but the buff is not announced
@@ -95,8 +99,9 @@ public class PlayerBuffs : NetworkBehaviour
             if (LoadoutLength == 0) ApplyDefaultLoadout();
         }
 
-        // Every peer subscribes: the Sudden Death tier override is a render-time read, so
-        // clients need the repaint too.
+        if (DedicatedServerPresentation.IsHeadless) return;
+
+        // Clients subscribe because the Sudden Death tier override is a render-time read.
         if (MatchManager.Instance != null)
         {
             subscribedMatchManager = MatchManager.Instance;

@@ -43,7 +43,7 @@ public class Enemy : NetworkBehaviour
     // The enemy's team, networked so CLIENTS colorize correctly. The spawner used to set
     // EnemyTeamComponent.teamID in the spawn callback, which runs on the server only —
     // every client kept the prefab default and showed the wrong team color.
-    [Networked, OnChangedRender(nameof(OnTeamChanged))]
+    [Networked, OnChangedRender(nameof(OnTeamChangedRender))]
     public Team Team { get; private set; }
 
     // Knockback tracking (TickTimer = simulation-path timing, authority only)
@@ -92,9 +92,8 @@ public class Enemy : NetworkBehaviour
         rb = GetComponent<Rigidbody2D>();
         ai = GetComponent<EnemyAI>();
 
-        // OnChangedRender does not fire for the value a late joiner receives as initial
-        // state (same pattern as PlayerTeamData), so apply once here.
-        OnTeamChanged();
+        // OnChangedRender does not fire for initial state, so initialize client presentation once.
+        OnTeamChangedRender();
 
         if (stats == null)
         {
@@ -139,15 +138,17 @@ public class Enemy : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
         Team = team;
-        OnTeamChanged(); // apply immediately on the authority; clients get OnChangedRender
+        EnemyTeamComponent tc = teamComponent != null ? teamComponent : GetComponent<EnemyTeamComponent>();
+        if (tc != null) tc.SetTeam(team);
     }
 
-    /// <summary>Render-time callback: push the networked team into the visual/team component.</summary>
-    private void OnTeamChanged()
+    /// <summary>Render-time callback: apply only the replicated team color.</summary>
+    private void OnTeamChangedRender()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         if (Team == global::Team.None) return;
         EnemyTeamComponent tc = teamComponent != null ? teamComponent : GetComponent<EnemyTeamComponent>();
-        if (tc != null) tc.ApplyTeam(Team);
+        if (tc != null) tc.ApplyTeamVisual(Team);
     }
 
     /// <summary>SERVER: called by the spawner's spawn callback so we can report our despawn.</summary>
@@ -183,6 +184,8 @@ public class Enemy : NetworkBehaviour
     /// <summary>Applies networked visual state (facing + telegraph flash) on every client.</summary>
     public override void Render()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         if (ai != null) ai.RenderVisuals();
 
         // Hurt is derived from the replicated health rather than from RPC_TakeDamage, which is

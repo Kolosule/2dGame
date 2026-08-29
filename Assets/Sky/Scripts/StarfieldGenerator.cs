@@ -30,6 +30,12 @@ public class StarfieldGenerator : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         // Always rebuild from the serialized fields at load time. The scene may embed a stale baked
         // mesh from a prior authoring session; if we trusted it (only rebuilding when null) then
         // changing minSize/maxSize/etc. in the Inspector would have NO effect at runtime — the game

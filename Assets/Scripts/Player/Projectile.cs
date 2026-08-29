@@ -69,6 +69,8 @@ public class Projectile : NetworkBehaviour
 
     public override void Render()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         if (rb != null && rb.linearVelocity.sqrMagnitude > 0.01f)
         {
             float angle = Mathf.Atan2(rb.linearVelocity.y, rb.linearVelocity.x) * Mathf.Rad2Deg;
@@ -166,6 +168,8 @@ public class Projectile : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_Impact(Vector3 position)
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         Audio.PlayAt(AudioCueId.ProjectileImpact, position);
 
         if (impactEffect != null)

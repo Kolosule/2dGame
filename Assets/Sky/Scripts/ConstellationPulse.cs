@@ -25,6 +25,12 @@ public class ConstellationPulse : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         renderers = GetComponentsInChildren<SpriteRenderer>(true);
         baseAlphas = new float[renderers.Length];
         for (int i = 0; i < renderers.Length; i++) baseAlphas[i] = renderers[i].color.a;

@@ -21,6 +21,7 @@ public class FlagCarrierMarker : MonoBehaviour
     /// <summary>Idempotent: repeated calls with the same value do nothing.</summary>
     public void SetCarryingFlag(bool carrying)
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         if (carrying == isCarryingFlag) return;
         isCarryingFlag = carrying;
 

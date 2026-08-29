@@ -1,14 +1,15 @@
 using System.Collections.Generic;
 using Fusion;
 using UnityEngine;
+using Game.Combat.Core;
 
 /// <summary>
 /// Suppresses physics collision between same-team players. Local physics decision, computed
 /// independently on every peer from the replicated Team -- every client runs its own Physics2D
-/// world, so every client must derive the same ignores. Re-derives on every
-/// PlayerTeamData.TeamChanged (the initial spawn assignment, and any later reassignment), not
-/// per frame. Only the player's primary non-trigger body collider is affected; trigger
-/// colliders (coin pickup, flag capture, home base) are untouched.
+/// world, so every client must derive the same ignores. PlayerTeamData raises TeamChanged from
+/// Spawned/FixedUpdateNetwork (never from Render), covering the initial assignment and later
+/// reassignments even when dedicated-server render callbacks are disabled. Only the player's
+/// primary non-trigger body collider is affected; trigger colliders are untouched.
 ///
 /// Replaces PlayerController's old SetupTeammateCollisionsWhenReady coroutine, which gave up
 /// permanently if team assignment took longer than a 5-second timeout, and never restored
@@ -56,7 +57,9 @@ public class FriendlyCollision : NetworkBehaviour
             if (other == this || other == null || other.bodyCollider == null) continue;
 
             Team otherTeam = other.teamData != null ? other.teamData.Team : Team.None;
-            bool sameTeam = myTeam == otherTeam && myTeam != Team.None;
+            bool sameTeam = FriendlyCollisionRules.ShouldIgnore(
+                TeamUtil.ToNumber(myTeam),
+                TeamUtil.ToNumber(otherTeam));
             Physics2D.IgnoreCollision(bodyCollider, other.bodyCollider, sameTeam);
         }
     }

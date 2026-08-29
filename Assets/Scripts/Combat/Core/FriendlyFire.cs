@@ -21,4 +21,36 @@ namespace Game.Combat.Core
             return attackerTeam != defenderTeam;
         }
     }
+
+    /// <summary>
+    /// Pure team-collision rule shared by the runtime component and EditMode tests.
+    /// Team number 0 means the assignment has not replicated yet, so collision stays enabled.
+    /// </summary>
+    public static class FriendlyCollisionRules
+    {
+        public static bool ShouldIgnore(int firstTeam, int secondTeam)
+        {
+            return firstTeam != 0 && firstTeam == secondTeam;
+        }
+    }
+
+    /// <summary>
+    /// Tracks replicated team changes on the simulation path. This keeps physics updates independent
+    /// of Fusion's render callbacks, which are intentionally disabled on dedicated servers.
+    /// </summary>
+    public struct TeamChangeTracker
+    {
+        private int currentTeam;
+        private bool initialized;
+
+        public bool Observe(int team)
+        {
+            if (team == 0) return false;
+            if (initialized && currentTeam == team) return false;
+
+            currentTeam = team;
+            initialized = true;
+            return true;
+        }
+    }
 }

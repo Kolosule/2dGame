@@ -28,6 +28,8 @@ public class PlayerStealthVisual : NetworkBehaviour
 
     public override void Spawned()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         buffs        = GetComponent<PlayerBuffs>();
         myTeam       = GetComponent<PlayerTeamData>();
         statsHandler = GetComponent<PlayerStatsHandler>();
@@ -35,6 +37,7 @@ public class PlayerStealthVisual : NetworkBehaviour
 
     public override void Render()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         if (buffs == null || bodyRenderers == null) return;
 
         // Death-dim guard: let PlayerStatsHandler own alpha while dead.

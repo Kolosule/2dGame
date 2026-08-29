@@ -52,12 +52,12 @@ public class PlayerAnimator : NetworkBehaviour
     [Header("Animator")]
     [Tooltip("Animator for the VISIBLE body (Player.controller). Wired in the prefab " +
              "to the Sprite child, because the prefab has a second Animator " +
-             "(Weapon.controller on SideAttackTransform) that GetComponentInChildren " +
+              "(Weapon.controller on WeaponVisual) that GetComponentInChildren " +
              "would return first. Auto-resolved as a fallback if left unset.")]
     [SerializeField] private Animator anim;
 
     [Tooltip("Optional second track for the portal/weapon (Weapon.controller on the " +
-             "SideAttackTransform child). Driven off the SAME resolved State int, so it " +
+             "WeaponVisual child). Driven off the SAME resolved State int, so it " +
              "shows the weapon emerging during Attack/GroundPound/Shoot and stays hidden " +
              "otherwise. Leave unset to disable the weapon track.")]
     [SerializeField] private Animator weaponAnim;
@@ -95,18 +95,21 @@ public class PlayerAnimator : NetworkBehaviour
         movement = GetComponent<PlayerMovement>();
         stats = GetComponent<PlayerStatsHandler>();
 
-        // Prefer the explicitly-wired body Animator. Fallback keeps things working if
-        // a future prefab variant forgets to assign it.
-        if (anim == null) anim = GetComponentInChildren<Animator>();
-
         // A [Networked] enum defaults to 0 (= Idle), which Render would read as an authoritative
         // Idle override before the first Simulate. Seed it to None so proxies derive locomotion
         // from the very first frame.
         if (HasStateAuthority) OverrideState = AnimState.None;
 
-        // Seed render-motion tracking so the first frame doesn't produce a velocity spike.
-        lastRenderPos = transform.position;
-        renderMotionPrimed = true;
+        if (!DedicatedServerPresentation.IsHeadless)
+        {
+            // Prefer the explicitly-wired body Animator. Fallback keeps things working if
+            // a future prefab variant forgets to assign it.
+            if (anim == null) anim = GetComponentInChildren<Animator>();
+
+            // Seed render-motion tracking so the first frame doesn't produce a velocity spike.
+            lastRenderPos = transform.position;
+            renderMotionPrimed = true;
+        }
     }
 
     /// <summary>
@@ -169,6 +172,8 @@ public class PlayerAnimator : NetworkBehaviour
     /// <summary>ALL CLIENTS: resolve the pose and apply it to the visible Animator(s).</summary>
     public override void Render()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         AnimState resolved = ResolveRenderState();
         int state = (int)resolved;
 

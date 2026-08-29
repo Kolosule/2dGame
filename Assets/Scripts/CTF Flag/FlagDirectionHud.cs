@@ -41,6 +41,12 @@ public class FlagDirectionHud : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         canvasRect = transform as RectTransform;
         SetActive(team1Arrow, false);
         SetActive(team2Arrow, false);
