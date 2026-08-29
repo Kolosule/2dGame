@@ -28,7 +28,9 @@ public static class SettingsService
     public const string SfxVolumeParam = "SfxVolume";
     public const string UiVolumeParam = "UiVolume";
 
-    public static bool HasDisplay => SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null;
+    public static bool HasDisplay =>
+        !DedicatedServerPresentation.IsHeadless
+        && SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void ApplyAtBoot()

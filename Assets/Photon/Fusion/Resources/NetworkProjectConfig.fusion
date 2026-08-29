@@ -9,7 +9,7 @@
         "CachedStaticCollidersSize": 64
     },
     "EnqueueIncompleteSynchronousSpawns": false,
-    "InvokeRenderInBatchMode": true,
+    "InvokeRenderInBatchMode": false,
     "NetworkIdIsObjectName": false,
     "HideNetworkObjectInactivityGuard": false,
     "AllowClientServerModesInWebGL": false,

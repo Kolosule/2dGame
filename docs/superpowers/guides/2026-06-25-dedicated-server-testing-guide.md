@@ -1,6 +1,7 @@
 # Dedicated Server — Implementation & Verification Guide
 
-> **Gameplay guide refreshed 2026-07-28; Azure endpoint notes refreshed 2026-08-28.**
+> **Gameplay guide refreshed 2026-07-28; Azure endpoint and headless-presentation notes refreshed
+> 2026-08-28.**
 
 This is the **Unity-Editor-side** work the agent can't run (no Unity CLI in the authoring
 environment): one-time setup, then the verification procedures for the dedicated-server topology
@@ -160,6 +161,70 @@ in any of three roles — here's how to tell which:
 > To exercise the real dedicated topology from one machine, run the headless build (§C2) or point at
 > Azure (§C1) and **Join**.
 
+### C5. Why the dedicated server does no visual or audio work
+
+A headless server has no screen and no local player. It still runs the authoritative Fusion
+simulation, Physics2D, collision, spawning, damage, buffs, flags, scoring, match phases, reconnects,
+and scene loading. It does **not** need to draw sprites, animate characters, update cameras/HUDs, or
+play sound.
+
+The optimization has three layers:
+
+1. `Assets/Photon/Fusion/Resources/NetworkProjectConfig.fusion` sets
+   `InvokeRenderInBatchMode` to `false`. Fusion therefore skips `Render()` and `OnChangedRender`
+   callbacks in `-batchmode`. Those callbacks are for presentation only; never add gameplay,
+   collider, score, health, spawn, or other authoritative changes to them.
+2. `Project Settings → Multiplayer → Multiplayer Roles` enables **Strip Rendering Components**,
+   **Strip UI Components**, and **Strip Audio Components** for server content. Safety checks remain
+   enabled. Unity removes Cameras/Lights/Renderers, Unity UI/EventSystem components, AudioSources,
+   AudioListeners, and audio filters from server scenes and prefabs. It does not remove transforms,
+   `NetworkObject`/`NetworkBehaviour`, `Rigidbody2D`, `Collider2D`, or Fusion physics components.
+3. `DedicatedServerPresentation` disables what automatic stripping does not cover: Animators,
+   ParticleSystems, camera-follow/shake scripts, HUD/menu scripts, cosmetic effects, and sky
+   animation. It scans once when a scene loads, and
+   `PooledNetworkObjectProvider` applies the same rules to spawned or reused network prefabs.
+   Every audited Fusion presentation callback also has a headless guard, which covers a local
+   `-dedicatedServer` launch even when it is not started with `-batchmode`.
+
+Expected once per process:
+
+```text
+[Server] Headless presentation disabled: render callbacks, cameras, audio, UI, and cosmetic animation are inactive.
+```
+
+Repeated `AudioListener`, missing-Camera, Animator, UI, shader, or particle warnings are not normal.
+If they appear, first confirm the build used the **Dedicated Server / Linux** profile and was launched
+with `-batchmode -nographics`; then check that the line above appears before the warning.
+
+**Temporarily debug a Fusion render callback:** set `InvokeRenderInBatchMode` back to `true`, rebuild
+the server, and add only the temporary diagnostic needed. Do not move gameplay into that callback.
+Restore it to `false` and remove the diagnostic before shipping.
+
+**Full rollback to the old server behavior:**
+
+1. Set `InvokeRenderInBatchMode` to `true` in `NetworkProjectConfig.fusion`.
+2. Set `m_StripRenderComponents`, `m_StripUIComponents`, and `m_StripAudioComponents` to `0` in
+   `ProjectSettings/Packages/com.unity.dedicated-server/ContentSelectionSettings.asset`.
+3. Revert the `DedicatedServerPresentation` integration (its startup activation, scene cleanup,
+   network-prefab cleanup, and presentation-only guards).
+4. Rebuild the **Dedicated Server / Linux** player into a clean output folder.
+5. Start it with the previous command line, connect clients, complete one match, and confirm the
+   previous server log and gameplay behavior.
+
+**Functional check after changing presentation settings:** run a dedicated server plus at least two
+clients and complete a match. Confirm initial and later team assignments update same-team collision;
+then exercise movement, melee, projectiles, enemies, coins, buffs, flag pickup/carry/drop/return/
+capture, scoring, death/respawn, return to lobby, and reconnect. Clients must retain their animation,
+audio, particles, UI, and camera behavior.
+
+Use the same map, player count, enemy count, and sustained combat duration for both performance runs.
+Record results rather than inferring a gain from the code change:
+
+| Build | Average server CPU | p95 tick | p99 tick | Managed memory | GC count | Log size |
+|---|---:|---:|---:|---:|---:|---:|
+| Before |  |  |  |  |  |  |
+| After |  |  |  |  |  |  |
+
 ---
 
 ## D. Phase 1 verification — dedicated server + lobby
@@ -187,8 +252,8 @@ Run the headless server + at least **3** clients.
       the smaller team.
 - [ ] **Disconnect surface.** Kill the server while a client sits in the lobby → that client
       returns to the menu with a "Disconnected: ..." status line.
-- [ ] **Server build hygiene.** `server.log` has no repeated `AudioListener` warnings and no
-      camera errors (cameras/audio are disabled on the server after scene load).
+- [ ] **Server build hygiene.** The one `[Server] Headless presentation disabled` line appears;
+      `server.log` has no repeated Camera, AudioListener, Animator, UI, shader, or particle warnings.
 - [ ] **Gameplay parity.** Player-vs-player **physical collision** (body-blocking) and the full
       **flag capture** flow behave exactly as in the old host build.
 - [ ] **Latency feel.** No single client has a zero-latency advantage (the old host's unfair

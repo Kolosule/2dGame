@@ -59,6 +59,12 @@ public class SettingsPanel : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         if (panelRoot == null)
         {
             Debug.LogError("❌ SettingsPanel: panelRoot not assigned!");

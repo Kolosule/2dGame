@@ -22,7 +22,11 @@ public class PooledNetworkObjectProvider : NetworkObjectProviderDefault
     {
         // Not poolable → default behaviour (Instantiate).
         if (prefab.GetComponent<Poolable>() == null)
-            return base.InstantiatePrefab(runner, prefab);
+        {
+            NetworkObject created = base.InstantiatePrefab(runner, prefab);
+            DedicatedServerPresentation.DisableHierarchy(created.gameObject);
+            return created;
+        }
 
         // Reuse an inactive instance if one is available for this prefab. Skip entries that
         // were destroyed since being pooled (scene unload / previous session shutdown) —
@@ -34,6 +38,7 @@ public class PooledNetworkObjectProvider : NetworkObjectProviderDefault
                 var reused = stack.Pop();
                 if (reused == null) continue;
                 reused.gameObject.SetActive(true);
+                DedicatedServerPresentation.DisableHierarchy(reused.gameObject);
                 return reused;
             }
         }
@@ -42,6 +47,7 @@ public class PooledNetworkObjectProvider : NetworkObjectProviderDefault
         var instance = base.InstantiatePrefab(runner, prefab);
         var poolable = instance.GetComponent<Poolable>();
         poolable.SourcePrefab = prefab;
+        DedicatedServerPresentation.DisableHierarchy(instance.gameObject);
         return instance;
     }
 

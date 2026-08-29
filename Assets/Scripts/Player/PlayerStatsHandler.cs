@@ -99,6 +99,8 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     private void OnHealthChanged()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         // Victim-only, flat: "I am being hit" must be instantly distinguishable from
         // "I am landing hits" (HitConfirm), which is why they are separate cues on separate paths.
         // Guarded on a health DECREASE so healing and the respawn reset never trigger it.
@@ -112,6 +114,8 @@ public class PlayerStatsHandler : NetworkBehaviour
 
     private void UpdateHealthBar()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         if (healthBar != null)
         {
             healthBar.fillAmount = CurrentHealth / stats.maxHealth;
@@ -258,6 +262,8 @@ public class PlayerStatsHandler : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_DisablePlayerControls()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         if (HasInputAuthority) Audio.Play2D(AudioCueId.PlayerDeath);
         else Audio.PlayAt(AudioCueId.PlayerDeath, transform.position);
 
@@ -330,6 +336,8 @@ public class PlayerStatsHandler : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_EnablePlayerControls()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         if (HasInputAuthority) Audio.Play2D(AudioCueId.PlayerRespawn);
         else Audio.PlayAt(AudioCueId.PlayerRespawn, transform.position);
 

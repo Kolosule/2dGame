@@ -23,6 +23,12 @@ public class PlayerCameraFeelHandler : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         netObj = GetComponent<NetworkObject>();
         movement = GetComponent<PlayerMovement>();
     }

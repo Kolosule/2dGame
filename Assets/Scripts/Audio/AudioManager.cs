@@ -47,6 +47,9 @@ public class AudioManager : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap()
     {
+#if UNITY_SERVER
+        return;
+#else
         // Same client-only gate SettingsService uses. A headless server allocates nothing.
         if (!SettingsService.HasDisplay) return;
         if (Instance != null) return;
@@ -64,6 +67,7 @@ public class AudioManager : MonoBehaviour
         AudioManager manager = go.AddComponent<AudioManager>();
         Instance = manager;
         manager.Initialize(cfg);
+#endif
     }
 
     private void Initialize(AudioConfig cfg)

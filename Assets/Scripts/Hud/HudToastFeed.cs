@@ -41,6 +41,12 @@ public class HudToastFeed : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         if (group != null) group.alpha = 0f;
     }
 

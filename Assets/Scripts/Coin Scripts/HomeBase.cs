@@ -129,6 +129,8 @@ public class NetworkedHomeBase : NetworkBehaviour
     /// </summary>
     private void Update()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         // Local, non-networked convenience read: playerInZone is only ever set for the
         // input-authority (local) player, and this only fires an RPC — it never feeds the
         // Fusion simulation, so reading the device directly here is safe.
@@ -246,6 +248,7 @@ public class NetworkedHomeBase : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnDeposit(Vector3 playerPosition, int points)
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
 
         // World half of a deposit: positional at the base, heard by everyone nearby. The
         // depositing player's own chime is a separate flat cue in PlayerInventory.

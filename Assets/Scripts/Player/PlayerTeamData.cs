@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using Fusion;
+using Game.Combat.Core;
 
 /// <summary>
 /// The single networked source of truth for a player's team, and the team-driven sprite
@@ -11,24 +12,31 @@ using Fusion;
 public class PlayerTeamData : NetworkBehaviour
 {
     /// <summary>The authoritative team for this player. Replicated to all clients.</summary>
-    [Networked, OnChangedRender(nameof(OnTeamChanged))]
-    public Team Team { get; set; }
+    [Networked, OnChangedRender(nameof(OnTeamChangedRender))]
+    public Team Team { get; private set; }
 
     /// <summary>Fires whenever the networked Team changes to a real value (Team1/Team2/Team3AI),
-    /// including the initial value a late joiner receives. Never fires while Team is still None.
-    /// FriendlyCollision subscribes to re-derive teammate collision ignores; mirrors the existing
-    /// NetworkedPlayerInventory.CoinsChanged event pattern.</summary>
+    /// including the initial value a late joiner receives. This event is raised from the simulation
+    /// path, never from OnChangedRender, because FriendlyCollision uses it for Physics2D rules.</summary>
     public event Action TeamChanged;
 
     [Header("Visual Feedback (Optional)")]
     [SerializeField] private SpriteRenderer spriteRenderer;
     [SerializeField] private bool colorizePlayer = true;
 
+    private TeamChangeTracker teamChangeTracker;
+
     public override void Spawned()
     {
-        // OnChangedRender does not fire for the value a late joiner receives as initial state,
-        // so initialize the visual once here.
-        OnTeamChanged();
+        ObserveTeamForGameplay();
+        OnTeamChangedRender();
+    }
+
+    public override void FixedUpdateNetwork()
+    {
+        // Proxies learn later team changes through replication. Observe them here so local Physics2D
+        // collision rules never depend on Render/OnChangedRender being called.
+        ObserveTeamForGameplay();
     }
 
     /// <summary>Server-only: assign this player's team. Rejects None and the AI team.</summary>
@@ -48,8 +56,9 @@ public class PlayerTeamData : NetworkBehaviour
 
         Team = team;
 
-        // Apply immediately on the authority; remote clients get it via OnChangedRender.
-        OnTeamChanged();
+        // Apply collision rules immediately on state authority. Remote peers observe the replicated
+        // value from FixedUpdateNetwork; visual color remains an OnChangedRender responsibility.
+        ObserveTeamForGameplay();
 
         // Mirror into the central stats table so the scoreboard can group by team regardless of
         // AoI distance. Harmless no-op on the very first call at spawn (before RegisterPlayer has
@@ -59,17 +68,22 @@ public class PlayerTeamData : NetworkBehaviour
             MatchStatsManager.Instance.SetTeam(Object.InputAuthority.PlayerId, TeamUtil.ToNumber(team));
     }
 
-    /// <summary>Render-time callback: refresh the team color from the networked value.</summary>
-    private void OnTeamChanged()
+    /// <summary>Render-time callback: refresh only the team color.</summary>
+    private void OnTeamChangedRender()
     {
-        if (Team == Team.None) return;
+        if (DedicatedServerPresentation.IsHeadless) return;
         ApplyTeamColor();
-        TeamChanged?.Invoke();
+    }
+
+    private void ObserveTeamForGameplay()
+    {
+        if (teamChangeTracker.Observe(TeamUtil.ToNumber(Team)))
+            TeamChanged?.Invoke();
     }
 
     private void ApplyTeamColor()
     {
-        if (!colorizePlayer || spriteRenderer == null || TeamManager.Instance == null) return;
+        if (Team == Team.None || !colorizePlayer || spriteRenderer == null || TeamManager.Instance == null) return;
 
         TeamData data = TeamManager.Instance.GetTeamData(Team);
         if (data != null)

@@ -193,6 +193,7 @@ public class MatchManager : NetworkBehaviour
 
     private void OnPhaseChanged()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         PlayPhaseCue(Phase);
         PhaseChanged?.Invoke();
     }

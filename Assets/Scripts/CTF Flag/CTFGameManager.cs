@@ -137,6 +137,8 @@ public class CTFGameManager : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     public void RPC_ShowNotification(string message)
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         if (notificationText != null)
         {
             notificationText.text = message;

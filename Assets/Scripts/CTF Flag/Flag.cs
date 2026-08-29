@@ -89,7 +89,7 @@ public class Flag : NetworkBehaviour
         if (triggerCollider != null)
             triggerCollider.isTrigger = true;
 
-        if (flagSprite == null)
+        if (!DedicatedServerPresentation.IsHeadless && flagSprite == null)
             flagSprite = GetComponent<SpriteRenderer>();
     }
 
@@ -140,14 +140,16 @@ public class Flag : NetworkBehaviour
                 break;
         }
 
-        // Reconcile the carrier marker on EVERY peer from the networked state, so all players
-        // (not just the holder) see the flag icon above whoever is carrying it.
-        GameObject desiredCarrier = CurrentState == FlagState.Carried ? carrierGameObject : null;
-        if (desiredCarrier != markedCarrier)
+        if (!DedicatedServerPresentation.IsHeadless)
         {
-            if (markedCarrier != null) SetCarrierMarker(markedCarrier, false);
-            if (desiredCarrier != null) SetCarrierMarker(desiredCarrier, true);
-            markedCarrier = desiredCarrier;
+            // Reconcile the carrier marker on every client from networked state.
+            GameObject desiredCarrier = CurrentState == FlagState.Carried ? carrierGameObject : null;
+            if (desiredCarrier != markedCarrier)
+            {
+                if (markedCarrier != null) SetCarrierMarker(markedCarrier, false);
+                if (desiredCarrier != null) SetCarrierMarker(desiredCarrier, true);
+                markedCarrier = desiredCarrier;
+            }
         }
     }
 
@@ -260,7 +262,7 @@ public class Flag : NetworkBehaviour
             AreaOfInterestRegistrar.Instance.AddAlwaysInterested(carrierObj);
 
         // Play pickup effect
-        if (pickupEffect != null)
+        if (!DedicatedServerPresentation.IsHeadless && pickupEffect != null)
             pickupEffect.Play();
 
         // Notify clients
@@ -310,7 +312,7 @@ public class Flag : NetworkBehaviour
         CarrierPlayerRef = PlayerRef.None;
 
         // Play drop effect
-        if (dropEffect != null)
+        if (!DedicatedServerPresentation.IsHeadless && dropEffect != null)
             dropEffect.Play();
 
         // Start auto-return countdown (evaluated server-side in FixedUpdateNetwork)
@@ -374,6 +376,7 @@ public class Flag : NetworkBehaviour
     /// </summary>
     private void OnStateChanged()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         UpdateVisuals();
         PlayStateCue();
     }
@@ -423,6 +426,8 @@ public class Flag : NetworkBehaviour
     /// </summary>
     private void OnCarrierPlayerRefChanged()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         // Resolve (or clear) the carrier GameObject on this peer. The marker visual itself is
         // reconciled every frame in Update() from the networked state, so it shows on every
         // peer regardless of exactly when this callback fires.

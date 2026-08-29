@@ -30,6 +30,7 @@ public class NetworkedPlayerInventory : NetworkBehaviour
 
     private void OnCoinsChanged()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
         CoinsChanged?.Invoke();
     }
 

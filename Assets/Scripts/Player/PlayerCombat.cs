@@ -180,6 +180,8 @@ public class PlayerCombat : NetworkBehaviour
     /// </summary>
     private void OnAttackStartTickChanged()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         // Tick 0 is the never-swung default; a pooled or freshly spawned player must not whoosh.
         if (AttackStartTick <= 0) return;
 

@@ -57,6 +57,12 @@ public class ScoreboardPanel : MonoBehaviour
 
     private void Awake()
     {
+        if (DedicatedServerPresentation.IsHeadless)
+        {
+            enabled = false;
+            return;
+        }
+
         if (rowTemplate != null) rowTemplate.gameObject.SetActive(false);
         SetVisible(false);
     }

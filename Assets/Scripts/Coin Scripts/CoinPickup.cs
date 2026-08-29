@@ -258,11 +258,11 @@ public class NetworkedCoinPickup : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Rotation visual + remote position follow.
-    /// </summary>
-    private void Update()
+    /// <summary>Client presentation: remote position follow plus optional coin rotation.</summary>
+    public override void Render()
     {
+        if (DedicatedServerPresentation.IsHeadless) return;
+
         // IMPORTANT: Only access networked properties if the object has been spawned
         if (Object == null || !Object.IsValid)
             return;
