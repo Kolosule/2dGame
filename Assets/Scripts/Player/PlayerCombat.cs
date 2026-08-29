@@ -11,6 +11,9 @@ using Game.Combat.Core;
 /// </summary>
 public class PlayerCombat : NetworkBehaviour
 {
+    private const int InitialHitCollectionCapacity = 32;
+    private const float LagCompensationQueryHalfDepth = 0.25f;
+
     [Header("Stats")]
     [SerializeField] private PlayerStats stats;
 
@@ -68,8 +71,21 @@ public class PlayerCombat : NetworkBehaviour
     private int verticalAim;
     private Vector2 lastAimWorldPoint;
 
-    // Dash-strike dedup: server-only, non-networked. Cleared on each new dash rising edge.
-    private readonly HashSet<Collider2D> dashStruck = new HashSet<Collider2D>();
+    // Server-only reusable query storage and target-id deduplication. The initial capacities cover
+    // all 20 players without allocating in the attack hot path.
+    private readonly List<Collider2D> currentTickHits =
+        new List<Collider2D>(InitialHitCollectionCapacity);
+    private readonly List<LagCompensatedHit> historicalPlayerHits =
+        new List<LagCompensatedHit>(InitialHitCollectionCapacity);
+    private readonly AttackHitRegistry dashStruck =
+        new AttackHitRegistry(InitialHitCollectionCapacity);
+    private readonly AttackHitRegistry swingStruck =
+        new AttackHitRegistry(InitialHitCollectionCapacity);
+    private ContactFilter2D enemyContactFilter;
+    private ContactFilter2D playerContactFilter;
+    private int enemyLayerMask;
+    private int playerLayerMask;
+    private bool warnedLagCompensationFallback;
     private bool wasDashing;
 
     [Networked] private TickTimer AttackCooldownTimer { get; set; }
@@ -82,9 +98,6 @@ public class PlayerCombat : NetworkBehaviour
     [Networked] private NetworkBool AttackFacingRight { get; set; }
     [Networked] private NetworkBool AttackIsPound { get; set; }
 
-    // Per-swing hit dedup: server-only, non-networked (same pattern as dashStruck).
-    private readonly HashSet<Collider2D> swingStruck = new HashSet<Collider2D>();
-
     void Awake()
     {
         playerAnimator = GetComponent<PlayerAnimator>();
@@ -93,6 +106,27 @@ public class PlayerCombat : NetworkBehaviour
         rb = GetComponent<Rigidbody2D>();
         playerMovement = GetComponent<PlayerMovement>();
         mods = GetComponent<PlayerStatModifiers>();
+
+        int configuredMask = attackableLayer.value;
+        enemyLayerMask = configuredMask & LayerMask.GetMask("Enemy");
+        playerLayerMask = configuredMask & LayerMask.GetMask("Player");
+        enemyContactFilter = CreateLayerFilter(enemyLayerMask);
+        playerContactFilter = CreateLayerFilter(playerLayerMask);
+
+        if (enemyLayerMask == 0)
+            Debug.LogError("PlayerCombat: attackableLayer must include the Enemy layer.");
+        if (playerLayerMask == 0)
+            Debug.LogError("PlayerCombat: attackableLayer must include the Player layer.");
+    }
+
+    private static ContactFilter2D CreateLayerFilter(int layerMask)
+    {
+        ContactFilter2D filter = new ContactFilter2D
+        {
+            useTriggers = Physics2D.queriesHitTriggers
+        };
+        filter.SetLayerMask(layerMask);
+        return filter;
     }
 
     /// <summary>Called every tick by PlayerController when input is available.</summary>
@@ -236,65 +270,191 @@ public class PlayerCombat : NetworkBehaviour
     }
 
     /// <summary>
-    /// SERVER: overlap the given box and apply melee damage/knockback to enemies and enemy
-    /// players. Shared by the normal swing and the dash-strike (Quicker Dash tier 3).
-    /// When <paramref name="alreadyHit"/> is non-null, each collider is processed at most once
-    /// (used by the dash-strike to limit damage to one hit per target per dash).
-    /// The normal swing passes the per-swing <c>swingStruck</c> dedup set so each target is hit
-    /// at most once per swing; the dash-strike passes <c>dashStruck</c>.
+    /// SERVER: detect enemies at the current tick and players either from Fusion history or the
+    /// documented current-tick fallback. Both paths share one target-id registry.
     /// </summary>
     private void ApplyMeleeHits(Vector2 center, Vector2 area,
-                                HashSet<Collider2D> alreadyHit = null)
+                                AttackHitRegistry alreadyHit)
     {
-        Collider2D[] objectsHit = Physics2D.OverlapBoxAll(center, area, 0f, attackableLayer);
+        Vector2 normalizedArea = new Vector2(Mathf.Abs(area.x), Mathf.Abs(area.y));
+        CombatConfig config = GetCombatConfig();
+        bool diagnosticsEnabled = config != null && config.logLagCompensationDiagnostics;
+        float diagnosticInterval = config != null
+            ? config.lagCompensationDiagnosticInterval
+            : 30f;
 
-        foreach (Collider2D hit in objectsHit)
+        ApplyCurrentTickEnemyHits(center, normalizedArea, alreadyHit, diagnosticsEnabled);
+
+        HitboxManager historyManager = Runner != null ? Runner.LagCompensation : null;
+        PlayerRef attacker = Object != null ? Object.InputAuthority : PlayerRef.None;
+        bool featureEnabled = config != null && config.enableLagCompensation;
+        PlayerHitQueryMode queryMode = LagCompensationPolicy.Resolve(
+            featureEnabled,
+            historyManager != null,
+            attacker.IsRealPlayer);
+
+        if (queryMode == PlayerHitQueryMode.Historical)
         {
-            if (alreadyHit != null)
-            {
-                if (alreadyHit.Contains(hit)) continue;
-                alreadyHit.Add(hit);
-            }
-
-            Enemy enemy = hit.GetComponent<Enemy>();
-            if (enemy != null)
-            {
-                Vector2 knockbackDirection = (hit.transform.position - transform.position).normalized;
-                Vector2 knockbackForce = new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward);
-                int finalDamage = ResolveMeleeDamage(enemy.Team, hit.transform.position);
-                enemy.TakeDamage(finalDamage, knockbackForce, hit.transform.position);
-                RPC_HitFeedback(enemy.Object.Id, hit.transform.position, finalDamage);
-                continue;
-            }
-
-            // Player hit. Damage goes through ServerApplyDamage keyed by this attacker's
-            // NetworkObject id, so spawn-immunity is respected and the rapid-hit guard is per
-            // attacker — which also throttles the dash-strike's per-tick calls to one hit per
-            // 0.1s per target. Friendly-fire and self-hit are both gated by FriendlyFire, the
-            // same predicate Projectile uses, so the two damage sources agree.
-            PlayerStatsHandler targetPlayer = hit.GetComponent<PlayerStatsHandler>();
-            if (targetPlayer != null)
-            {
-                PlayerTeamData targetTeam = hit.GetComponent<PlayerTeamData>();
-                Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
-                Team otherTeam = targetTeam != null ? targetTeam.Team : Team.None;
-                bool isSelf = targetPlayer == statsHandler;
-                if (!FriendlyFire.CanDamagePlayer(TeamUtil.ToNumber(myTeam), TeamUtil.ToNumber(otherTeam), isSelf))
-                    continue;
-
-                int finalDamage = ResolveMeleeDamage(otherTeam, hit.transform.position);
-                targetPlayer.ServerApplyDamage(finalDamage, Object.Id);
-                RPC_HitFeedback(targetPlayer.Object.Id, hit.transform.position, finalDamage);
-
-                Rigidbody2D targetRb = hit.GetComponent<Rigidbody2D>();
-                if (targetRb != null)
-                {
-                    Vector2 knockbackDirection = (hit.transform.position - transform.position).normalized;
-                    targetRb.AddForce(new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward),
-                                      ForceMode2D.Impulse);
-                }
-            }
+            ApplyHistoricalPlayerHits(
+                historyManager, attacker, center, normalizedArea, alreadyHit, diagnosticsEnabled);
         }
+        else
+        {
+            if (featureEnabled)
+                WarnLagCompensationFallbackOnce(historyManager == null
+                    ? "Fusion's history manager is unavailable"
+                    : "the attacker has no valid input authority");
+            else if (config == null)
+                WarnLagCompensationFallbackOnce("CombatConfig is unavailable");
+
+            ApplyCurrentTickPlayerHits(
+                center, normalizedArea, alreadyHit, diagnosticsEnabled);
+        }
+
+        CombatLagCompensationDiagnostics.MaybeLog(
+            diagnosticsEnabled, diagnosticInterval);
+    }
+
+    private void ApplyCurrentTickEnemyHits(
+        Vector2 center,
+        Vector2 area,
+        AttackHitRegistry alreadyHit,
+        bool diagnosticsEnabled)
+    {
+        currentTickHits.Clear();
+        Physics2D.OverlapBox(center, area, 0f, enemyContactFilter, currentTickHits);
+
+        foreach (Collider2D hit in currentTickHits)
+        {
+            Enemy enemy = hit.GetComponent<Enemy>();
+            if (enemy == null || !TryRegisterTarget(enemy.Object, alreadyHit, diagnosticsEnabled))
+                continue;
+
+            Vector2 knockbackDirection =
+                (hit.transform.position - transform.position).normalized;
+            Vector2 knockbackForce =
+                new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward);
+            int finalDamage = ResolveMeleeDamage(enemy.Team, hit.transform.position);
+            enemy.TakeDamage(finalDamage, knockbackForce, hit.transform.position);
+            RPC_HitFeedback(enemy.Object.Id, hit.transform.position, finalDamage);
+            CombatLagCompensationDiagnostics.RecordCurrentTickEnemyHit(diagnosticsEnabled);
+        }
+    }
+
+    private void ApplyHistoricalPlayerHits(
+        HitboxManager historyManager,
+        PlayerRef attacker,
+        Vector2 center,
+        Vector2 area,
+        AttackHitRegistry alreadyHit,
+        bool diagnosticsEnabled)
+    {
+        Vector3 queryCenter = new Vector3(center.x, center.y, transform.position.z);
+        Vector3 queryExtents =
+            new Vector3(area.x * 0.5f, area.y * 0.5f, LagCompensationQueryHalfDepth);
+
+        long queryStartedAt =
+            CombatLagCompensationDiagnostics.BeginQuery(diagnosticsEnabled);
+        historyManager.OverlapBox(
+            queryCenter,
+            queryExtents,
+            Quaternion.identity,
+            attacker,
+            historicalPlayerHits,
+            layerMask: playerLayerMask,
+            options: HitOptions.SubtickAccuracy | HitOptions.IgnoreInputAuthority,
+            clearHits: true,
+            queryTriggerInteraction: QueryTriggerInteraction.Ignore);
+        CombatLagCompensationDiagnostics.RecordQuery(
+            diagnosticsEnabled, queryStartedAt);
+
+        foreach (LagCompensatedHit hit in historicalPlayerHits)
+        {
+            HitboxRoot root = hit.Hitbox != null ? hit.Hitbox.Root : null;
+            PlayerStatsHandler targetPlayer =
+                root != null ? root.GetComponent<PlayerStatsHandler>() : null;
+            TryApplyPlayerMeleeHit(
+                targetPlayer, alreadyHit, diagnosticsEnabled, historicalHit: true);
+        }
+    }
+
+    private void ApplyCurrentTickPlayerHits(
+        Vector2 center,
+        Vector2 area,
+        AttackHitRegistry alreadyHit,
+        bool diagnosticsEnabled)
+    {
+        currentTickHits.Clear();
+        Physics2D.OverlapBox(center, area, 0f, playerContactFilter, currentTickHits);
+
+        foreach (Collider2D hit in currentTickHits)
+        {
+            PlayerStatsHandler targetPlayer = hit.GetComponent<PlayerStatsHandler>();
+            TryApplyPlayerMeleeHit(
+                targetPlayer, alreadyHit, diagnosticsEnabled, historicalHit: false);
+        }
+    }
+
+    private void TryApplyPlayerMeleeHit(
+        PlayerStatsHandler targetPlayer,
+        AttackHitRegistry alreadyHit,
+        bool diagnosticsEnabled,
+        bool historicalHit)
+    {
+        if (targetPlayer == null || targetPlayer.IsDead) return;
+
+        PlayerTeamData targetTeam = targetPlayer.GetComponent<PlayerTeamData>();
+        Team myTeam = teamComponent != null ? teamComponent.Team : Team.None;
+        Team otherTeam = targetTeam != null ? targetTeam.Team : Team.None;
+        bool isSelf = targetPlayer == statsHandler;
+        if (!FriendlyFire.CanDamagePlayer(
+                TeamUtil.ToNumber(myTeam), TeamUtil.ToNumber(otherTeam), isSelf))
+            return;
+
+        if (!TryRegisterTarget(targetPlayer.Object, alreadyHit, diagnosticsEnabled))
+            return;
+
+        Vector2 currentTargetPosition = targetPlayer.transform.position;
+        int finalDamage = ResolveMeleeDamage(otherTeam, currentTargetPosition);
+        DamageApplyResult damageResult =
+            targetPlayer.ServerApplyDamage(finalDamage, Object.Id);
+        if (!PlayerDamageGate.AllowsSecondaryEffects(damageResult)) return;
+
+        RPC_HitFeedback(
+            targetPlayer.Object.Id, currentTargetPosition, finalDamage);
+
+        Rigidbody2D targetRb = targetPlayer.GetComponent<Rigidbody2D>();
+        if (targetRb != null)
+        {
+            Vector2 knockbackDirection =
+                (currentTargetPosition - (Vector2)transform.position).normalized;
+            targetRb.AddForce(
+                new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward),
+                ForceMode2D.Impulse);
+        }
+
+        if (historicalHit)
+            CombatLagCompensationDiagnostics.RecordHistoricalPlayerHit(diagnosticsEnabled);
+    }
+
+    private static bool TryRegisterTarget(
+        NetworkObject target,
+        AttackHitRegistry alreadyHit,
+        bool diagnosticsEnabled)
+    {
+        if (target == null || !target.IsValid) return false;
+        if (alreadyHit.TryRegister((ulong)target.Id.Raw)) return true;
+
+        CombatLagCompensationDiagnostics.RecordRejectedDuplicate(diagnosticsEnabled);
+        return false;
+    }
+
+    private void WarnLagCompensationFallbackOnce(string reason)
+    {
+        if (warnedLagCompensationFallback) return;
+        warnedLagCompensationFallback = true;
+        Debug.LogWarning(
+            $"PlayerCombat: using current-tick player hit detection because {reason}.");
     }
 
     /// <summary>
@@ -319,9 +479,7 @@ public class PlayerCombat : NetworkBehaviour
     /// </summary>
     private int ResolveMeleeDamage(Team defenderTeam, Vector2 defenderPos)
     {
-        CombatConfig config = GameSettingsManager.Instance != null
-            ? GameSettingsManager.Instance.GetCombatConfig()
-            : null;
+        CombatConfig config = GetCombatConfig();
         if (config == null)
         {
             CombatConfig.WarnMissingOnce();
@@ -329,6 +487,13 @@ public class PlayerCombat : NetworkBehaviour
         }
 
         return config.ResolveDamage(stats.attackDamage, defenderTeam, defenderPos);
+    }
+
+    private static CombatConfig GetCombatConfig()
+    {
+        return GameSettingsManager.Instance != null
+            ? GameSettingsManager.Instance.GetCombatConfig()
+            : null;
     }
 
     private void ShootProjectile(Vector2 aimWorldPoint)

@@ -5,8 +5,9 @@ using Game.Combat.Core;
 
 /// <summary>
 /// Server-spawned networked projectile. Velocity is set on the server and synced by
-/// NetworkRigidbody2D; hit detection, damage, stun, and despawn run on the state authority.
-/// Full friendly-fire/effects polish is a later pass — this is the minimal correct version.
+/// NetworkRigidbody2D; current-tick trigger detection, damage, stun, and despawn run on the state
+/// authority. Projectile lag compensation is intentionally excluded because Fusion 2.0.12 has no
+/// swept-projectile query and mixing historical players with live wall triggers can penetrate walls.
 /// </summary>
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(CircleCollider2D))]
@@ -104,13 +105,20 @@ public class Projectile : NetworkBehaviour
                     attackerId = shooterObj.Id;
 
                 int finalDamage = ResolveDamage(targetTeam, other.transform.position);
-                playerStats.ServerApplyDamage(finalDamage, attackerId);
-                RPC_HitFeedback(playerStats.Object.Id, other.transform.position, finalDamage);
-                if (stunPlayers)
+                DamageApplyResult damageResult =
+                    playerStats.ServerApplyDamage(finalDamage, attackerId);
+                if (PlayerDamageGate.AllowsSecondaryEffects(damageResult))
                 {
-                    PlayerMovement pm = other.GetComponent<PlayerMovement>();
-                    if (pm != null) pm.ApplyStun(stunDuration);
+                    RPC_HitFeedback(playerStats.Object.Id, other.transform.position, finalDamage);
+                    if (stunPlayers)
+                    {
+                        PlayerMovement pm = other.GetComponent<PlayerMovement>();
+                        if (pm != null) pm.ApplyStun(stunDuration);
+                    }
                 }
+
+                // Preserve one-impact projectile behavior even when health damage is rejected by
+                // spawn immunity, death, or the rapid-hit guard.
                 Hit();
             }
             return;
