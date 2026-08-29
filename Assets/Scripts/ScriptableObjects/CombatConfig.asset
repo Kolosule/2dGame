@@ -17,6 +17,9 @@ MonoBehaviour:
   scaledKnockback: 1
   attackSpeedMultiplier: 1
   territorialAdvantageEnabled: 1
+  enableLagCompensation: 0
+  logLagCompensationDiagnostics: 0
+  lagCompensationDiagnosticInterval: 30
   damageNumberPrefab: {fileID: 0}
   normalDamageColor: {r: 1, g: 1, b: 1, a: 1}
   bonusDamageColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}

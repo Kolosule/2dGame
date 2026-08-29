@@ -66,6 +66,7 @@ public class PlayerStatsHandler : NetworkBehaviour
     // Cached for the respawn teleport: NetworkRigidbody2D.Teleport bumps the teleport key so
     // proxies snap to the respawn point instead of interpolating across the map.
     private NetworkRigidbody2D netRb;
+    private HitboxRoot hitboxRoot;
 
     // Render-side only: previous health, so OnHealthChanged can tell a hit from a heal or a
     // respawn reset. Never read by simulation, never networked.
@@ -74,12 +75,14 @@ public class PlayerStatsHandler : NetworkBehaviour
     public override void Spawned()
     {
         netRb = GetComponent<NetworkRigidbody2D>();
+        hitboxRoot = GetComponent<HitboxRoot>();
 
         if (HasStateAuthority)
         {
             CurrentHealth = stats.maxHealth;
             IsDead = false;
             SpawnImmunityTimer = TickTimer.CreateFromSeconds(Runner, spawnImmunityDuration);
+            if (hitboxRoot != null) hitboxRoot.HitboxRootActive = true;
         }
 
         UpdateHealthBar();
@@ -145,22 +148,19 @@ public class PlayerStatsHandler : NetworkBehaviour
     /// id: the melee player, the shooter, or the enemy). Spawn immunity is global; the
     /// rapid-hit guard is PER ATTACKER so two players hitting in the same 0.1s both land.
     /// </summary>
-    public void ServerApplyDamage(float damage, NetworkId attackerId)
+    public DamageApplyResult ServerApplyDamage(float damage, NetworkId attackerId)
     {
-        if (!HasStateAuthority) return;
-        if (IsDead) return;
-
-        // Spawn immunity: ignore damage while the immunity timer is still running.
-        if (!SpawnImmunityTimer.ExpiredOrNotRunning(Runner))
-        {
-            return;
-        }
+        bool hasSpawnImmunity = HasStateAuthority &&
+                                !SpawnImmunityTimer.ExpiredOrNotRunning(Runner);
+        DamageApplyResult gateResult = PlayerDamageGate.EvaluatePreCooldown(
+            HasStateAuthority, IsDead, hasSpawnImmunity);
+        if (gateResult != DamageApplyResult.Applied) return gateResult;
 
         // Rapid-hit guard, per attacker.
         int cooldownTicks = Mathf.Max(1, Mathf.RoundToInt(hitCooldown * Runner.TickRate));
         if (!hitLedger.TryRegisterHit((ulong)attackerId.Raw, Runner.Tick, cooldownTicks))
         {
-            return;
+            return DamageApplyResult.RejectedHitCooldown;
         }
 
         lastAttackerId = attackerId;
@@ -173,6 +173,8 @@ public class PlayerStatsHandler : NetworkBehaviour
             CurrentHealth = 0;
             Die();
         }
+
+        return DamageApplyResult.Applied;
     }
 
     /// <summary>
@@ -183,6 +185,7 @@ public class PlayerStatsHandler : NetworkBehaviour
         if (!HasStateAuthority) return;
 
         IsDead = true;
+        if (hitboxRoot != null) hitboxRoot.HitboxRootActive = false;
 
         ReportDeathToStats();
 
@@ -314,6 +317,8 @@ public class PlayerStatsHandler : NetworkBehaviour
             rb.linearVelocity = Vector2.zero;
             rb.angularVelocity = 0f;
         }
+
+        if (hitboxRoot != null) hitboxRoot.HitboxRootActive = true;
 
         // Re-enable player controls on all clients
         RPC_EnablePlayerControls();

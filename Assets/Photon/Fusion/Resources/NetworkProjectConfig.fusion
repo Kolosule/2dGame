@@ -3,10 +3,10 @@
     "TypeId": "NetworkProjectConfig",
     "PeerMode": 0,
     "LagCompensation": {
-        "Enabled": false,
+        "Enabled": true,
         "HitboxBufferLengthInMs": 200,
-        "HitboxDefaultCapacity": 512,
-        "CachedStaticCollidersSize": 64
+        "HitboxDefaultCapacity": 32,
+        "CachedStaticCollidersSize": 0
     },
     "EnqueueIncompleteSynchronousSpawns": false,
     "InvokeRenderInBatchMode": false,

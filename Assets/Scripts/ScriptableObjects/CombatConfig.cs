@@ -36,6 +36,18 @@ public class CombatConfig : ScriptableObject
              "team-buff layer inert, because Vanguard exists only to reduce this vulnerability.")]
     public bool territorialAdvantageEnabled = true;
 
+    [Header("Lag Compensation")]
+    [Tooltip("Rewind player hitboxes for server-authoritative melee and damaging-dash checks. " +
+             "Enable this for A/B testing after reviewing the lag-compensation test guide.")]
+    public bool enableLagCompensation;
+
+    [Tooltip("Write occasional aggregate lag-compensation counters on the authoritative server.")]
+    public bool logLagCompensationDiagnostics;
+
+    [Tooltip("Seconds between diagnostic summaries. No per-query messages are written.")]
+    [Min(5f)]
+    public float lagCompensationDiagnosticInterval = 30f;
+
     [Header("Visual Feedback")]
     [Tooltip("Damage number prefab")]
     public GameObject damageNumberPrefab;

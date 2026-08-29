@@ -15,7 +15,7 @@ honest enough that feedback means something.
 | # | Item | Priority | Status |
 | --- | --- | --- | --- |
 | 1 | Reconnect / session robustness under real drops | 🔴 High | ⬜ Open |
-| 2 | Lag compensation on melee hit detection | 🔴 High | ⬜ Open |
+| 2 | Lag compensation on melee hit detection | 🔴 High | 🟡 Implemented; latency sign-off pending |
 | 3 | Flag drop/return RPC race | — | ✅ Done |
 | 4 | `.gitignore` hygiene | — | ✅ No action needed (already correct) |
 | 5 | Remove dead unvalidated damage RPC | — | ✅ Done |
@@ -64,31 +64,16 @@ class in `Game.Net` (following how `ReconnectRegistry` was already extracted), l
 
 ## 2. Lag compensation on melee hit detection
 
-**Why this matters for a playtest specifically.** This is the thing you are literally trying to
-evaluate. Without it, higher-ping testers will report *"combat feels unresponsive"*, and the
-temptation will be to fix that by tuning swing timings in `PlayerStats`
-(`attackStartupTicks` / `attackActiveTicks` / `attackRecoveryTicks`) — which would be tuning the
-wrong variable and would bake a latency workaround into the game's feel.
+The authoritative player portion of side/up/down melee, ground pound, and damaging dash now uses
+Fusion 2.0.12 historical box queries. Enemy detection remains current-tick Box2D. Physical
+projectiles also remain current-tick because the installed Fusion version has no swept-projectile
+query and combining historical players with live wall triggers is not safe.
 
-**Where.** `PlayerCombat.ApplyMeleeHits()` uses a raw `Physics2D.OverlapBoxAll(...)` inside the
-authoritative tick. Fusion ships `Runner.LagCompensation` precisely so that a client's hit is
-evaluated against where the target *was on the attacker's screen*, rather than where the target
-is on the server right now.
-
-**Notes for whoever picks this up:**
-
-- The swing itself is already modelled correctly — `SwingPhase.Resolve` derives the phase from
-  the start tick, so it predicts and resimulates properly. Only the *query* needs changing.
-- Lag compensation requires targets to have Fusion `Hitbox` components; today the query relies on
-  `attackableLayer` + `Collider2D`. That is the bulk of the work.
-- `Projectile.cs` performs its own overlap check and has the same issue; fix both together so
-  melee and projectiles agree.
-- Keep the existing per-attacker rapid-hit ledger (`hitLedger` in `PlayerStatsHandler`) — it is
-  correct and orthogonal to this change.
-
-**Cheaper interim option** if the `Hitbox` migration is too large before the test: slightly
-enlarge the melee box and note it as a known limitation, so that feel feedback is at least not
-dominated by ping.
+The implementation, switch, capacity calculation, diagnostics, rollback steps, automated coverage,
+and required two-client latency matrix are documented in
+[`lag-compensation-testing-guide.md`](lag-compensation-testing-guide.md). Do not change this item to
+done until that matrix demonstrates better high-latency registration without low-latency
+regressions, duplicate damage, invalid friendly hits, or wall penetration.
 
 ---
 
