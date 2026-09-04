@@ -77,10 +77,20 @@ public class MainMenuUI : MonoBehaviour
 
         PlayerPrefs.SetString(NicknamePref, Nickname);
         PlayerPrefs.Save();
-        SetBusy(true);
-        ShowStatus(asHost ? "Starting host..." : "Connecting...");
+        ShowConnecting(asHost);
         if (asHost) networkManager.StartHost();
         else networkManager.StartClient();
+    }
+
+    /// <summary>
+    /// Busy state + the connect-in-progress status line. Also re-applied by GameNetworkManager after
+    /// it rebuilds the runner for a retry, because that teardown routes a shutdown callback through
+    /// ShowStatus and would otherwise leave "Disconnected: Ok" on screen during the new attempt.
+    /// </summary>
+    public void ShowConnecting(bool asHost)
+    {
+        SetBusy(true);
+        ShowStatus(asHost ? "Starting host..." : "Connecting...");
     }
 
     /// <summary>
