@@ -3,6 +3,7 @@ using Fusion;
 using Fusion.Addons.Physics;
 using Fusion.Sockets;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Game.Match.Core;
@@ -43,6 +44,12 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     // on a real disconnect, so a shared GameObject would let a genuine drop destroy
     // GameNetworkManager and ReconnectController (with its in-flight retry coroutine) mid-reconnect.
     private GameObject runnerObject;
+
+    // True once StartGame has been called on the CURRENT runner. Fusion's NetworkRunner is single
+    // use: the second StartGame on one instance returns ShutdownReason.OperationCanceled without
+    // touching the network ("Failed: NetworkRunner should not be reused."). See RunnerLifecyclePolicy.
+    private bool runnerConsumed;
+
     private NetworkSceneManagerDefault sceneManager;
     private PooledNetworkObjectProvider objectProvider;
     private RunnerSimulatePhysics2D simulatePhysics;
@@ -159,6 +166,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         runnerObject.transform.SetParent(transform, false);
 
         runner = runnerObject.AddComponent<NetworkRunner>();
+        runnerConsumed = false;
 
         // Fusion steps Physics2D inside the network tick (required for NetworkRigidbody2D prediction).
         // ClientPhysicsSimulation defaults to Disabled, which means CLIENTS never call
@@ -202,6 +210,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (runner != null) runner.Shutdown(destroyGameObject: false);
 
         runner = null;
+        runnerConsumed = false;
         simulatePhysics = null;
         objectProvider = null;
         sceneManager = null;
@@ -215,7 +224,53 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     // Connection entry points (menuUI buttons call these)
     // ============================
 
-    public async void StartHost()
+    public void StartHost() => StartCoroutine(ConnectRoutine(asHost: true));
+
+    public void StartClient() => StartCoroutine(ConnectRoutine(asHost: false));
+
+    /// <summary>
+    /// Every menu-initiated connection attempt, on a runner that has never been started.
+    ///
+    /// The menu leaves Join/Host clickable after a failed attempt, but the runner that attempt
+    /// consumed can never be started again — Fusion answers the second StartGame with
+    /// ShutdownReason.OperationCanceled and no network traffic at all. Without the rebuild below,
+    /// one failed connect (a server that is restarting, say) bricks Join AND Host with
+    /// "OperationCanceled" until the player relaunches the game.
+    /// </summary>
+    private IEnumerator ConnectRoutine(bool asHost)
+    {
+        if (RunnerLifecyclePolicy.NeedsRebuild(runner != null, runnerConsumed))
+        {
+            // Latch BEFORE tearing down: TeardownRunner -> runner.Shutdown() re-enters OnShutdown,
+            // and this attempt's shutdown must go to the menu, never to the reconnect loop.
+            MarkIntentionalDisconnect();
+            TeardownRunner();
+
+            // OnShutdown ran on the way through: it wrote "Disconnected: …" over the caller's status
+            // line and re-enabled Join/Host. Re-assert the connecting state BEFORE yielding, so the
+            // rebuild frame cannot be interrupted by a second click.
+            if (menuUI != null) menuUI.ShowConnecting(asHost);
+
+            yield return null;      // Unity defers Destroy to end of frame; rebuild next frame
+            BuildRunner();
+        }
+
+        if (runner == null)
+        {
+            Debug.LogError("❌ Cannot connect: the network runner could not be created.");
+            if (menuUI != null)
+            {
+                menuUI.ShowStatus("Cannot connect: network runner unavailable.");
+                menuUI.SetBusy(false);
+            }
+            yield break;
+        }
+
+        if (asHost) StartHostInternal();
+        else StartClientInternal();
+    }
+
+    private async void StartHostInternal()
     {
         startedAsClient = false;
         intentionalDisconnect = false;
@@ -233,6 +288,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             ConnectionToken = PlayerIdentity.TokenBytes
         };
 
+        runnerConsumed = true;
         var result = await runner.StartGame(args);
 
         if (result.Ok)
@@ -251,7 +307,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
-    public async void StartClient()
+    private async void StartClientInternal()
     {
         startedAsClient = true;
         intentionalDisconnect = false;
@@ -269,6 +325,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             ConnectionToken = PlayerIdentity.TokenBytes
         };
 
+        runnerConsumed = true;
         var result = await runner.StartGame(args);
 
         if (result.Ok)
@@ -309,6 +366,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (endpoint.RelayOnly)
             args.DisableNATPunchthrough = true;
 
+        runnerConsumed = true;
         var result = await runner.StartGame(args);
 
         if (result.Ok)
@@ -363,6 +421,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             ConnectionToken = PlayerIdentity.TokenBytes
         };
 
+        runnerConsumed = true;
         var result = await runner.StartGame(args);
         return result.Ok;
     }
@@ -590,6 +649,17 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     }
 
     /// <summary>
+    /// The server's OWN player id when the server is also a player (GameMode.Host), else
+    /// LobbyHostPolicy.NoHost. Fusion marks a dedicated server's LocalPlayer as not-a-real-player,
+    /// which is exactly the host/dedicated distinction the designation needs. Meaningful only on the
+    /// server, so the IsServer guard makes a client-side read return NoHost rather than its own id.
+    /// </summary>
+    private int ServerPlayerId =>
+        runner != null && runner.IsServer && runner.LocalPlayer.IsRealPlayer
+            ? runner.LocalPlayer.PlayerId
+            : LobbyHostPolicy.NoHost;
+
+    /// <summary>
     /// Server-only: encode one snapshot and send it to every remote player; a host-as-player
     /// applies it to its own LobbyScreenUI directly (same snapshot, no wire trip).
     /// </summary>
@@ -597,7 +667,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         if (runner == null || !runner.IsServer) return;
 
-        var snap = serverLobby.BuildSnapshot(maxPlayers);
+        var snap = serverLobby.BuildSnapshot(maxPlayers, ServerPlayerId);
         byte[] payload = LobbyProtocol.EncodeLobbyState(snap);
 
         foreach (var p in runner.ActivePlayers)
@@ -960,7 +1030,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             {
                 // Only the designated host-client may start, and only when the gate allows it.
                 if (!gameStarting
-                    && player.PlayerId == serverLobby.CurrentHostId()
+                    && player.PlayerId == serverLobby.CurrentHostId(ServerPlayerId)
                     && LobbyHostPolicy.CanStart(serverLobby.PlayerCount))
                 {
                     gameStarting = true;
