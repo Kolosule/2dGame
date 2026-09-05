@@ -649,6 +649,17 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     }
 
     /// <summary>
+    /// The server's OWN player id when the server is also a player (GameMode.Host), else
+    /// LobbyHostPolicy.NoHost. Fusion marks a dedicated server's LocalPlayer as not-a-real-player,
+    /// which is exactly the host/dedicated distinction the designation needs. Meaningful only on the
+    /// server, so the IsServer guard makes a client-side read return NoHost rather than its own id.
+    /// </summary>
+    private int ServerPlayerId =>
+        runner != null && runner.IsServer && runner.LocalPlayer.IsRealPlayer
+            ? runner.LocalPlayer.PlayerId
+            : LobbyHostPolicy.NoHost;
+
+    /// <summary>
     /// Server-only: encode one snapshot and send it to every remote player; a host-as-player
     /// applies it to its own LobbyScreenUI directly (same snapshot, no wire trip).
     /// </summary>
@@ -656,7 +667,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         if (runner == null || !runner.IsServer) return;
 
-        var snap = serverLobby.BuildSnapshot(maxPlayers);
+        var snap = serverLobby.BuildSnapshot(maxPlayers, ServerPlayerId);
         byte[] payload = LobbyProtocol.EncodeLobbyState(snap);
 
         foreach (var p in runner.ActivePlayers)
@@ -1019,7 +1030,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             {
                 // Only the designated host-client may start, and only when the gate allows it.
                 if (!gameStarting
-                    && player.PlayerId == serverLobby.CurrentHostId()
+                    && player.PlayerId == serverLobby.CurrentHostId(ServerPlayerId)
                     && LobbyHostPolicy.CanStart(serverLobby.PlayerCount))
                 {
                     gameStarting = true;

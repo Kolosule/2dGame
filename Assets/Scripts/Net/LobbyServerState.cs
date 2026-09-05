@@ -4,7 +4,7 @@ using System.Collections.Generic;
 /// Server-side lobby roster + rules. Pure C# — player ids are plain ints (mapping from
 /// Fusion's PlayerRef.PlayerId is GameNetworkManager's job) so this is unit-testable.
 /// Owns: balanced team auto-assign on join (smaller team wins, tie -> team 1), optional
-/// team switching, nickname storage, host designation (LobbyHostPolicy: lowest id) and
+/// team switching, nickname storage, host designation (LobbyHostPolicy) and
 /// the start gate (>= 1 player).
 /// </summary>
 public class LobbyServerState
@@ -76,19 +76,24 @@ public class LobbyServerState
 
     public int TeamOf(int id) => players.TryGetValue(id, out var e) ? e.Team : 0;
 
-    public int CurrentHostId()
+    /// <summary>
+    /// The designated host. <paramref name="serverPlayerId"/> is the server's own player id in host
+    /// mode, or LobbyHostPolicy.NoHost on a dedicated server — see LobbyHostPolicy for why it cannot
+    /// be derived from the roster.
+    /// </summary>
+    public int CurrentHostId(int serverPlayerId)
     {
         var ids = new List<int>(players.Keys);
-        return LobbyHostPolicy.DesignateHostId(ids);
+        return LobbyHostPolicy.DesignateHostId(ids, serverPlayerId);
     }
 
-    public LobbyStateSnapshot BuildSnapshot(int maxPlayers)
+    public LobbyStateSnapshot BuildSnapshot(int maxPlayers, int serverPlayerId)
     {
         var s = new LobbyStateSnapshot
         {
             CanStart = LobbyHostPolicy.CanStart(players.Count),
             MaxPlayers = maxPlayers,
-            HostId = CurrentHostId(),
+            HostId = CurrentHostId(serverPlayerId),
         };
         foreach (var kv in players)
             s.Players.Add(new LobbyPlayerEntry(kv.Key, kv.Value.Name, kv.Value.Team));

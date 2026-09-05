@@ -30,6 +30,19 @@ public class MatchManager : NetworkBehaviour
     // One timer reused per timed phase; its networked so clients/late-joiners see remaining time.
     [Networked] private TickTimer PhaseTimer { get; set; }
 
+    /// <summary>
+    /// The designated host's player id, or LobbyHostPolicy.NoHost. Written by the state authority
+    /// (the server) and replicated, because NO client can work this out for itself: in host mode the
+    /// host is simply the player Fusion gave the last PlayerRef index, and Fusion exposes no way to
+    /// identify the server's player from a remote peer. Recomputing it locally handed the host's
+    /// authority to the first client that joined.
+    /// </summary>
+    [Networked] public int HostPlayerId { get; set; }
+
+    // Reused by the per-tick host resolve so the server does not allocate a list every tick.
+    private readonly System.Collections.Generic.List<int> activeIdScratch =
+        new System.Collections.Generic.List<int>();
+
     /// <summary>Fires on every phase change (all peers, via OnChangedRender). HUD subscribes.</summary>
     public event Action PhaseChanged;
 
@@ -67,7 +80,12 @@ public class MatchManager : NetworkBehaviour
     public override void Spawned()
     {
         if (HasStateAuthority)
+        {
+            // Seed before the first replication so clients never observe the default 0, which would
+            // otherwise read as "player 0 is the host".
+            HostPlayerId = ResolveHostId();
             EnterPhase(MatchPhase.Warmup);
+        }
 
         // Late-joiner reconcile: render the current phase immediately (mirrors the old
         // OnGameOverChanged-from-Spawned pattern).
@@ -77,6 +95,10 @@ public class MatchManager : NetworkBehaviour
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
+
+        // Before the timer early-outs below: the roster changes on any join or leave, and a host
+        // that drops must hand the designation on.
+        HostPlayerId = ResolveHostId();
 
         // TickTimer.None never expires, which is what makes an uncapped SuddenDeath and
         // Intermission inert without a special case here.
@@ -169,15 +191,33 @@ public class MatchManager : NetworkBehaviour
         EnterPhase(MatchPhase.Intermission);
     }
 
-    /// <summary>True on the peer whose local player is the designated host (lowest active PlayerId).</summary>
+    /// <summary>True on the peer whose local player is the designated host.</summary>
     public bool LocalPlayerIsHost() => Runner != null && IsHost(Runner.LocalPlayer);
 
     private bool IsHost(PlayerRef p)
     {
-        if (Runner == null || p == PlayerRef.None) return false;
-        var ids = new System.Collections.Generic.List<int>();
-        foreach (var active in Runner.ActivePlayers) ids.Add(active.PlayerId);
-        return LobbyHostPolicy.DesignateHostId(ids) == p.PlayerId;
+        if (Runner == null || p == PlayerRef.None || !p.IsRealPlayer) return false;
+        if (HostPlayerId == LobbyHostPolicy.NoHost) return false;
+        return HostPlayerId == p.PlayerId;
+    }
+
+    /// <summary>
+    /// State-authority-only. Mirrors the lobby's rule (LobbyHostPolicy) so the in-match host and the
+    /// lobby host can never disagree. On the state authority — and only there — LocalPlayer
+    /// distinguishes a host (a real player) from a dedicated server (not one).
+    /// </summary>
+    private int ResolveHostId()
+    {
+        if (Runner == null) return LobbyHostPolicy.NoHost;
+
+        activeIdScratch.Clear();
+        foreach (var active in Runner.ActivePlayers) activeIdScratch.Add(active.PlayerId);
+
+        int serverPlayerId = Runner.LocalPlayer.IsRealPlayer
+            ? Runner.LocalPlayer.PlayerId
+            : LobbyHostPolicy.NoHost;
+
+        return LobbyHostPolicy.DesignateHostId(activeIdScratch, serverPlayerId);
     }
 
     /// <summary>

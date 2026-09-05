@@ -53,7 +53,7 @@ public class LobbyServerStateTests
         Assert.IsTrue(s.SetNickname(7, "  Ann  "));
         Assert.IsFalse(s.SetNickname(7, "Ann"));   // unchanged
         Assert.IsFalse(s.SetNickname(99, "Bob"));  // unknown player
-        var snap = s.BuildSnapshot(20);
+        var snap = s.BuildSnapshot(20, LobbyHostPolicy.NoHost);
         Assert.AreEqual("Ann", snap.Players[0].Name);
     }
 
@@ -61,32 +61,58 @@ public class LobbyServerStateTests
     public void CurrentHostId_LowestId_ReresolvesOnLeave()
     {
         var s = new LobbyServerState();
-        Assert.AreEqual(LobbyHostPolicy.NoHost, s.CurrentHostId());
+        Assert.AreEqual(LobbyHostPolicy.NoHost, s.CurrentHostId(LobbyHostPolicy.NoHost));
         s.PlayerJoined(4);
         s.PlayerJoined(2);
         s.PlayerJoined(7);
-        Assert.AreEqual(2, s.CurrentHostId());
+        Assert.AreEqual(2, s.CurrentHostId(LobbyHostPolicy.NoHost));
         s.PlayerLeft(2);
-        Assert.AreEqual(4, s.CurrentHostId());
+        Assert.AreEqual(4, s.CurrentHostId(LobbyHostPolicy.NoHost));
+    }
+
+    [Test]
+    public void CurrentHostId_HostMode_ServerPlayerKeepsLobbyDespiteHigherId()
+    {
+        // Fusion seats the host player at the LAST index, so the lowest-id rule alone would hand a
+        // host's own lobby to the first client that joined it.
+        var s = new LobbyServerState();
+        s.PlayerJoined(19); // the host itself
+        Assert.AreEqual(19, s.CurrentHostId(19));
+        s.PlayerJoined(0);  // first client
+        Assert.AreEqual(19, s.CurrentHostId(19));
+
+        // ...and once the host is gone the lobby falls back to the lowest remaining id.
+        s.PlayerLeft(19);
+        Assert.AreEqual(0, s.CurrentHostId(19));
     }
 
     [Test]
     public void BuildSnapshot_ContentsAndGate()
     {
         var s = new LobbyServerState();
-        var empty = s.BuildSnapshot(20);
+        var empty = s.BuildSnapshot(20, LobbyHostPolicy.NoHost);
         Assert.IsFalse(empty.CanStart);
         Assert.AreEqual(20, empty.MaxPlayers);
 
         s.PlayerJoined(5);
         s.PlayerJoined(3);
-        var snap = s.BuildSnapshot(20);
+        var snap = s.BuildSnapshot(20, LobbyHostPolicy.NoHost);
         Assert.IsTrue(snap.CanStart);
         Assert.AreEqual(3, snap.HostId);
         Assert.AreEqual(2, snap.Players.Count);
         Assert.AreEqual(3, snap.Players[0].Id); // ascending id order
         Assert.AreEqual(5, snap.Players[1].Id);
         Assert.AreEqual("Player 5", snap.Players[1].Name);
+    }
+
+    [Test]
+    public void BuildSnapshot_HostMode_ReportsServerPlayerAsHost()
+    {
+        var s = new LobbyServerState();
+        s.PlayerJoined(19);
+        s.PlayerJoined(0);
+        var snap = s.BuildSnapshot(20, 19);
+        Assert.AreEqual(19, snap.HostId);
     }
 
     [Test]
