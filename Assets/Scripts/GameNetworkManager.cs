@@ -177,10 +177,19 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         // Fusion steps Physics2D inside the network tick (required for NetworkRigidbody2D prediction).
         // ClientPhysicsSimulation defaults to Disabled, which means CLIENTS never call
-        // Physics.Simulate() and so never integrate their own rigidbody forward — SimulateForward
-        // enables client-side prediction of the local player's position.
+        // Physics.Simulate() and so never integrate their own rigidbody forward.
+        //
+        // SimulateAlways (not SimulateForward) is required for real position prediction. Before every
+        // resimulation NetworkRigidbody resets the predicted body to the last server-confirmed state
+        // (NetworkRigidbodyBase.Copy.cs BeforeAllTicks). SimulateForward then calls only
+        // SyncTransforms() on those resim ticks (RunnerSimulatePhysicsBase.CanSimulatePhysics), so
+        // PlayerMovement.Simulate sets linearVelocity but the body never integrates — the client
+        // loses every resim tick of motion and only the single forward tick actually moves it. The
+        // resulting snap is speed * ping, which is why dashing (the fastest state) felt worst.
+        // SimulateAlways re-integrates each resim tick so the prediction converges on the server.
+        // Cost: one extra full-scene Physics2D.Simulate() per resim tick; profile at full playercount.
         simulatePhysics = runnerObject.AddComponent<RunnerSimulatePhysics2D>();
-        simulatePhysics.ClientPhysicsSimulation = ClientPhysicsSimulation.SimulateForward;
+        simulatePhysics.ClientPhysicsSimulation = ClientPhysicsSimulation.SimulateAlways;
 
         // Pool high-churn networked prefabs (projectiles) instead of Instantiate/Destroy each shot.
         objectProvider = runnerObject.AddComponent<PooledNetworkObjectProvider>();
