@@ -55,6 +55,12 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private RunnerSimulatePhysics2D simulatePhysics;
     private NetworkInputProvider inputProvider;
     private LobbyServerState serverLobby = new LobbyServerState();
+
+    // Server-only. Owns the single "record a display name" rule shared by the host shortcut, the
+    // client NAME message and the reconnect restore, plus the latched menu nickname of the local
+    // (host) player, who never sends one over the wire. See ServerSetNickname.
+    private readonly LobbyNicknameBook nicknames = new LobbyNicknameBook();
+
     private bool gameStarting = false;
 
     // Server-only. Token -> state preserved for players who dropped mid-match, held for the REST OF
@@ -129,6 +135,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         LobbyNicknameChoices.Clear();
         LobbyLoadoutChoices.Clear();
         serverLobby = new LobbyServerState();
+        nicknames.Reset();
         gameStarting = false;
 
         if (boot == NetworkBootKind.DedicatedServer)
@@ -489,9 +496,15 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (runner.IsServer)
         {
+            // Latch it FIRST, unconditionally. This runs from EnterLobbyUI, i.e. after the await on
+            // StartGame — which is not ordered against OnPlayerJoined, so the local player may not be
+            // seated yet. The host never re-sends their name, so a nickname applied while unseated
+            // would be lost for the whole session; ServerHandleJoin re-applies it from here instead.
+            nicknames.RememberLocal(nick);
+
             if (runner.LocalPlayer != PlayerRef.None)
             {
-                serverLobby.SetNickname(runner.LocalPlayer.PlayerId, nick);
+                ServerSetNickname(runner.LocalPlayer, nick);
                 BroadcastLobby(); // refresh even if unchanged so the just-shown UI gets a snapshot
             }
         }
@@ -589,10 +602,9 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (reconnectRegistry.TryClaim(token, out ReconnectHeldSlot held))
         {
             int heldTeam = serverLobby.PlayerJoinedOnTeam(player.PlayerId, held.Team);
-            serverLobby.SetNickname(player.PlayerId, held.DisplayName);
 
             LobbyTeamChoices.Set(player, heldTeam);
-            LobbyNicknameChoices.Set(player, held.DisplayName);
+            ServerSetNickname(player, held.DisplayName);
             if (held.LoadoutOrder != null && held.LoadoutOrder.Length > 0)
                 LobbyLoadoutChoices.Set(player, held.LoadoutOrder);
 
@@ -607,8 +619,47 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         int team = serverLobby.PlayerJoined(player.PlayerId);
         LobbyTeamChoices.Set(player, team);
-        LobbyNicknameChoices.Set(player, LobbyProtocol.PlaceholderName(player.PlayerId));
+        // The local (host) player types their nickname in the menu instead of sending a NAME message,
+        // and SendLocalNickname may already have run — apply the latched value HERE so the host's
+        // real name lands in both stores whichever of the two ran first. Every other joiner gets ""
+        // (their NAME message arrives later), which is a no-op that mirrors the "Player N"
+        // placeholder PlayerJoined just seeded. A dedicated server has no local player, so it never
+        // takes the latched branch.
+        ServerSetNickname(player, nicknames.JoinNickname(IsLocalPlayer(player)));
         if (!gameStarting) BroadcastLobby();
+    }
+
+    /// <summary>True for the host's own player; always false on a dedicated server (LocalPlayer is
+    /// PlayerRef.None there, which no real joiner ever matches).</summary>
+    private bool IsLocalPlayer(PlayerRef player) =>
+        runner != null && runner.LocalPlayer != PlayerRef.None && player == runner.LocalPlayer;
+
+    /// <summary>
+    /// Server-only. THE one place a player's display name is written. Updates the lobby roster (what
+    /// LobbyScreenUI renders) AND LobbyNicknameChoices (what survives the scene load and becomes the
+    /// scoreboard name), so the two cannot drift — the host used to write only the first and reached
+    /// the scoreboard as "Player 1".
+    ///
+    /// Mirroring is deliberately unconditional: "the roster did not change" still means the handoff
+    /// store must agree with the roster. An empty/whitespace nickname is a no-op on the roster
+    /// (LobbyServerState.SetNickname keeps the current name), so it mirrors the "Player N"
+    /// placeholder rather than a blank.
+    ///
+    /// Returns true when the roster name actually changed, i.e. when a broadcast is worth sending.
+    /// The caller owns that decision: the host path refreshes even when nothing changed.
+    /// </summary>
+    private bool ServerSetNickname(PlayerRef player, string raw)
+    {
+        if (runner == null || !runner.IsServer || player == PlayerRef.None) return false;
+
+        // Not seated yet — there is nothing to mirror, and for the local player ServerHandleJoin
+        // will re-apply the latched nickname the moment they are.
+        if (!nicknames.TryRecord(serverLobby, player.PlayerId, raw,
+                                 out string displayName, out bool rosterChanged))
+            return false;
+
+        LobbyNicknameChoices.Set(player, displayName);
+        return rosterChanged;
     }
 
     /// <summary>
@@ -893,6 +944,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         LobbyNicknameChoices.Clear();
         LobbyLoadoutChoices.Clear();
         serverLobby = new LobbyServerState();
+        nicknames.Reset();
         gameStarting = false;
     }
 
@@ -1009,11 +1061,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             {
                 if (data.Array == null) return;
                 if (!LobbyProtocol.TryDecodeNickname(data.Array, data.Offset, data.Count, out string name)) return;
-                if (serverLobby.SetNickname(player.PlayerId, name))
-                {
-                    LobbyNicknameChoices.Set(player, name);
-                    if (!gameStarting) BroadcastLobby();
-                }
+                if (ServerSetNickname(player, name) && !gameStarting) BroadcastLobby();
                 return;
             }
 
@@ -1113,6 +1161,11 @@ public static class LobbyTeamChoices
 /// Per-player display name collected during the lobby (placeholder on join, updated on nickname
 /// change), keyed by PlayerRef, parallel to LobbyTeamChoices. Survives the menu -> gameplay scene
 /// load. NetworkedSpawnManager reads this to register each player's MatchStatsManager entry.
+///
+/// This is a MIRROR of LobbyServerState's roster name, not a second source of truth: write it only
+/// through GameNetworkManager.ServerSetNickname, which updates both together. Writing it directly is
+/// how the host ended up on the scoreboard as "Player 1" while the lobby screen showed their real
+/// name.
 /// </summary>
 public static class LobbyNicknameChoices
 {
