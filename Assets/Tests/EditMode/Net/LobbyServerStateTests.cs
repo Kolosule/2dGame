@@ -58,6 +58,27 @@ public class LobbyServerStateTests
     }
 
     [Test]
+    public void NameOf_ReportsTheRosterNameThatMustBeMirrored()
+    {
+        var s = new LobbyServerState();
+        Assert.AreEqual("", s.NameOf(7), "not seated");
+
+        s.PlayerJoined(7);
+        Assert.AreEqual("Player 7", s.NameOf(7));
+
+        s.SetNickname(7, "Ann");
+        Assert.AreEqual("Ann", s.NameOf(7));
+
+        // A rejected (empty) nickname must still report the CURRENT name, not the submitted one —
+        // that is what keeps a blank off the scoreboard.
+        s.SetNickname(7, "  ");
+        Assert.AreEqual("Ann", s.NameOf(7));
+
+        s.PlayerLeft(7);
+        Assert.AreEqual("", s.NameOf(7));
+    }
+
+    [Test]
     public void CurrentHostId_LowestId_ReresolvesOnLeave()
     {
         var s = new LobbyServerState();

@@ -65,6 +65,13 @@ public class LobbyServerState
         return true;
     }
 
+    /// <summary>
+    /// The player's current roster name, or "" when they are not seated. The authoritative display
+    /// name: LobbyNicknameBook mirrors THIS into the scene-load handoff store rather than the raw
+    /// nickname that was submitted, so a rejected (empty) nickname still mirrors "Player N".
+    /// </summary>
+    public string NameOf(int id) => players.TryGetValue(id, out var e) ? e.Name : "";
+
     /// <summary>True only if the player exists, team is 1|2, and it differs from their current team.</summary>
     public bool SwitchTeam(int id, int team)
     {
