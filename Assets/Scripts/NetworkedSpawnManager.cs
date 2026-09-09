@@ -7,7 +7,7 @@ using System.Linq;
 
 /// <summary>
 /// Spawns each player on the team they picked, with no timed poll and no auto-balance race. Team
-/// choices are collected by the host during the lobby (see GameNetworkManager / LobbyTeamChoices)
+/// choices are collected by GameNetworkManager in its session-owned handoff during the lobby
 /// BEFORE the Gameplay scene is loaded, so by the time this manager spawns every player's choice is
 /// already known authoritatively on the host. A player is spawned as soon as they are an active
 /// member of the session AND a lobby choice exists for them; auto-balance remains only as a
@@ -167,7 +167,15 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        if (!LobbyTeamChoices.TryGet(player, out int choice))
+        GameNetworkManager sessionOwner = GameNetworkManager.Instance;
+        if (sessionOwner == null || !sessionOwner.OwnsRunner(Runner))
+        {
+            Debug.LogError($"Cannot spawn Player {player.PlayerId}: no GameNetworkManager owns this " +
+                           "runner's lobby handoff.", this);
+            return;
+        }
+
+        if (!sessionOwner.TryGetLobbyTeam(player, out int choice))
         {
             // The lobby gate normally guarantees a choice before gameplay loads; reaching here means
             // an unexpected late joiner with no recorded choice. AssignTeam auto-balances them.
@@ -178,8 +186,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             // hold for this player means GameNetworkManager.OnPlayerJoined has NOT run for them, so
             // the hold will never be claimed: they are about to be auto-balanced onto an arbitrary
             // team with none of their state restored, while their held seat stays reserved forever.
-            if (GameNetworkManager.Instance != null &&
-                GameNetworkManager.Instance.ServerHasUnclaimedHold(player))
+            if (sessionOwner.ServerHasUnclaimedHold(player))
             {
                 Debug.LogError($"Player {player.PlayerId} has no lobby team choice but still has an " +
                                "unclaimed reconnect hold — callback order changed; GameNetworkManager must " +
@@ -194,17 +201,16 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         // exists (join and spawn can be a whole scene load apart). Consume it once, here, so both
         // the spawn callback and the stats registration below can use it.
         ReconnectHeldSlot restore = null;
-        if (GameNetworkManager.Instance != null)
-            GameNetworkManager.Instance.TryConsumeRestore(player, out restore);
+        sessionOwner.TryConsumeRestore(player, out restore);
 
         int team = AssignTeam(player, choice);
 
         Vector3 spawnPosition = GetSpawnPosition(team);
-        SpawnPlayer(Runner, player, spawnPosition, team, restore);
+        SpawnPlayer(Runner, player, spawnPosition, team, sessionOwner, restore);
 
         if (MatchStatsManager.Instance != null)
         {
-            if (!LobbyNicknameChoices.TryGet(player, out string name) || string.IsNullOrEmpty(name))
+            if (!sessionOwner.TryGetLobbyNickname(player, out string name) || string.IsNullOrEmpty(name))
                 name = LobbyProtocol.PlaceholderName(player.PlayerId);
 
             if (restore != null)
@@ -215,7 +221,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     }
 
     private void SpawnPlayer(NetworkRunner runner, PlayerRef player, Vector3 spawnPosition, int team,
-                             ReconnectHeldSlot restore)
+                             GameNetworkManager sessionOwner, ReconnectHeldSlot restore)
     {
         if (playerPrefab == null)
         {
@@ -229,7 +235,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             spawnPosition,
             Quaternion.identity,
             player,
-            (runner, obj) => OnPlayerSpawned(runner, obj, team, restore)
+            (runner, obj) => OnPlayerSpawned(runner, obj, team, sessionOwner, restore)
         );
 
         if (spawnedObject == null)
@@ -243,12 +249,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
                 else if (team == 2) team2Count--;
             }
             // Park the restore again so the retry still restores them.
-            if (restore != null && GameNetworkManager.Instance != null)
-                GameNetworkManager.Instance.ReturnRestore(player, restore);
+            if (restore != null)
+                sessionOwner.ReturnRestore(player, restore);
         }
     }
 
-    private void OnPlayerSpawned(NetworkRunner runner, NetworkObject obj, int team, ReconnectHeldSlot restore)
+    private void OnPlayerSpawned(NetworkRunner runner, NetworkObject obj, int team,
+                                 GameNetworkManager sessionOwner, ReconnectHeldSlot restore)
     {
         // Register this object as the player's canonical player-object. Fusion replicates the
         // association to every peer, so Runner.TryGetPlayerObject(playerRef) resolves on clients
@@ -269,7 +276,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         PlayerBuffs buffs = obj.GetComponent<PlayerBuffs>();
         if (buffs != null)
         {
-            if (LobbyLoadoutChoices.TryGet(obj.InputAuthority, out byte[] order))
+            if (sessionOwner.TryGetLobbyLoadout(obj.InputAuthority, out byte[] order))
                 buffs.ServerInitLoadout(order);
             // If no lobby choice, PlayerBuffs.Spawned applies the config default order.
 

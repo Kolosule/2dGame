@@ -16,7 +16,7 @@ using Game.Match.Core;
 /// (lowest PlayerId — the first joiner) gets the Start button and may start whenever at least
 /// one player is connected. In host mode the host's own UI is fed the same snapshot through a
 /// local loopback, so both modes share one rendering path (LobbyScreenUI.ApplyLobbyState).
-/// Team/loadout results land in LobbyTeamChoices/LobbyLoadoutChoices for NetworkedSpawnManager.
+/// Lobby choices are projected into this session's LobbySessionHandoff for NetworkedSpawnManager.
 /// </summary>
 public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 {
@@ -55,6 +55,9 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private RunnerSimulatePhysics2D simulatePhysics;
     private NetworkInputProvider inputProvider;
     private LobbyServerState serverLobby = new LobbyServerState();
+
+    // This persistent owner, not a scene or runner, owns the projection used at spawn time.
+    private readonly LobbySessionHandoff lobbyHandoff = new LobbySessionHandoff();
 
     // Server-only. Owns the single "record a display name" rule shared by the host shortcut, the
     // client NAME message and the reconnect restore, plus the latched menu nickname of the local
@@ -131,9 +134,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         BuildRunner();
 
-        LobbyTeamChoices.Clear();
-        LobbyNicknameChoices.Clear();
-        LobbyLoadoutChoices.Clear();
+        lobbyHandoff.Reset();
         serverLobby = new LobbyServerState();
         nicknames.Reset();
         gameStarting = false;
@@ -286,12 +287,19 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         else StartClientInternal();
     }
 
-    private async void StartHostInternal()
+    /// <summary>A fresh logical session, unlike TryReconnectAsync on a replacement runner.</summary>
+    private void BeginSession(bool asClient)
     {
-        startedAsClient = false;
+        lobbyHandoff.Reset();
+        startedAsClient = asClient;
         intentionalDisconnect = false;
         hasBeenConnected = false;
         connectedSessionName = null;
+    }
+
+    private async void StartHostInternal()
+    {
+        BeginSession(asClient: false);
         var args = new StartGameArgs()
         {
             GameMode = GameMode.Host, // AutoHostOrClient creates separate sessions — never use it here
@@ -325,10 +333,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     private async void StartClientInternal()
     {
-        startedAsClient = true;
-        intentionalDisconnect = false;
-        hasBeenConnected = false;
-        connectedSessionName = null;
+        BeginSession(asClient: true);
         var args = new StartGameArgs()
         {
             GameMode = GameMode.Client,
@@ -362,10 +367,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     async void StartServer(DedicatedServerEndpointConfig endpoint)
     {
-        startedAsClient = false;
-        intentionalDisconnect = false;
-        hasBeenConnected = false;
-        connectedSessionName = null;
+        BeginSession(asClient: false);
         var args = new StartGameArgs()
         {
             GameMode = GameMode.Server,
@@ -414,6 +416,18 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     }
 
     public int MenuSceneIndex => menuSceneIndex;
+
+    public bool OwnsRunner(NetworkRunner candidate) => candidate != null && candidate == runner;
+
+    // Read-only spawn facade. Writes stay in the authoritative lobby command paths below.
+    public bool TryGetLobbyTeam(PlayerRef player, out int team) =>
+        lobbyHandoff.TryGetTeam(player.PlayerId, out team);
+
+    public bool TryGetLobbyNickname(PlayerRef player, out string nickname) =>
+        lobbyHandoff.TryGetNickname(player.PlayerId, out nickname);
+
+    public bool TryGetLobbyLoadout(PlayerRef player, out byte[] order) =>
+        lobbyHandoff.TryGetLoadout(player.PlayerId, out order);
 
     /// <summary>
     /// One reconnect attempt against the session we were actually in, with the same identity token.
@@ -538,7 +552,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             if (runner.LocalPlayer == PlayerRef.None) return; // dedicated server is not a player
             if (serverLobby.SwitchTeam(runner.LocalPlayer.PlayerId, teamNumber))
             {
-                LobbyTeamChoices.Set(runner.LocalPlayer, teamNumber);
+                lobbyHandoff.SetTeam(runner.LocalPlayer.PlayerId, teamNumber);
                 BroadcastLobby();
             }
         }
@@ -561,7 +575,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (order == null || order.Length == 0) return;
 
         if (runner.IsServer)
-            LobbyLoadoutChoices.Set(runner.LocalPlayer, order);
+            lobbyHandoff.SetLoadout(runner.LocalPlayer.PlayerId, order);
         else
             runner.SendReliableDataToServer(LoadoutKey, order);
     }
@@ -592,11 +606,11 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     /// <summary>
     /// Server-only: seat the player in the lobby roster and mirror the result into the handoff
-    /// dictionaries NetworkedSpawnManager reads. Runs for mid-match late joiners too.
+    /// NetworkedSpawnManager reads. Runs for mid-match late joiners too.
     ///
     /// A reconnecting player (a token matching a held slot) reclaims their held team, name, and
     /// loadout instead of being auto-assigned, and their progression is parked in pendingRestores
-    /// for the spawn to consume. Restoration deliberately flows through the SAME three dictionaries
+    /// for the spawn to consume. Restoration deliberately flows through the SAME session handoff
     /// as a normal join, so the spawn path needs no reconnect-specific branch and the lobby
     /// team-pick is skipped implicitly rather than by a special case.
     /// </summary>
@@ -612,10 +626,10 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             int heldTeam = serverLobby.PlayerJoinedOnTeam(player.PlayerId, held.Team);
 
-            LobbyTeamChoices.Set(player, heldTeam);
+            lobbyHandoff.SetTeam(player.PlayerId, heldTeam);
             ServerSetNickname(player, held.DisplayName);
             if (held.LoadoutOrder != null && held.LoadoutOrder.Length > 0)
-                LobbyLoadoutChoices.Set(player, held.LoadoutOrder);
+                lobbyHandoff.SetLoadout(player.PlayerId, held.LoadoutOrder);
 
             pendingRestores[player] = held;
 
@@ -627,7 +641,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         int team = serverLobby.PlayerJoined(player.PlayerId);
-        LobbyTeamChoices.Set(player, team);
+        lobbyHandoff.SetTeam(player.PlayerId, team);
         // The local (host) player types their nickname in the menu instead of sending a NAME message,
         // and SendLocalNickname may already have run — apply the latched value HERE so the host's
         // real name lands in both stores whichever of the two ran first. Every other joiner gets ""
@@ -645,7 +659,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     /// <summary>
     /// Server-only. THE one place a player's display name is written. Updates the lobby roster (what
-    /// LobbyScreenUI renders) AND LobbyNicknameChoices (what survives the scene load and becomes the
+    /// LobbyScreenUI renders) AND the session handoff (what survives the scene load and becomes the
     /// scoreboard name), so the two cannot drift — the host used to write only the first and reached
     /// the scoreboard as "Player 1".
     ///
@@ -667,7 +681,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
                                  out string displayName, out bool rosterChanged))
             return false;
 
-        LobbyNicknameChoices.Set(player, displayName);
+        lobbyHandoff.SetNickname(player.PlayerId, displayName);
         return rosterChanged;
     }
 
@@ -755,6 +769,12 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         if (runner == null || !runner.IsServer) return;
 
+        PrepareReturnToLobby();
+        _ = runner.LoadScene(SceneRef.FromIndex(menuSceneIndex));
+    }
+
+    private void PrepareReturnToLobby()
+    {
         // The match is over: every hold expires here. This is the whole reason the reconnect design
         // needs no grace TickTimer — the match boundary is the timer.
         reconnectRegistry.Clear();
@@ -766,19 +786,19 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // back on the unreliable leave-time GetPlayerConnectionToken this map exists to avoid.
 
         gameStarting = false;
-        _ = runner.LoadScene(SceneRef.FromIndex(menuSceneIndex));
+        // Connected players keep their handoff choices for the next match in this same session.
     }
 
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
-        intentionalDisconnect = true;
+        MarkIntentionalDisconnect();
         if (runner != null) runner.Shutdown(destroyGameObject: false);
     }
 
     void OnApplicationQuit()
     {
-        intentionalDisconnect = true;
+        MarkIntentionalDisconnect();
         if (runner != null) runner.Shutdown(destroyGameObject: false);
     }
 
@@ -788,6 +808,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
+        if (!OwnsRunner(runner)) return;
+
         // DO NOT SPAWN PLAYER HERE — NetworkedSpawnManager in the Gameplay scene handles it.
         if (runner.IsServer)
         {
@@ -810,15 +832,16 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
+        // A deferred leave from an old runner must not remove a new session's reused PlayerId.
+        if (!OwnsRunner(runner)) return;
+
         if (runner.IsServer)
         {
             // FIRST: preserve their state while the lobby records and the avatar still exist.
             ServerCaptureForReconnect(runner, player);
 
             serverLobby.PlayerLeft(player.PlayerId);
-            LobbyTeamChoices.Remove(player);
-            LobbyNicknameChoices.Remove(player);
-            LobbyLoadoutChoices.Remove(player);
+            lobbyHandoff.RemovePlayer(player.PlayerId);
             pendingRestores.Remove(player);
             tokensByPlayer.Remove(player);
             if (!gameStarting) BroadcastLobby();
@@ -833,7 +856,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     /// deposited value is read off it. GameNetworkManager registers its callbacks in Start() on the
     /// persistent object, long before NetworkedSpawnManager.Spawned() registers the callback that
     /// despawns the avatar, so this always runs first on the same runner. The existing JOIN path
-    /// already depends on the same invariant (ServerHandleJoin must fill LobbyTeamChoices before
+    /// already depends on the same invariant (ServerHandleJoin must fill the session handoff before
     /// TrySpawnPlayer reads it), so it is load-bearing in both directions — the LogError below is
     /// the tripwire if it ever changes.
     /// </summary>
@@ -869,13 +892,13 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         var slot = new ReconnectHeldSlot
         {
-            Team = LobbyTeamChoices.TryGet(player, out int team) ? team : serverLobby.TeamOf(player.PlayerId),
-            DisplayName = LobbyNicknameChoices.TryGet(player, out string name) && !string.IsNullOrEmpty(name)
+            Team = lobbyHandoff.TryGetTeam(player.PlayerId, out int team) ? team : serverLobby.TeamOf(player.PlayerId),
+            DisplayName = lobbyHandoff.TryGetNickname(player.PlayerId, out string name) && !string.IsNullOrEmpty(name)
                 ? name
                 : LobbyProtocol.PlaceholderName(player.PlayerId),
             // Without this the rejoiner silently reverts to BuffLoadoutConfig's default priority
-            // order, because LobbyLoadoutChoices.Remove runs moments from now.
-            LoadoutOrder = LobbyLoadoutChoices.TryGet(player, out byte[] order) ? order : null
+            // order, because lobbyHandoff.RemovePlayer runs moments from now.
+            LoadoutOrder = lobbyHandoff.TryGetLoadout(player.PlayerId, out byte[] order) ? order : null
         };
 
         // A stats row is the proof that this player actually spawned. Without one, "no avatar" simply
@@ -916,6 +939,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnConnectedToServer(NetworkRunner runner)
     {
+        if (!OwnsRunner(runner)) return;
         hasBeenConnected = true;
     }
 
@@ -923,16 +947,18 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         // Same stale-callback guard as OnShutdown: a disconnect from a runner the reconnect loop
         // already discarded must not restart the loop on top of a live connection.
-        if (runner != this.runner) return;
+        if (!OwnsRunner(runner)) return;
 
         Debug.LogWarning($"Disconnected from server: {reason}");
-        TryBeginReconnect(reason.ToString());
+        // Fusion may report the disconnect without OnShutdown. Only a retry keeps this session alive.
+        if (!TryBeginReconnect(reason.ToString()))
+            lobbyHandoff.Reset();
     }
 
     /// <summary>
-    /// Session state that must not survive the runner it belongs to. Called from OnShutdown for a
-    /// drop we did not cause, and directly from TeardownRunner for one we did — every operation is
-    /// idempotent, so running it from both on a single teardown is harmless.
+    /// Runner cleanup, called from OnShutdown for a drop we did not cause, and directly from
+    /// TeardownRunner for one we did. The handoff alone survives while retrying the same session;
+    /// all other stores retain their existing runner/match lifetimes. Every reset is idempotent.
     /// </summary>
     private void ShutdownCleanup()
     {
@@ -949,9 +975,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         pendingRestores.Clear();
         tokensByPlayer.Clear();
 
-        LobbyTeamChoices.Clear();
-        LobbyNicknameChoices.Clear();
-        LobbyLoadoutChoices.Clear();
+        if (!ShouldReconnect)
+            lobbyHandoff.Reset();
         serverLobby = new LobbyServerState();
         nicknames.Reset();
         gameStarting = false;
@@ -962,7 +987,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // Fusion supports deferred shutdown, so this can arrive from a runner we already replaced —
         // up to five of them are torn down during one reconnect loop. Acting on a stale callback
         // would clear the LIVE session's state and restart the retry loop on a healthy connection.
-        if (runner != this.runner) return;
+        if (!OwnsRunner(runner)) return;
 
         ShutdownCleanup();
 
@@ -977,6 +1002,9 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
+    private bool ShouldReconnect =>
+        !intentionalDisconnect && hasBeenConnected && startedAsClient && reconnectController != null;
+
     /// <summary>
     /// True when the retry loop took over. Only for a CLIENT that actually got connected and did not
     /// quit on purpose: a dedicated server, a host, and a failed first connect all keep today's
@@ -987,15 +1015,18 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     /// </summary>
     private bool TryBeginReconnect(string reason)
     {
-        if (intentionalDisconnect || !hasBeenConnected || !startedAsClient) return false;
-        if (reconnectController == null) return false;
+        if (!ShouldReconnect) return false;
 
         reconnectController.BeginReconnect(reason);
         return true;
     }
 
-    /// <summary>Marks the next shutdown as ours, so it goes to the menu instead of the retry loop.</summary>
-    public void MarkIntentionalDisconnect() => intentionalDisconnect = true;
+    /// <summary>Ends this logical session, even if its runner has already gone away.</summary>
+    public void MarkIntentionalDisconnect()
+    {
+        intentionalDisconnect = true;
+        lobbyHandoff.Reset();
+    }
 
     public void CancelReconnect()
     {
@@ -1052,6 +1083,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data)
     {
+        if (!OwnsRunner(runner)) return;
+
         if (runner.IsServer)
         {
             if (key == TeamChoiceKey)
@@ -1060,7 +1093,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
                 int team = data.Array[data.Offset];
                 if (serverLobby.SwitchTeam(player.PlayerId, team))
                 {
-                    LobbyTeamChoices.Set(player, team);
+                    lobbyHandoff.SetTeam(player.PlayerId, team);
                     BroadcastLobby();
                 }
                 return;
@@ -1079,7 +1112,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
                 if (data.Count < 1 || data.Array == null) return;
                 var order = new byte[data.Count];
                 Array.Copy(data.Array, data.Offset, order, 0, data.Count);
-                LobbyLoadoutChoices.Set(player, order);
+                lobbyHandoff.SetLoadout(player.PlayerId, order);
                 return;
             }
 
@@ -1115,6 +1148,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnSceneLoadDone(NetworkRunner runner)
     {
+        if (!OwnsRunner(runner)) return;
+
         bool isDedicatedServer = runner.IsServer && runner.LocalPlayer == PlayerRef.None;
         if (isDedicatedServer)
             DedicatedServerPresentation.DisableLoadedScenes();
@@ -1147,54 +1182,4 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
-}
-
-/// <summary>
-/// Per-player team assignments collected during the lobby (auto-assigned on join, updated on
-/// switch), keyed by PlayerRef. Lives on the host/server only and survives the menu -> gameplay
-/// scene load. NetworkedSpawnManager reads this to spawn each player on the right team.
-/// </summary>
-public static class LobbyTeamChoices
-{
-    private static readonly Dictionary<PlayerRef, int> choices = new Dictionary<PlayerRef, int>();
-
-    public static void Set(PlayerRef player, int team) => choices[player] = team;
-    public static bool TryGet(PlayerRef player, out int team) => choices.TryGetValue(player, out team);
-    public static void Remove(PlayerRef player) => choices.Remove(player);
-    public static void Clear() => choices.Clear();
-}
-
-/// <summary>
-/// Per-player display name collected during the lobby (placeholder on join, updated on nickname
-/// change), keyed by PlayerRef, parallel to LobbyTeamChoices. Survives the menu -> gameplay scene
-/// load. NetworkedSpawnManager reads this to register each player's MatchStatsManager entry.
-///
-/// This is a MIRROR of LobbyServerState's roster name, not a second source of truth: write it only
-/// through GameNetworkManager.ServerSetNickname, which updates both together. Writing it directly is
-/// how the host ended up on the scoreboard as "Player 1" while the lobby screen showed their real
-/// name.
-/// </summary>
-public static class LobbyNicknameChoices
-{
-    private static readonly Dictionary<PlayerRef, string> choices = new Dictionary<PlayerRef, string>();
-
-    public static void Set(PlayerRef player, string name) => choices[player] = name;
-    public static bool TryGet(PlayerRef player, out string name) => choices.TryGetValue(player, out name);
-    public static void Remove(PlayerRef player) => choices.Remove(player);
-    public static void Clear() => choices.Clear();
-}
-
-/// <summary>
-/// Per-player buff loadout (priority order as BuffId bytes) collected during the lobby, parallel
-/// to LobbyTeamChoices. Read by NetworkedSpawnManager on the host to initialise each player's
-/// PlayerBuffs. A missing entry falls back to the BuffLoadoutConfig default order.
-/// </summary>
-public static class LobbyLoadoutChoices
-{
-    private static readonly Dictionary<PlayerRef, byte[]> choices = new Dictionary<PlayerRef, byte[]>();
-
-    public static void Set(PlayerRef player, byte[] order) => choices[player] = order;
-    public static bool TryGet(PlayerRef player, out byte[] order) => choices.TryGetValue(player, out order);
-    public static void Remove(PlayerRef player) => choices.Remove(player);
-    public static void Clear() => choices.Clear();
 }
