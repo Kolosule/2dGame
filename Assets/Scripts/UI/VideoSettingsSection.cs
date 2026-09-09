@@ -55,6 +55,7 @@ public class VideoSettingsSection : MonoBehaviour
 
     private bool awaitingConfirm;
     private float confirmRemaining;
+    private int lastConfirmCountdownSeconds = -1;
     private int previousWidth, previousHeight, previousDisplayMode;
 
     private void Awake()
@@ -111,13 +112,22 @@ public class VideoSettingsSection : MonoBehaviour
 
         confirmRemaining -= Time.unscaledDeltaTime;
 
+        UpdateConfirmCountdownLabel();
+
+        if (confirmRemaining <= 0f) CancelPendingConfirm();
+    }
+
+    private void UpdateConfirmCountdownLabel()
+    {
         if (confirmCountdownLabel != null)
         {
             int seconds = Mathf.Max(0, Mathf.CeilToInt(confirmRemaining));
-            confirmCountdownLabel.text = "Keep these display settings? Reverting in " + seconds + "s";
+            if (seconds != lastConfirmCountdownSeconds)
+            {
+                confirmCountdownLabel.text = "Keep these display settings? Reverting in " + seconds + "s";
+                lastConfirmCountdownSeconds = seconds;
+            }
         }
-
-        if (confirmRemaining <= 0f) CancelPendingConfirm();
     }
 
     /// <summary>Repopulate every control from the store. Called whenever the panel opens.</summary>
@@ -212,10 +222,12 @@ public class VideoSettingsSection : MonoBehaviour
 
         awaitingConfirm = true;
         confirmRemaining = confirmSeconds;
+        lastConfirmCountdownSeconds = -1;
 
         SettingsService.ApplyDisplayPreview(width, height, displayMode);
 
         if (confirmPanel != null) confirmPanel.SetActive(true);
+        UpdateConfirmCountdownLabel();
     }
 
     private void OnVSyncChanged(bool on)
