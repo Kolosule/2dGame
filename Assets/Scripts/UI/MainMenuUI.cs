@@ -45,10 +45,10 @@ public class MainMenuUI : MonoBehaviour
         }
 
         if (joinButton != null) joinButton.onClick.AddListener(() => Connect(asHost: false));
-        else Debug.LogError("❌ MainMenuUI: Join button not assigned!");
+        else Debug.LogError("MainMenuUI: Join button not assigned!");
 
         if (hostButton != null) hostButton.onClick.AddListener(() => Connect(asHost: true));
-        else Debug.LogError("❌ MainMenuUI: Host button not assigned!");
+        else Debug.LogError("MainMenuUI: Host button not assigned!");
 
         if (optionsButton != null) optionsButton.onClick.AddListener(OpenSettings);
 
@@ -71,7 +71,7 @@ public class MainMenuUI : MonoBehaviour
         Audio.PlayUi(AudioCueId.UiClick);
         if (networkManager == null)
         {
-            Debug.LogError("❌ MainMenuUI: networkManager not assigned!");
+            Debug.LogError("MainMenuUI: networkManager not assigned!");
             return;
         }
 
@@ -110,7 +110,7 @@ public class MainMenuUI : MonoBehaviour
     {
         if (settingsPanel == null)
         {
-            Debug.LogError("❌ MainMenuUI: settingsPanel not assigned!");
+            Debug.LogError("MainMenuUI: settingsPanel not assigned!");
             return;
         }
 

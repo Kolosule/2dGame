@@ -48,7 +48,7 @@ public class PlayerCameraShakeHandler : MonoBehaviour
 
         if (statsHandler == null)
         {
-            Debug.LogError("❌ PlayerCameraShakeHandler: No PlayerStatsHandler found on this GameObject!");
+            Debug.LogError("PlayerCameraShakeHandler: No PlayerStatsHandler found on this GameObject!");
             enabled = false;
             return;
         }

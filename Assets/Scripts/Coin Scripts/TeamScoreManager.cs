@@ -144,7 +144,7 @@ public class TeamScoreManager : NetworkBehaviour
         int authored = vanguardThresholds != null ? vanguardThresholds.Length : 0;
         if (authored != vanguardMaxTier)
         {
-            Debug.LogError($"❌ TeamScoreManager: vanguardThresholds has {authored} entries but " +
+            Debug.LogError($"TeamScoreManager: vanguardThresholds has {authored} entries but " +
                            $"vanguardMaxTier is {vanguardMaxTier}. One team buff needs exactly one " +
                            $"threshold per tier.");
         }
@@ -158,7 +158,7 @@ public class TeamScoreManager : NetworkBehaviour
             {
                 if (vanguardThresholds[i] <= vanguardThresholds[i - 1])
                 {
-                    Debug.LogError($"❌ TeamScoreManager: vanguardThresholds must be strictly " +
+                    Debug.LogError($"TeamScoreManager: vanguardThresholds must be strictly " +
                                    $"ascending, but index {i} ({vanguardThresholds[i]}) is not " +
                                    $"greater than index {i - 1} ({vanguardThresholds[i - 1]}).");
                 }

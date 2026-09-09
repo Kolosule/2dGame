@@ -83,10 +83,10 @@ public class CTFGameManager : NetworkBehaviour
         }
 
         if (team1Flag == null)
-            Debug.LogError("⚠️ Team1 flag not found!");
+            Debug.LogError("Team1 flag not found!");
 
         if (team2Flag == null)
-            Debug.LogError("⚠️ Team2 flag not found!");
+            Debug.LogError("Team2 flag not found!");
     }
 
     /// <summary>

@@ -30,9 +30,6 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     [Header("Team Settings")]
     [Tooltip("Allow unbalanced teams (players can choose any team)")]
     [SerializeField] private bool allowUnbalancedTeams = true;
-
-    [Header("Debug Settings")]
-    [SerializeField] private bool verboseLogging = true;
     #endregion
 
     #region Private Fields
@@ -50,7 +47,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     {
         if (Instance != null && Instance != this)
         {
-            Debug.LogWarning("⚠️ Multiple NetworkedSpawnManagers found! Destroying duplicate.");
+            Debug.LogWarning("Multiple NetworkedSpawnManagers found! Destroying duplicate.");
             Destroy(gameObject);
             return;
         }
@@ -98,10 +95,10 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     private void ValidateSpawnPoints()
     {
         if (team1SpawnPoints == null || team1SpawnPoints.Length == 0)
-            Debug.LogError("❌ Team 1 spawn points not assigned!");
+            Debug.LogError("Team 1 spawn points not assigned!");
 
         if (team2SpawnPoints == null || team2SpawnPoints.Length == 0)
-            Debug.LogError("❌ Team 2 spawn points not assigned!");
+            Debug.LogError("Team 2 spawn points not assigned!");
     }
     #endregion
 
@@ -174,7 +171,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         {
             // The lobby gate normally guarantees a choice before gameplay loads; reaching here means
             // an unexpected late joiner with no recorded choice. AssignTeam auto-balances them.
-            Debug.LogWarning($"⚠️ No lobby team choice for Player {player.PlayerId} - auto-balancing");
+            Debug.LogWarning($"No lobby team choice for Player {player.PlayerId} - auto-balancing");
             choice = NoTeamChoice;
 
             // Ordering tripwire (the join-side twin of ServerCaptureForReconnect's). An outstanding
@@ -184,7 +181,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             if (GameNetworkManager.Instance != null &&
                 GameNetworkManager.Instance.ServerHasUnclaimedHold(player))
             {
-                Debug.LogError($"❌ Player {player.PlayerId} has no lobby team choice but still has an " +
+                Debug.LogError($"Player {player.PlayerId} has no lobby team choice but still has an " +
                                "unclaimed reconnect hold — callback order changed; GameNetworkManager must " +
                                "register its callbacks before NetworkedSpawnManager. Restored state is lost " +
                                "and their held slot will never be released.");
@@ -222,7 +219,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     {
         if (playerPrefab == null)
         {
-            Debug.LogError("❌ Player prefab not assigned!");
+            Debug.LogError("Player prefab not assigned!");
             return;
         }
 
@@ -237,7 +234,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         if (spawnedObject == null)
         {
-            Debug.LogError($"❌ Failed to spawn player {player.PlayerId}!");
+            Debug.LogError($"Failed to spawn player {player.PlayerId}!");
             // Roll the bookkeeping back so a later trigger can retry the spawn cleanly.
             spawnedPlayers.Remove(player);
             if (playerTeams.Remove(player))
@@ -300,7 +297,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         {
             // Deliberate "no choice made" path - auto-balance onto the smaller team.
             if (allowUnbalancedTeams)
-                Debug.LogWarning($"⚠️ No team choice for Player {player.PlayerId} - using auto-balance");
+                Debug.LogWarning($"No team choice for Player {player.PlayerId} - using auto-balance");
 
             team = (team1Count <= team2Count) ? 1 : 2;
         }
@@ -317,7 +314,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     }
 
     /// <summary>
-    /// ⭐ MADE PUBLIC - Other scripts need to access this for respawning
+    /// Returns a random team spawn point for initial spawning and respawning.
     /// </summary>
     public Vector3 GetSpawnPosition(int team)
     {
@@ -325,7 +322,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
 
         if (spawnPoints == null || spawnPoints.Length == 0)
         {
-            Debug.LogError($"❌ No spawn points for Team {team}!");
+            Debug.LogError($"No spawn points for Team {team}!");
             return Vector3.zero;
         }
 

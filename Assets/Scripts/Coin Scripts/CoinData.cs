@@ -4,7 +4,6 @@ using Fusion;
 /// <summary>
 /// ScriptableObject that holds coin value data for different teams.
 /// This allows easy balancing through the Unity Inspector without changing code.
-/// NOW COMPATIBLE WITH 3-TEAM SYSTEM (Team1, Team2, Team3)
 /// </summary>
 [CreateAssetMenu(fileName = "New Coin Data", menuName = "Game/Coin Data")]
 public class CoinData : ScriptableObject

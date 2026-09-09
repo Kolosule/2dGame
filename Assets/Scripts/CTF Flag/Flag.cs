@@ -6,7 +6,6 @@ using Game.Audio.Core;
 /// <summary>
 /// Manages flag state and interactions for Capture the Flag mode
 /// Attach this to each team's flag GameObject
-/// CONVERTED TO PHOTON FUSION - FIXED VERSION
 /// </summary>
 public class Flag : NetworkBehaviour
 {
@@ -58,7 +57,7 @@ public class Flag : NetworkBehaviour
     [Networked] private TickTimer AutoReturnTimer { get; set; }
 
     // Local references
-    private GameObject carrierGameObject; // RENAMED from 'carrier' to avoid conflict
+    private GameObject carrierGameObject;
     private GameObject markedCarrier;      // who currently shows the flag icon on THIS peer
 
     // Non-networked, server-only: sub-second remainder for flag-carry-time reporting. Reset to 0
@@ -79,7 +78,7 @@ public class Flag : NetworkBehaviour
     /// <summary>Canonical Team for this flag (HUD/color lookups). Derived from the authored string.</summary>
     public Team OwningTeamEnum => TeamUtil.Normalize(owningTeam);
     public FlagState State => CurrentState;
-    public GameObject Carrier => carrierGameObject; // Use the renamed variable
+    public GameObject Carrier => carrierGameObject;
 
     private void Awake()
     {

@@ -154,8 +154,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             return; // headless server: no menu UI
         }
 
-        if (menuUI == null) Debug.LogError("❌ MainMenuUI not assigned!");
-        if (lobbyUI == null) Debug.LogError("❌ LobbyScreenUI not assigned!");
+        if (menuUI == null) Debug.LogError("MainMenuUI not assigned!");
+        if (lobbyUI == null) Debug.LogError("LobbyScreenUI not assigned!");
     }
 
     /// <summary>
@@ -273,7 +273,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (runner == null)
         {
-            Debug.LogError("❌ Cannot connect: the network runner could not be created.");
+            Debug.LogError("Cannot connect: the network runner could not be created.");
             if (menuUI != null)
             {
                 menuUI.ShowStatus("Cannot connect: network runner unavailable.");
@@ -314,7 +314,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
         else
         {
-            Debug.LogError($"❌ Failed to start host: {result.ShutdownReason}");
+            Debug.LogError($"Failed to start host: {result.ShutdownReason}");
             if (menuUI != null)
             {
                 menuUI.ShowStatus($"Failed to start host: {result.ShutdownReason}");
@@ -351,7 +351,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
         else
         {
-            Debug.LogError($"❌ Failed to connect: {result.ShutdownReason}");
+            Debug.LogError($"Failed to connect: {result.ShutdownReason}");
             if (menuUI != null)
             {
                 menuUI.ShowStatus($"Failed to connect: {result.ShutdownReason}");
@@ -388,7 +388,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         if (result.Ok)
             LogDedicatedServerEndpoint(endpoint);
         else
-            Debug.LogError($"❌ Server failed to start: {result.ShutdownReason}");
+            Debug.LogError($"Server failed to start: {result.ShutdownReason}");
     }
 
     private static void LogDedicatedServerEndpoint(DedicatedServerEndpointConfig endpoint)
@@ -619,7 +619,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
             pendingRestores[player] = held;
 
-            Debug.Log($"🔄 Player {player.PlayerId} reconnected — restored to team {heldTeam} " +
+            Debug.Log($"Player {player.PlayerId} reconnected — restored to team {heldTeam} " +
                       $"with {held.TotalDepositedValue} deposited.");
 
             if (!gameStarting) BroadcastLobby();
@@ -855,7 +855,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             // Silent here would make the whole feature inert and look exactly like the expected
             // duplicate-token case, so say it out loud.
-            Debug.LogWarning($"⚠️ ServerCaptureForReconnect: no identity token for Player {player.PlayerId} — not held.");
+            Debug.LogWarning($"ServerCaptureForReconnect: no identity token for Player {player.PlayerId} — not held.");
             return;
         }
 
@@ -892,12 +892,12 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
         else if (everSpawned)
         {
-            Debug.LogError($"❌ ServerCaptureForReconnect: no avatar for Player {player.PlayerId} — " +
+            Debug.LogError($"ServerCaptureForReconnect: no avatar for Player {player.PlayerId} — " +
                            "callback order changed; their deposited value will NOT be restored.");
         }
         else
         {
-            Debug.LogWarning($"⚠️ ServerCaptureForReconnect: Player {player.PlayerId} dropped before their " +
+            Debug.LogWarning($"ServerCaptureForReconnect: Player {player.PlayerId} dropped before their " +
                              "avatar spawned — team and name are held, but there is no progression to preserve.");
         }
 
@@ -925,7 +925,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // already discarded must not restart the loop on top of a live connection.
         if (runner != this.runner) return;
 
-        Debug.LogWarning($"⚠️ Disconnected from server: {reason}");
+        Debug.LogWarning($"Disconnected from server: {reason}");
         TryBeginReconnect(reason.ToString());
     }
 
@@ -1018,7 +1018,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
         else
         {
-            Debug.Log($"🚪 Refusing connection: session full " +
+            Debug.Log($"Refusing connection: session full " +
                       $"({runner.ActivePlayers.Count()} active + {reconnectRegistry.HeldCount} held / {maxPlayers}).");
             request.Refuse();
         }
@@ -1032,11 +1032,11 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         // and this fires on every attempt against a down server, plus on a server-side Refuse().
         if (reconnectController != null && reconnectController.IsReconnecting)
         {
-            Debug.LogWarning($"⚠️ Reconnect attempt failed: {reason}");
+            Debug.LogWarning($"Reconnect attempt failed: {reason}");
             return;
         }
 
-        Debug.LogError($"❌ Connection failed: {reason}");
+        Debug.LogError($"Connection failed: {reason}");
         if (menuUI != null)
         {
             menuUI.ShowStatus($"Connection failed: {reason}");
@@ -1159,11 +1159,9 @@ public static class LobbyTeamChoices
     private static readonly Dictionary<PlayerRef, int> choices = new Dictionary<PlayerRef, int>();
 
     public static void Set(PlayerRef player, int team) => choices[player] = team;
-    public static bool Has(PlayerRef player) => choices.ContainsKey(player);
     public static bool TryGet(PlayerRef player, out int team) => choices.TryGetValue(player, out team);
     public static void Remove(PlayerRef player) => choices.Remove(player);
     public static void Clear() => choices.Clear();
-    public static int Count => choices.Count;
 }
 
 /// <summary>

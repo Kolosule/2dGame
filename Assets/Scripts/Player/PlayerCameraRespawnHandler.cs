@@ -2,7 +2,7 @@
 using System.Collections;
 
 /// <summary>
-/// FIXED VERSION - Connects the camera system to player respawn events.
+/// Connects the camera system to player respawn events.
 /// This script triggers smooth camera transitions when the player dies and respawns.
 /// 
 /// SETUP INSTRUCTIONS:
@@ -14,11 +14,6 @@ using System.Collections;
 /// - Detects when the player dies (health reaches 0)
 /// - Triggers a smooth camera transition to the respawn point
 /// - Camera arrives at respawn point before/as player respawns
-/// 
-/// WHAT CHANGED:
-/// - Reads the player's team from the networked PlayerTeamData
-/// - Compatible with the fixed NetworkedSpawnManager
-/// - FIXED LINE 160: String-to-int conversion for GetSpawnPosition()
 /// </summary>
 public class PlayerCameraRespawnHandler : MonoBehaviour
 {
@@ -49,7 +44,7 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
 
         if (statsHandler == null)
         {
-            Debug.LogError("❌ PlayerCameraRespawnHandler: No PlayerStatsHandler found!");
+            Debug.LogError("PlayerCameraRespawnHandler: No PlayerStatsHandler found!");
             enabled = false;
             return;
         }
@@ -135,8 +130,7 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
     }
 
     /// <summary>
-    /// FIXED: Gets the respawn position for this player using team number (int)
-    /// NOW PROPERLY CONVERTS STRING → INT
+    /// Gets the respawn position for this player.
     /// </summary>
     private Vector3 GetRespawnPosition()
     {
@@ -157,7 +151,7 @@ public class PlayerCameraRespawnHandler : MonoBehaviour
 
         if (showDebugMessages)
         {
-            Debug.LogWarning("⚠️ Could not resolve respawn position - using current position");
+            Debug.LogWarning("Could not resolve respawn position - using current position");
         }
         return transform.position;
     }

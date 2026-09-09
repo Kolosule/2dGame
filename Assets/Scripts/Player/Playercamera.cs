@@ -147,7 +147,7 @@ public class PlayerCamera : MonoBehaviour
 
         if (cam == null)
         {
-            Debug.LogError("❌ PlayerCamera: No Camera component found! Please attach this script to a Camera.");
+            Debug.LogError("PlayerCamera: No Camera component found! Please attach this script to a Camera.");
             enabled = false;
             return;
         }

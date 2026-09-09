@@ -5,7 +5,6 @@ using Fusion;
 using Game.Audio.Core;
 
 /// <summary>
-/// FIXED VERSION - Now properly handles coin deposits by passing NetworkObject directly!
 /// Networked home base for Photon Fusion.
 /// Players deposit coins here to score points for their team.
 /// </summary>
@@ -151,8 +150,6 @@ public class NetworkedHomeBase : NetworkBehaviour
             return;
         }
 
-
-        // FIXED: Send the NetworkObject directly instead of PlayerRef
         RPC_RequestDeposit(player.Object);
     }
 

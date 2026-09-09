@@ -45,13 +45,13 @@ public static class PlayerIdentity
         }
     }
 
-    /// <summary>The same identity as the 16 raw bytes Fusion sends as the connection token.</summary>
+    /// <summary>A defensive copy of the identity's 16 raw bytes sent as Fusion's connection token.</summary>
     public static byte[] TokenBytes
     {
         get
         {
             if (cachedBytes == null) cachedBytes = IdentityTokenCodec.ToBytes(Hex);
-            return cachedBytes;
+            return (byte[])cachedBytes.Clone();
         }
     }
 

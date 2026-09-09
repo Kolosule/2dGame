@@ -67,20 +67,20 @@ public class SettingsPanel : MonoBehaviour
 
         if (panelRoot == null)
         {
-            Debug.LogError("❌ SettingsPanel: panelRoot not assigned!");
+            Debug.LogError("SettingsPanel: panelRoot not assigned!");
             return;
         }
 
         if (panelRoot == gameObject)
         {
-            Debug.LogError("❌ SettingsPanel: panelRoot must be a CHILD window object, not this " +
+            Debug.LogError("SettingsPanel: panelRoot must be a CHILD window object, not this " +
                            "component's own GameObject — deactivating self would stop Awake from " +
                            "ever having run.");
             return;
         }
 
         if (video == null)
-            Debug.LogError("❌ SettingsPanel: video not assigned! The Video tab will not function.");
+            Debug.LogError("SettingsPanel: video not assigned! The Video tab will not function.");
 
         if (closeButton != null) closeButton.onClick.AddListener(Close);
 

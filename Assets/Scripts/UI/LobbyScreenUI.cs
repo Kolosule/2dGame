@@ -113,7 +113,7 @@ public class LobbyScreenUI : MonoBehaviour
     {
         if (settingsPanel == null)
         {
-            Debug.LogError("❌ LobbyScreenUI: settingsPanel not assigned!");
+            Debug.LogError("LobbyScreenUI: settingsPanel not assigned!");
             return;
         }
 
@@ -187,7 +187,7 @@ public class LobbyScreenUI : MonoBehaviour
     }
 
     // ============================
-    // Loadout picker (moved from the old TeamSelectionUI, labels now TMP)
+    // Loadout picker
     // ============================
 
     private void ToggleLoadoutPanel()
