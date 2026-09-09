@@ -6,14 +6,8 @@ using Game.Audio.Core;
 using Game.Combat.Core;
 
 /// <summary>
-/// FIXED VERSION - Drops flag on death and uses correct float health type
 /// Handles player health, damage, and death/respawn with Photon Fusion networking
-/// INCLUDES SPAWN IMMUNITY to prevent damage on spawn
-/// 
-/// WHAT CHANGED:
-/// - Respawn() resolves the team from the networked PlayerTeamData enum
-/// - Compatible with the fixed NetworkedSpawnManager
-/// - FIXED LINE 244: String-to-int conversion for GetSpawnPosition()
+/// Drops carried flags on death and provides spawn immunity.
 /// </summary>
 public class PlayerStatsHandler : NetworkBehaviour
 {
@@ -37,7 +31,7 @@ public class PlayerStatsHandler : NetworkBehaviour
     /// <summary>Fires whenever CurrentHealth changes (Fusion render callback). HUD subscribes.</summary>
     public event Action HealthChanged;
 
-    // Networked properties - FIXED: Use float for health
+    // Networked properties
     [Networked, OnChangedRender(nameof(OnHealthChanged))]
     public float CurrentHealth { get; set; }
 
@@ -178,7 +172,7 @@ public class PlayerStatsHandler : NetworkBehaviour
     }
 
     /// <summary>
-    /// FIXED: Handles player death and drops flag. Only runs on server.
+    /// Handles player death and drops flag. Only runs on server.
     /// </summary>
     private void Die()
     {
@@ -284,8 +278,7 @@ public class PlayerStatsHandler : NetworkBehaviour
     }
 
     /// <summary>
-    /// FIXED: Respawn the player at their team's spawn point. Only runs on server.
-    /// INCLUDES SPAWN IMMUNITY RESET and proper string→int conversion
+    /// Respawn the player at the chosen spawn point and reset spawn immunity. Only runs on server.
     /// </summary>
     private void Respawn()
     {
@@ -334,7 +327,7 @@ public class PlayerStatsHandler : NetworkBehaviour
             return NetworkedSpawnManager.Instance.GetSpawnPosition(teamNumber);
         }
 
-        Debug.LogWarning("⚠️ Could not resolve team spawn position - respawning at current location");
+        Debug.LogWarning("Could not resolve team spawn position - respawning at current location");
         return transform.position;
     }
 

@@ -37,9 +37,9 @@ public static class EconomyHudBuilder
 
         EditorSceneManager.MarkSceneDirty(canvas.gameObject.scene);
         string names = iconNames.Count > 0 ? string.Join(", ", iconNames) : "none";
-        Debug.Log($"[Economy] HUD built: toast feed ✔, {icons} buff icon(s) extended ({names}), " +
-                  $"Team Power strip {(strip ? "✔" : "SKIPPED — no TeamScoreDisplay in scene")}, " +
-                  $"Sudden Death banner {(banner ? "✔" : "SKIPPED — no MatchPhaseHud in scene")}. " +
+        Debug.Log($"[Economy] HUD built: toast feed OK, {icons} buff icon(s) extended ({names}), " +
+                  $"Team Power strip {(strip ? "OK" : "SKIPPED — no TeamScoreDisplay in scene")}, " +
+                  $"Sudden Death banner {(banner ? "OK" : "SKIPPED — no MatchPhaseHud in scene")}. " +
                   $"Save the scene (Ctrl+S).");
     }
 

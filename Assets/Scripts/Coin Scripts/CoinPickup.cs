@@ -289,8 +289,5 @@ public class NetworkedCoinPickup : NetworkBehaviour
         // confirmation is a separate, flat cue owned by PlayerInventory — two roles, one sound
         // each, so the collector no longer hears the same clip twice.
         Audio.PlayAt(AudioCueId.CoinPickupWorld, transform.position);
-
-        // You can add particle effects here
-        // Example: Instantiate(pickupEffect, transform.position, Quaternion.identity);
     }
 }

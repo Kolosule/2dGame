@@ -42,7 +42,7 @@ public class MenuCamera : MonoBehaviour
 
         if (cam == null)
         {
-            Debug.LogError("❌ MenuCamera: No Camera component found! Please attach this script to a Camera.");
+            Debug.LogError("MenuCamera: No Camera component found! Please attach this script to a Camera.");
             enabled = false;
             return;
         }

@@ -3,15 +3,8 @@ using Fusion;
 using Game.Audio.Core;
 
 /// <summary>
-/// FIXED VERSION - Now properly networked for multiplayer!
-/// 
-/// WHAT CHANGED:
-/// - Inherits from NetworkBehaviour instead of MonoBehaviour
-/// - Health is now [Networked] so all clients see the same value
-/// - Only server handles damage and death
-/// - Clients automatically sync health changes
-/// 
-/// This ensures that when the host kills an enemy, all clients see it die!
+/// Networked enemy with health replicated to all clients.
+/// Damage and death are handled by the server.
 /// </summary>
 public class Enemy : NetworkBehaviour
 {
@@ -29,8 +22,7 @@ public class Enemy : NetworkBehaviour
     [Tooltip("How far coins should scatter from death position")]
     [SerializeField] private float coinScatterRadius = 1.5f;
 
-    // ⭐ CRITICAL FIX: Health is now networked!
-    // This means all clients will see the same health value
+    // Health is replicated so all clients see the same value.
     [Networked]
     private int CurrentHealth { get; set; }
 
@@ -214,7 +206,7 @@ public class Enemy : NetworkBehaviour
     /// </summary>
     public void TakeDamage(int amount, Vector2 knockbackForce, Vector2 hitPoint)
     {
-        // ⭐ CRITICAL: Only server can modify health
+        // CRITICAL: Only server can modify health
         // If a client tries to damage an enemy, we need to tell the server
         if (!HasStateAuthority)
         {
@@ -278,7 +270,7 @@ public class Enemy : NetworkBehaviour
     {
         Audio.PlayAt(AudioCueId.EnemyAttack, transform.position);
 
-        // ⭐ IMPORTANT: Only server should attack
+        // IMPORTANT: Only server should attack
         // Clients will see the attack results through health sync
         if (!HasStateAuthority)
         {
@@ -321,12 +313,12 @@ public class Enemy : NetworkBehaviour
     }
 
     /// <summary>
-    /// Enemy death handler - NOW DROPS COINS!
+    /// Enemy death handler, including coin drops.
     /// Only runs on server
     /// </summary>
     private void Die()
     {
-        // ⭐ Double-check we're on the server
+        // Double-check we're on the server
         if (!HasStateAuthority)
         {
             return;
@@ -339,7 +331,7 @@ public class Enemy : NetworkBehaviour
             SpawnCoins();
         }
 
-        // ⭐ IMPORTANT: Use Runner.Despawn instead of Destroy
+        // IMPORTANT: Use Runner.Despawn instead of Destroy
         // This removes the enemy from the network properly
         Runner.Despawn(Object);
     }
@@ -361,7 +353,7 @@ public class Enemy : NetworkBehaviour
             Vector2 randomOffset = Random.insideUnitCircle * coinScatterRadius;
             Vector3 spawnPosition = transform.position + new Vector3(randomOffset.x, randomOffset.y, 0);
 
-            // ⭐ Spawn the coin on the network
+            // Spawn the coin on the network
             // Runner.Spawn makes sure ALL clients see the coin!
             // The coin gives itself its "pop" and falls under its own server-side simulation
             // (see NetworkedCoinPickup), so no Rigidbody/force handling is needed here.

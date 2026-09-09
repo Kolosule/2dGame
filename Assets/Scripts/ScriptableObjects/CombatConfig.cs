@@ -124,7 +124,7 @@ public class CombatConfig : ScriptableObject
     {
         if (warnedTerritoryDisabled) return;
         warnedTerritoryDisabled = true;
-        Debug.LogWarning("⚠️ CombatConfig.territorialAdvantageEnabled is FALSE — the own-base " +
+        Debug.LogWarning("CombatConfig.territorialAdvantageEnabled is FALSE — the own-base " +
                          "vulnerability and the entire Vanguard team-buff layer are inert. Coin " +
                          "deposits then buy nothing at the team level.");
     }
@@ -138,7 +138,7 @@ public class CombatConfig : ScriptableObject
     {
         if (warnedConfigMissing) return;
         warnedConfigMissing = true;
-        Debug.LogWarning("⚠️ GameSettingsManager.combatConfig is unassigned — combat damage is " +
+        Debug.LogWarning("GameSettingsManager.combatConfig is unassigned — combat damage is " +
                          "falling back to raw base values: no global multiplier, no own-base " +
                          "vulnerability, no Vanguard scaling.");
     }

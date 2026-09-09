@@ -69,7 +69,7 @@ public class MatchStatsManager : NetworkBehaviour
             // .maxPlayers, and NetworkProjectConfig's Simulation.PlayerCount are only coupled by
             // comment -- if session size is ever raised without updating all three, this is how
             // you find out.
-            Debug.LogError($"❌ MatchStatsManager.RegisterPlayer: playerId {playerId} exceeds " +
+            Debug.LogError($"MatchStatsManager.RegisterPlayer: playerId {playerId} exceeds " +
                             $"RosterCapacity ({RosterCapacity}); this player's stats will not be tracked.");
             return;
         }
@@ -102,7 +102,7 @@ public class MatchStatsManager : NetworkBehaviour
         if (!HasStateAuthority || slot == null) return;
         if (!RosterIndex.TryResolve(playerId, RosterCapacity, out int index))
         {
-            Debug.LogError($"❌ MatchStatsManager.RestoreEntry: playerId {playerId} exceeds " +
+            Debug.LogError($"MatchStatsManager.RestoreEntry: playerId {playerId} exceeds " +
                             $"RosterCapacity ({RosterCapacity}); this player's restored stats will not be tracked.");
             return;
         }

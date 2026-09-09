@@ -88,7 +88,7 @@ public class ReconnectController : MonoBehaviour
             {
                 // The abandoned task may still complete later (fire-and-forget) — that is accepted;
                 // there is no cancellation path for an in-flight Fusion StartGame.
-                Debug.LogWarning($"⚠️ Reconnect attempt {attempt} timed out after {AttemptTimeoutSeconds}s — moving on.");
+                Debug.LogWarning($"Reconnect attempt {attempt} timed out after {AttemptTimeoutSeconds}s — moving on.");
 
                 // Tear it down NOW, not after the next backoff wait. A merely-slow attempt that
                 // completes during that wait is a live, successful connection: the server claims the
@@ -100,7 +100,7 @@ public class ReconnectController : MonoBehaviour
 
             bool ok = !task.IsFaulted && !task.IsCanceled && task.Result;
             if (task.IsFaulted)
-                Debug.LogWarning($"⚠️ Reconnect attempt {attempt} threw: {task.Exception}");
+                Debug.LogWarning($"Reconnect attempt {attempt} threw: {task.Exception}");
 
             if (ok)
             {
