@@ -33,6 +33,9 @@ public class MatchPhaseHud : MonoBehaviour
     [SerializeField] private ScoreboardPanel scoreboardPanel;
 
     private MatchManager bound;
+    private int lastCountdownSeconds = -1;
+    private int lastMatchTimerSeconds = -1;
+    private int lastReturnCountdownSeconds = -1;
 
     private void Awake()
     {
@@ -45,6 +48,13 @@ public class MatchPhaseHud : MonoBehaviour
         HideAll();
         if (returnToLobbyButton != null)
             returnToLobbyButton.onClick.AddListener(OnReturnToLobbyClicked);
+    }
+
+    private void OnEnable()
+    {
+        InvalidateTimerText();
+        if (bound != null)
+            UpdateTimerText(bound.Phase, bound.PhaseTimeRemaining);
     }
 
     private void OnDestroy()
@@ -67,29 +77,64 @@ public class MatchPhaseHud : MonoBehaviour
 
         // Per-frame numeric read for the ticking display only.
         float? remaining = bound.PhaseTimeRemaining;
-        switch (bound.Phase)
+        UpdateTimerText(bound.Phase, remaining);
+    }
+
+    private void UpdateTimerText(MatchPhase phase, float? remaining)
+    {
+        switch (phase)
         {
             case MatchPhase.Countdown:
                 if (countdownText != null)
-                    countdownText.text = Mathf.CeilToInt(Mathf.Max(0f, remaining ?? 0f)).ToString();
+                {
+                    int seconds = Mathf.CeilToInt(Mathf.Max(0f, remaining ?? 0f));
+                    if (seconds != lastCountdownSeconds)
+                    {
+                        countdownText.text = seconds.ToString();
+                        lastCountdownSeconds = seconds;
+                    }
+                }
                 break;
             case MatchPhase.Live:
             case MatchPhase.SuddenDeath:
                 if (matchTimerRoot != null) matchTimerRoot.SetActive(remaining.HasValue);
                 if (remaining.HasValue && matchTimerText != null)
-                    matchTimerText.text = FormatClock(remaining.Value);
+                {
+                    int seconds = Mathf.Max(0, Mathf.CeilToInt(remaining.Value));
+                    if (seconds != lastMatchTimerSeconds)
+                    {
+                        matchTimerText.text = FormatClock(seconds);
+                        lastMatchTimerSeconds = seconds;
+                    }
+                }
+                else
+                    lastMatchTimerSeconds = -1;
                 break;
             case MatchPhase.PostMatch:
                 if (returnCountdownText != null)
-                    returnCountdownText.text =
-                        $"Returning to lobby in {Mathf.CeilToInt(Mathf.Max(0f, remaining ?? 0f))}…";
+                {
+                    int seconds = Mathf.CeilToInt(Mathf.Max(0f, remaining ?? 0f));
+                    if (seconds != lastReturnCountdownSeconds)
+                    {
+                        returnCountdownText.text = $"Returning to lobby in {seconds}…";
+                        lastReturnCountdownSeconds = seconds;
+                    }
+                }
                 break;
         }
+    }
+
+    private void InvalidateTimerText()
+    {
+        lastCountdownSeconds = -1;
+        lastMatchTimerSeconds = -1;
+        lastReturnCountdownSeconds = -1;
     }
 
     /// <summary>Toggle which panel is visible for the current phase. Called on every PhaseChanged.</summary>
     private void Render()
     {
+        InvalidateTimerText();
         if (bound == null) return;
         MatchPhase phase = bound.Phase;
 
@@ -141,9 +186,8 @@ public class MatchPhaseHud : MonoBehaviour
         if (resultsPanel != null) resultsPanel.SetActive(false);
     }
 
-    private static string FormatClock(float seconds)
+    private static string FormatClock(int seconds)
     {
-        int s = Mathf.Max(0, Mathf.CeilToInt(seconds));
-        return $"{s / 60:0}:{s % 60:00}";
+        return $"{seconds / 60:0}:{seconds % 60:00}";
     }
 }
