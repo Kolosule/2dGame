@@ -35,9 +35,9 @@ highest-leverage thing to verify before test day.
 - `Assets/Scripts/Net/ReconnectPolicy.cs` — covered by `ReconnectPolicyTests`
 - `Assets/Scripts/Net/ReconnectBackoff.cs` — covered by `ReconnectBackoffTests`
 
-The **untested** part is the integration glue inside `GameNetworkManager.cs` (~1000 lines), which
-has no test coverage because it is welded to `NetworkRunner`. Specific areas of concern, per the
-comments already in that file:
+The main remaining gap is live Fusion integration inside `GameNetworkManager.cs` (~1000 lines).
+State-only ownership and cleanup boundaries have EditMode coverage, but real runner, scene-load,
+and reconnect behavior still needs multiplayer exercise. Specific areas of concern:
 
 - `pendingRestores` (the `Dictionary<PlayerRef, ReconnectHeldSlot>`) is parked between
   `OnPlayerJoined` and the spawn that consumes it — and for a mid-match rejoin those two points
@@ -57,6 +57,19 @@ comments already in that file:
 | Client drops while **carrying a flag** | Flag drops correctly; rejoiner is not still marked carrier |
 | Host drops | Documented, understood behaviour (even if "session ends") |
 | Client force-quits (ungraceful) | Token path still works — this is the case the design targets |
+
+The lobby-to-spawn projection is now one non-static `LobbySessionHandoff`, owned privately by the
+persistent `GameNetworkManager`. Spawning reads team, nickname, and loadout through that owner's
+read-only facade and rejects a missing or mismatched runner owner instead of treating it as a missing
+choice. `LobbyServerState` remains authoritative; nickname writes still go through
+`ServerSetNickname`, and the existing team/loadout command and spawn validation paths are unchanged.
+
+The handoff survives menu/gameplay round-trips and same-session reconnect runner rebuilds. A new
+Host/Join/server session, terminal shutdown, cancelled/exhausted reconnect, or owner destruction
+resets all choices together. Player leave captures the reconnect hold first, then removes that
+player's entire handoff. Reconnect holds, pending restores, and cached identity tokens retain their
+existing match/runner lifetimes. Net EditMode coverage exercises the store and state-only owner
+boundaries; it does not replace the real-drop and scene-transition multiplayer matrix above.
 
 **Stretch goal:** extract the lobby/roster half of `GameNetworkManager` into a testable plain
 class in `Game.Net` (following how `ReconnectRegistry` was already extracted), leaving the

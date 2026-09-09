@@ -3,13 +3,13 @@
 /// latched menu nickname.
 ///
 /// A display name has to reach TWO stores: the lobby roster (LobbyServerState -> LobbyProtocol ->
-/// LobbyScreenUI) and the PlayerRef-keyed handoff dictionary that survives the MainMenu ->
-/// Gameplay scene load (GameNetworkManager.LobbyNicknameChoices -> MatchStatsManager ->
+/// LobbyScreenUI) and the session-owned handoff that survives the MainMenu ->
+/// Gameplay scene load (LobbySessionHandoff -> MatchStatsManager ->
 /// ScoreboardPanel). They drifted once already: the host wrote only the roster, so their real name
 /// showed on the lobby screen while the scoreboard kept the "Player N" placeholder. Every write now
 /// goes through <see cref="TryRecord"/>, which reports the name BOTH stores must show.
 ///
-/// Pure C# — players are plain ints, and the caller owns the PlayerRef-keyed store — so the rule is
+/// Pure C# — players are plain ints, and the caller owns the handoff — so the rule is
 /// unit-testable without UnityEngine or Fusion.
 /// </summary>
 public class LobbyNicknameBook
