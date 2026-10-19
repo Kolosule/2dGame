@@ -244,7 +244,7 @@ public class DirectionalMeleeSimulationTests
             Invoke(player.Movement, "Simulate", input, default(NetworkButtons), default(NetworkButtons));
             Vector2 velocity = player.Body.linearVelocity;
             ActivateSwing(player);
-            Invoke(player.Combat, "Simulate", input, default(NetworkButtons));
+            Invoke(player.Combat, "Simulate", input, default(NetworkButtons), true);
 
             Assert.IsFalse((bool)Invoke(player.Movement, "IsFacingRight"));
             Assert.IsTrue((bool)Get<NetworkBool>(player.Combat, "AttackFacingRight"));
@@ -321,7 +321,7 @@ public class DirectionalMeleeSimulationTests
     {
         NetworkButtons buttons = default;
         buttons.Set(2, pressed);
-        Invoke(player.Combat, "Simulate", Input(aim), buttons);
+        Invoke(player.Combat, "Simulate", Input(aim), buttons, true);
     }
 
     private object Input(int aim)

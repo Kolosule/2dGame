@@ -123,6 +123,11 @@ the player's `maxFallSpeed`, which still caps subsequent falling motion. The old
 `groundPoundForce` value migrates to this field, but it now affects the target.
 Ordinary side/up and projectile knockback are unchanged.
 
+Ranged attacks charge while the shoot control is held and call `TriggerShoot()` only
+on release. Charging does not latch the Shoot pose or play firing effects. The player
+prefab ramps launch speed from 5 to 40 over 2 seconds, with no ranged firing cooldown;
+holding longer retains full charge until release. There is no separate charge animation.
+
 ---
 
 ## 4. Common tasks

@@ -323,8 +323,9 @@ MonoBehaviour:
   projectileSpawnPoint: {fileID: 8846297479289465317}
   projectileDamage: 15
   projectileSpeed: 40
+  projectileMinimumSpeed: 5
   projectileScale: 1
-  projectileCooldown: 2
+  projectileChargeTime: 2
   muzzleFlashPrefab: {fileID: 0}
   muzzleFlashLifetime: 0.2
   tracerColor: {r: 1, g: 0.9, b: 0.3, a: 1}

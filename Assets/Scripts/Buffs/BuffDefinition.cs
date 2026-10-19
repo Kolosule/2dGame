@@ -5,8 +5,8 @@ public enum BuffKind { Passive, Active }
 
 /// <summary>
 /// One buff, described by a 3-entry tier table in the concrete subclass. Passive buffs
-/// contribute to EffectiveStats; active buffs expose per-tier ActiveBuffParams. Adding a
-/// buff = new subclass + asset added to BuffLoadoutConfig.AllBuffs. No core-loop edits.
+/// contribute to EffectiveStats; active buffs expose per-tier ActiveBuffParams.
+/// The shared BuffUpgradePath determines which buffs progress and in what order.
 /// </summary>
 public abstract class BuffDefinition : ScriptableObject
 {

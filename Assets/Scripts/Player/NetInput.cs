@@ -7,7 +7,7 @@ public enum PlayerButton
     Jump = 0,
     Dash = 1,
     Melee = 2,
-    Shoot = 3,
+    Shoot = 3,   // held state; ShootSequence preserves press/release transitions between polls
     Stealth = 4,
     Down = 5,     // held while pressing down (fast-fall edge detection via PreviousButtons)
 }
@@ -19,5 +19,7 @@ public struct NetInput : INetworkInput
     public sbyte Horizontal;     // -1 / 0 / 1
     public sbyte VerticalAim;    // -1 / 0 / 1 (for up/down attacks)
     public NetworkButtons Buttons;
+    public uint ShootSequence;
+    public uint ShootCancelSequence;
     public Vector2 AimWorldPoint; // mouse world position for projectile aim
 }

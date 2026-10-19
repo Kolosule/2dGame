@@ -3,10 +3,11 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using Game.Audio.Core;
+using Game.Buffs.Core;
 
 /// <summary>
 /// Lobby screen: "Players: X/20" header, two team columns of name rows, team-switch buttons, a
-/// collapsible loadout picker, and a Start button shown only to the designated host. Renders
+/// collapsible read-only upgrade path, and a Start button shown only to the designated host. Renders
 /// purely from the server's LobbyStateSnapshot (ApplyLobbyState) — it holds no authoritative
 /// state, so host-mode and dedicated-server mode share one rendering path.
 /// </summary>
@@ -33,21 +34,21 @@ public class LobbyScreenUI : MonoBehaviour
     [Header("Start (designated host only)")]
     [SerializeField] private Button startButton;
 
-    [Header("Loadout (collapsible)")]
+    [Header("Upgrade path (read-only, collapsible)")]
     [SerializeField] private Button loadoutToggleButton;
     [SerializeField] private GameObject loadoutPanel;
     [Tooltip("The buff loadout config (same asset used by the player prefab).")]
     [SerializeField] private BuffLoadoutConfig buffConfig;
-    [Tooltip("One row per loadout slot, top = highest priority.")]
+    [Tooltip("One row per approved upgrade, in unlock order.")]
     [SerializeField] private TMP_Text[] slotLabels;
-    [SerializeField] private Button[] slotUpButtons;
-    [SerializeField] private Button[] slotDownButtons;
+    // Retained so existing scenes also hide their old reorder controls.
+    [SerializeField, HideInInspector] private Button[] slotUpButtons;
+    [SerializeField, HideInInspector] private Button[] slotDownButtons;
 
     [Header("Wiring")]
     [SerializeField] private GameNetworkManager networkManager;
 
     private readonly List<GameObject> rowPool = new List<GameObject>();
-    private List<Game.Buffs.Core.BuffId> loadoutOrder;
 
     private void Start()
     {
@@ -74,8 +75,8 @@ public class LobbyScreenUI : MonoBehaviour
 
         if (optionsButton != null) optionsButton.onClick.AddListener(OpenSettings);
 
-        InitLoadoutOrder();
-        WireLoadoutButtons();
+        HideReorderButtons(slotUpButtons);
+        HideReorderButtons(slotDownButtons);
         RefreshLoadoutLabels();
     }
 
@@ -187,7 +188,7 @@ public class LobbyScreenUI : MonoBehaviour
     }
 
     // ============================
-    // Loadout picker
+    // Read-only upgrade path
     // ============================
 
     private void ToggleLoadoutPanel()
@@ -196,56 +197,30 @@ public class LobbyScreenUI : MonoBehaviour
         if (loadoutPanel != null) loadoutPanel.SetActive(!loadoutPanel.activeSelf);
     }
 
-    private void InitLoadoutOrder()
+    private static void HideReorderButtons(Button[] buttons)
     {
-        loadoutOrder = new List<Game.Buffs.Core.BuffId>();
-        if (buffConfig != null && buffConfig.DefaultOrder != null)
-            foreach (var id in buffConfig.DefaultOrder) loadoutOrder.Add(id);
-    }
-
-    private void WireLoadoutButtons()
-    {
-        if (slotUpButtons != null)
-            for (int i = 0; i < slotUpButtons.Length; i++)
-            {
-                int idx = i;
-                if (slotUpButtons[i] != null) slotUpButtons[i].onClick.AddListener(() => MoveSlot(idx, -1));
-            }
-        if (slotDownButtons != null)
-            for (int i = 0; i < slotDownButtons.Length; i++)
-            {
-                int idx = i;
-                if (slotDownButtons[i] != null) slotDownButtons[i].onClick.AddListener(() => MoveSlot(idx, +1));
-            }
-    }
-
-    private void MoveSlot(int index, int delta)
-    {
-        if (loadoutOrder == null) return;
-        int target = index + delta;
-        if (index < 0 || index >= loadoutOrder.Count || target < 0 || target >= loadoutOrder.Count) return;
-        (loadoutOrder[index], loadoutOrder[target]) = (loadoutOrder[target], loadoutOrder[index]);
-        RefreshLoadoutLabels();
-
-        // Every reorder is submitted immediately (tiny payload) — no separate confirm step.
-        if (networkManager != null)
-            networkManager.SubmitLocalLoadoutChoice(LoadoutAsBytes());
+        if (buttons == null) return;
+        foreach (var button in buttons)
+        {
+            if (button == null) continue;
+            button.interactable = false;
+            button.gameObject.SetActive(false);
+        }
     }
 
     private void RefreshLoadoutLabels()
     {
-        if (slotLabels == null || loadoutOrder == null || buffConfig == null) return;
+        if (slotLabels == null) return;
+        var order = BuffUpgradePath.Order;
         for (int i = 0; i < slotLabels.Length; i++)
         {
             if (slotLabels[i] == null) continue;
-            if (i < loadoutOrder.Count)
+            if (i < order.Count)
             {
-                var def = buffConfig.GetById(loadoutOrder[i]);
-                slotLabels[i].text = $"{i + 1}. {(def != null ? def.DisplayName : loadoutOrder[i].ToString())}";
+                var def = buffConfig != null ? buffConfig.GetById(order[i]) : null;
+                slotLabels[i].text = $"{i + 1}. {(def != null ? def.DisplayName : order[i].ToString())}";
             }
             else slotLabels[i].text = "";
         }
     }
-
-    private byte[] LoadoutAsBytes() => Game.Buffs.Core.LoadoutCodec.ToBytes(loadoutOrder);
 }

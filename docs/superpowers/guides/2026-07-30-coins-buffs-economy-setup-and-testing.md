@@ -28,10 +28,11 @@ Run against the merged four-scope tree, Unity 6000.3.0f1, batchmode:
 - Dead code removal is complete: no remaining references to `MatchManager.IsLive`,
   `GetDamageReceivedModifier`, `coinsToDropMin/Max`, or `scoreLimit`.
 - Assets already committed and correct: `BuffLoadoutConfig.asset` (4 buffs, 12 ascending
-  thresholds, `maxTier: 3`, default order `ExtraJump, Stealth, QuickerDash, FlagRunner`),
+  thresholds, `maxTier: 3`), the fixed upgrade order
+  `ExtraJump, QuickerDash, Stealth, FlagRunner` in `BuffUpgradePath`,
   `FlagRunnerBuff.asset` (`1.1 / 1.2 / 1.2`, dash-lift at tier 3), all seven enemy prefabs
-  on the new single `coinsToDrop`, and the MainMenu 4th loadout picker row (labels, up and
-  down buttons all bound).
+  on the new single `coinsToDrop`, and the MainMenu four-row read-only upgrade path.
+  Legacy up/down controls are hidden and no custom order is accepted.
 
 **Nothing below is a compile or logic problem. Everything below is scene wiring** — the
 part no test can reach.
@@ -177,12 +178,15 @@ tier-0/1/2 max-distance values of `×2.5 / ×1.75 / ×1.0`.
 
 ### 2.3 Scope 3 — Flag Runner, MaxTier, 12-step curve
 
-Curve: `5, 10, 16, 24, 34, 46, 62, 80, 110, 150, 200, 260`. Round-robin over the priority
-order — default `[ExtraJump, Stealth, QuickerDash, FlagRunner]`.
+Curve: `5, 10, 16, 24, 34, 46, 62, 80, 110, 150, 200, 260`. Round-robin over the fixed
+order `[ExtraJump, QuickerDash, Stealth, FlagRunner]` for every player:
+**Jump → Dash → Invisibility → Flag Carrying**. This is not a selectable default.
 
-| Banked | Extra Jump | Stealth | Quicker Dash | Flag Runner |
+| Banked | Extra Jump | Quicker Dash | Stealth | Flag Runner |
 |---|---|---|---|---|
 | 5 | T1 | — | — | — |
+| 10 | T1 | T1 | — | — |
+| 16 | T1 | T1 | T1 | — |
 | 24 | T1 | T1 | T1 | T1 |
 | 55 | T2 | T2 | T1 | T1 |
 | 120 | T3 | T2 | T2 | T2 |
@@ -192,9 +196,9 @@ order — default `[ExtraJump, Stealth, QuickerDash, FlagRunner]`.
 | # | Do | Expect | Fails if |
 |---|---|---|---|
 | 1 | Bank in steps and read the pip rows at 5 / 24 / 55 / 120 / 260 | Pips match the table above exactly | Any row is one tier low across the board → the `MaxTier` regression is back |
-| 2 | In the **lobby**, open the loadout picker | **Four** rows, reorderable with up/down. Default order as above | Only three rows appear |
-| 3 | Reorder so Flag Runner is **priority #1**, start, bank 5 | Flag Runner hits T1 first; Extra Jump is still locked | The order is ignored → the byte payload is not reaching `ServerInitLoadout` |
-| 4 | Start a match **without** touching the picker | Default order applied, no errors | An empty payload wipes the loadout |
+| 2 | In the **lobby**, open Upgrade Path | **Four read-only rows** in the fixed order above, with no up/down controls | Rows can be reordered or an upgrade is missing |
+| 3 | On both clients, bank to 5 / 10 / 16 / 24 | Jump, Dash, Invisibility, then Flag Carrying reach T1 on each client | Different players unlock in different orders |
+| 4 | Start without opening the panel, then disconnect/reconnect after earning tiers | The fixed path applies automatically; reconnect preserves deposited value and earned tiers | Progression needs a lobby submission or reconnect changes the path |
 | 5 | With Flag Runner at **T1**, pick up the enemy flag and run | Noticeably faster while carrying (+10%); normal speed the instant you drop it | Speed bonus applies when not carrying |
 | 6 | Same at **T2** | +20% while carrying | — |
 | 7 | With Flag Runner **below T3**, carry the flag and press Dash | Dash is blocked (unchanged behaviour) | — |

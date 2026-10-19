@@ -173,10 +173,9 @@ public class LobbyNicknameBookTests
     }
 
     [Test]
-    public void ReconnectRestore_MirrorsTheValidatedName_WithoutErasingTeamOrLoadout()
+    public void ReconnectRestore_MirrorsTheValidatedName_WithoutErasingTeam()
     {
         handoff.SetTeam(6, lobby.PlayerJoinedOnTeam(6, 2));
-        handoff.SetLoadout(6, new byte[] { 3, 1, 2 });
 
         ServerSetNickname(6, "  Ann\tabelle Lee  ");
 
@@ -184,8 +183,6 @@ public class LobbyNicknameBookTests
         Assert.AreEqual(lobby.NameOf(6), ScoreboardName(6));
         Assert.IsTrue(handoff.TryGetTeam(6, out int team));
         Assert.AreEqual(2, team);
-        Assert.IsTrue(handoff.TryGetLoadout(6, out byte[] order));
-        CollectionAssert.AreEqual(new byte[] { 3, 1, 2 }, order);
     }
 
     // ---- Latch semantics --------------------------------------------------------------------

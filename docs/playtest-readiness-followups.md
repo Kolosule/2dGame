@@ -59,10 +59,13 @@ and reconnect behavior still needs multiplayer exercise. Specific areas of conce
 | Client force-quits (ungraceful) | Token path still works — this is the case the design targets |
 
 The lobby-to-spawn projection is now one non-static `LobbySessionHandoff`, owned privately by the
-persistent `GameNetworkManager`. Spawning reads team, nickname, and loadout through that owner's
+persistent `GameNetworkManager`. Spawning reads team and nickname through that owner's
 read-only facade and rejects a missing or mismatched runner owner instead of treating it as a missing
 choice. `LobbyServerState` remains authoritative; nickname writes still go through
-`ServerSetNickname`, and the existing team/loadout command and spawn validation paths are unchanged.
+`ServerSetNickname`, and the existing team command and spawn validation paths are unchanged.
+Upgrade order is no longer a lobby choice or reconnect field: all players use
+`BuffUpgradePath` (Jump → Dash → Invisibility → Flag Carrying), with tiers derived from
+their preserved deposited value.
 
 The handoff survives menu/gameplay round-trips and same-session reconnect runner rebuilds. A new
 Host/Join/server session, terminal shutdown, cancelled/exhausted reconnect, or owner destruction

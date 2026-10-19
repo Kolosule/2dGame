@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Session-owned projection of lobby choices for gameplay spawning, not an authoritative roster.
-/// Team, nickname and loadout arrive independently; recording one never replaces the other fields.
+/// Team and nickname arrive independently; recording one never replaces the other field.
 /// The owner keeps this across scene loads and reconnect attempts, and resets it at session boundaries.
 /// Player ids are plain ints; the owner handles Fusion conversion and authoritative validation.
 /// </summary>
@@ -14,8 +14,6 @@ public sealed class LobbySessionHandoff
         public int Team;
         public bool HasNickname;
         public string Nickname;
-        public bool HasLoadout;
-        public byte[] Loadout;
     }
 
     private readonly Dictionary<int, Entry> players = new Dictionary<int, Entry>();
@@ -56,26 +54,6 @@ public sealed class LobbySessionHandoff
         }
 
         nickname = null;
-        return false;
-    }
-
-    public void SetLoadout(int playerId, byte[] order)
-    {
-        Entry entry = GetOrCreate(playerId);
-        entry.Loadout = order;
-        entry.HasLoadout = true;
-    }
-
-    /// <summary>False means no choice was submitted; spawning keeps the configured default loadout.</summary>
-    public bool TryGetLoadout(int playerId, out byte[] order)
-    {
-        if (players.TryGetValue(playerId, out Entry entry) && entry.HasLoadout)
-        {
-            order = entry.Loadout;
-            return true;
-        }
-
-        order = null;
         return false;
     }
 

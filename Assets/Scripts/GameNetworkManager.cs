@@ -33,7 +33,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     // Reliable-data channel tags. TEAM is a team-SWITCH request (teams are auto-assigned on join).
     private static readonly ReliableKey TeamChoiceKey = ReliableKey.FromInts(0x54454100, 0x4D, 0, 0); // "TEAM"
-    private static readonly ReliableKey LoadoutKey = ReliableKey.FromInts(0x4C4F4144, 0x55, 0, 0);    // "LOAD"
+    private static readonly ReliableKey LegacyLoadoutKey = ReliableKey.FromInts(0x4C4F4144, 0x55, 0, 0); // "LOAD" (rejected)
     private static readonly ReliableKey NameKey = ReliableKey.FromInts(0x4E414D45, 0, 0, 0);          // "NAME"
     private static readonly ReliableKey RosterKey = ReliableKey.FromInts(0x524F5354, 0, 0, 0);        // "ROST"
     private static readonly ReliableKey StartMatchKey = ReliableKey.FromInts(0x53545254, 0, 0, 0);    // "STRT"
@@ -426,9 +426,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public bool TryGetLobbyNickname(PlayerRef player, out string nickname) =>
         lobbyHandoff.TryGetNickname(player.PlayerId, out nickname);
 
-    public bool TryGetLobbyLoadout(PlayerRef player, out byte[] order) =>
-        lobbyHandoff.TryGetLoadout(player.PlayerId, out order);
-
     /// <summary>
     /// One reconnect attempt against the session we were actually in, with the same identity token.
     /// Requires a freshly built runner (see TeardownRunner/BuildRunner). Does not touch the menu UI —
@@ -563,24 +560,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     }
 
     /// <summary>
-    /// Called by LobbyScreenUI when the local player reorders their buffs. Records on the host
-    /// (directly if we are the host, else over reliable-data).
-    /// </summary>
-    public void SubmitLocalLoadoutChoice(byte[] order)
-    {
-        if (runner == null || !runner.IsRunning) return;
-
-        // A zero-length reliable payload trips a Fusion assert on the real socket path
-        // (only reproduces on remote clients). Treat null/empty as "no custom loadout".
-        if (order == null || order.Length == 0) return;
-
-        if (runner.IsServer)
-            lobbyHandoff.SetLoadout(runner.LocalPlayer.PlayerId, order);
-        else
-            runner.SendReliableDataToServer(LoadoutKey, order);
-    }
-
-    /// <summary>
     /// Called when the local player clicks Start. Host mode starts directly; on a dedicated
     /// server the designated host-client asks the server, which re-validates.
     /// </summary>
@@ -608,8 +587,8 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     /// Server-only: seat the player in the lobby roster and mirror the result into the handoff
     /// NetworkedSpawnManager reads. Runs for mid-match late joiners too.
     ///
-    /// A reconnecting player (a token matching a held slot) reclaims their held team, name, and
-    /// loadout instead of being auto-assigned, and their progression is parked in pendingRestores
+    /// A reconnecting player (a token matching a held slot) reclaims their held team and name
+    /// instead of being auto-assigned, and their progression is parked in pendingRestores
     /// for the spawn to consume. Restoration deliberately flows through the SAME session handoff
     /// as a normal join, so the spawn path needs no reconnect-specific branch and the lobby
     /// team-pick is skipped implicitly rather than by a special case.
@@ -628,9 +607,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
             lobbyHandoff.SetTeam(player.PlayerId, heldTeam);
             ServerSetNickname(player, held.DisplayName);
-            if (held.LoadoutOrder != null && held.LoadoutOrder.Length > 0)
-                lobbyHandoff.SetLoadout(player.PlayerId, held.LoadoutOrder);
-
             pendingRestores[player] = held;
 
             Debug.Log($"Player {player.PlayerId} reconnected — restored to team {heldTeam} " +
@@ -895,10 +871,7 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             Team = lobbyHandoff.TryGetTeam(player.PlayerId, out int team) ? team : serverLobby.TeamOf(player.PlayerId),
             DisplayName = lobbyHandoff.TryGetNickname(player.PlayerId, out string name) && !string.IsNullOrEmpty(name)
                 ? name
-                : LobbyProtocol.PlaceholderName(player.PlayerId),
-            // Without this the rejoiner silently reverts to BuffLoadoutConfig's default priority
-            // order, because lobbyHandoff.RemovePlayer runs moments from now.
-            LoadoutOrder = lobbyHandoff.TryGetLoadout(player.PlayerId, out byte[] order) ? order : null
+                : LobbyProtocol.PlaceholderName(player.PlayerId)
         };
 
         // A stats row is the proof that this player actually spawned. Without one, "no avatar" simply
@@ -1085,6 +1058,13 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         if (!OwnsRunner(runner)) return;
 
+        if (key == LegacyLoadoutKey)
+        {
+            Debug.LogWarning($"Rejected custom upgrade path from Player {player.PlayerId}: " +
+                             "all players use the fixed upgrade path.");
+            return;
+        }
+
         if (runner.IsServer)
         {
             if (key == TeamChoiceKey)
@@ -1104,15 +1084,6 @@ public class GameNetworkManager : MonoBehaviour, INetworkRunnerCallbacks
                 if (data.Array == null) return;
                 if (!LobbyProtocol.TryDecodeNickname(data.Array, data.Offset, data.Count, out string name)) return;
                 if (ServerSetNickname(player, name) && !gameStarting) BroadcastLobby();
-                return;
-            }
-
-            if (key == LoadoutKey)
-            {
-                if (data.Count < 1 || data.Array == null) return;
-                var order = new byte[data.Count];
-                Array.Copy(data.Array, data.Offset, order, 0, data.Count);
-                lobbyHandoff.SetLoadout(player.PlayerId, order);
                 return;
             }
 

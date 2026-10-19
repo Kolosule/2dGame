@@ -60,7 +60,14 @@ public class PlayerController : NetworkBehaviour
                 Runner.AddPlayerAreaOfInterest(Object.InputAuthority, stats.RespawnPosition, areaOfInterestRadius);
         }
 
-        if (GetInput(out NetInput input))
+        bool hasInput = GetInput(out NetInput input);
+        bool allowRangedCharge = combat.enabled &&
+                                 (stats == null || !stats.IsDead) &&
+                                 (MatchManager.Instance == null || MatchManager.Instance.InputEnabled);
+        if (!allowRangedCharge && (HasStateAuthority || HasInputAuthority))
+            combat.CancelRangedCharge(hasInput, input);
+
+        if (hasInput)
         {
             NetworkButtons current = input.Buttons;
             NetworkButtons pressed = current.GetPressed(PreviousButtons);
@@ -86,7 +93,7 @@ public class PlayerController : NetworkBehaviour
 
             // Honor either component being disabled (we drive them directly, not via Fusion).
             if (movement.enabled) movement.Simulate(input, pressed, released);
-            if (combat.enabled) combat.Simulate(input, pressed);
+            if (combat.enabled) combat.Simulate(input, pressed, allowRangedCharge);
             if (buffs != null) buffs.Simulate(input, pressed);
 
             // Derive animation state AFTER movement/combat so velocity/dash/stun are current.
