@@ -76,7 +76,7 @@ public class FriendlyFireTests
         Assert.IsNotNull(prefab, $"Missing player prefab at {prefabPath}.");
 
         Transform attackPoint = prefab.transform.Find("SideAttackTransform");
-        Transform weaponVisual = prefab.transform.Find("WeaponVisual");
+        Transform weaponVisual = prefab.transform.Find("WeaponFacing/WeaponVisual");
         Assert.IsNotNull(attackPoint);
         Assert.IsNotNull(weaponVisual);
         Assert.IsNull(attackPoint.GetComponent<Animator>(),

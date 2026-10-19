@@ -1,0 +1,27 @@
+{
+    "name": "Game.Combat.Simulation.Tests",
+    "rootNamespace": "",
+    "references": [
+        "Game.Combat.Core",
+        "Fusion.Unity",
+        "Fusion.Addons.Physics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [ "Editor" ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll",
+        "Fusion.Runtime.dll",
+        "Fusion.Common.dll",
+        "Fusion.Sockets.dll",
+        "Fusion.Log.dll",
+        "Fusion.Realtime.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [ "UNITY_INCLUDE_TESTS" ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

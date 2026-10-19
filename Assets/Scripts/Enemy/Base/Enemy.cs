@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using Fusion;
 using Game.Audio.Core;
+using Game.Combat.Core;
 
 /// <summary>
 /// Networked enemy with health replicated to all clients.
@@ -215,17 +216,36 @@ public class Enemy : NetworkBehaviour
             return;
         }
 
-        // SERVER CODE BELOW:
-        // Apply damage
+        ApplyDamage(amount, knockbackForce);
+    }
+
+    public void ServerTakeSpikeDamage(int amount, float downwardSpeed)
+    {
+        if (!HasStateAuthority) return;
+        float velocityY = MeleeAttackRules.SpikeVelocity(
+            rb != null ? rb.linearVelocity.y : 0f, downwardSpeed);
+        ApplyDamage(amount, Vector2.zero, velocityY);
+    }
+
+    private void ApplyDamage(int amount, Vector2 knockbackForce, float? spikeVelocity = null)
+    {
+        if (CurrentHealth <= 0) return;
         CurrentHealth -= amount;
 
         // Apply knockback, scaled by this archetype's knockback multiplier (bigger = easier
         // to knock out of an attack, which is how a well-timed hit interrupts the telegraph).
         if (rb != null)
         {
-            float knockbackMultiplier = stats != null ? stats.knockbackMultiplier : 1f;
-            rb.linearVelocity = Vector2.zero; // Reset current velocity
-            rb.AddForce(knockbackForce * knockbackMultiplier, ForceMode2D.Impulse);
+            if (spikeVelocity.HasValue)
+            {
+                rb.linearVelocity = new Vector2(rb.linearVelocity.x, spikeVelocity.Value);
+            }
+            else
+            {
+                float knockbackMultiplier = stats != null ? stats.knockbackMultiplier : 1f;
+                rb.linearVelocity = Vector2.zero;
+                rb.AddForce(knockbackForce * knockbackMultiplier, ForceMode2D.Impulse);
+            }
 
             // Set knockback state with duration (0.3s) — pauses AI movement
             knockbackTimer = TickTimer.CreateFromSeconds(Runner, 0.3f);

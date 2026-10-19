@@ -10,7 +10,7 @@ animations. Read this before touching `Player.controller`, `Weapon.controller`, 
 
 Animation is **split by whether a pose can be inferred from motion**. **Authoritative**
 poses that a remote client *cannot* guess from movement — Dead, the latched one-shots
-(Attack/GroundPound/Shoot), Stunned, Dash — are computed on the state authority (and
+(Attack/AttackUp/AttackDown/Shoot), Stunned, Dash — are computed on the state authority (and
 predicted on the local input authority) and replicated as a single `[Networked]`
 `PlayerAnimator.OverrideState` enum (`AnimState.None` = "no override"). **Locomotion**
 (Idle/Walk/Jump/Fall) is **not networked**: every client derives it in `Render()` from
@@ -28,10 +28,12 @@ There are **two animation tracks**, both driven off the same `State` int:
 | Track | GameObject | Controller | Purpose |
 |---|---|---|---|
 | **Body** | `Sprite` child | `Assets/Animation/Player.controller` | Locomotion + action poses (the visible character) |
-| **Weapon / portal** | `SideAttackTransform` child | `Assets/Animation/Weapon.controller` | The weapon that portals in during attacks; hidden otherwise |
+| **Weapon / portal** | `WeaponFacing/WeaponVisual` child | `Assets/Animation/Weapon.controller` | Directional weapon swings; hidden otherwise |
 
 Both are wired in the prefab on the `PlayerAnimator` component (`anim` = body,
-`weaponAnim` = weapon). Leaving `weaponAnim` empty just disables the weapon track.
+`weaponAnim` = weapon). `weaponFacingRoot` references the unanimated `WeaponFacing`
+parent: it compensates for body turns so the weapon keeps the facing committed at
+the start of the swing. Leaving `weaponAnim` empty disables the weapon track.
 
 ---
 
@@ -48,15 +50,17 @@ contract: the controllers select a state via a transition condition `State Equal
 | 2 | Jump | `Player Jump.anim` | Hidden |
 | 3 | Fall | `Fall.anim` | Hidden |
 | 4 | Dash | `Dash.anim` | Hidden |
-| 5 | Attack | `AttackGround.anim` | `WeaponAttackSwing.anim` *(empty stub)* |
-| 6 | GroundPound | `AttackGround.anim` *(placeholder)* | `WeaponGroundPound.anim` *(empty stub)* |
+| 5 | Attack | `AttackGround.anim` | `WeaponAttackSwing.anim` |
+| 6 | AttackDown | `AttackGround.anim` *(same body pose)* | `WeaponAttackDown.anim` |
 | 7 | Shoot | `AttackGround.anim` *(placeholder)* | `WeaponShootDraw.anim` *(empty stub)* |
 | 8 | Stunned | `Hit.anim` | Hidden |
 | 9 | Dead | `Dead.anim` | Hidden |
+| 10 | AttackUp | `AttackGround.anim` *(same body pose)* | `WeaponAttackUp.anim` |
 
-**Placeholders / TODO art:** GroundPound and Shoot reuse another clip on the body, and
-all three weapon-track actions reuse `AttackEnemy.anim`. Replace these with real clips
-when the art exists (see §4).
+The three melee clips use the same sprites and sprite-key timing. Up/down change
+only weapon placement and in-plane orientation; the body stays upright. State 6
+retains the old ground-pound state ID, and the down clip retains that asset's GUID.
+Only Shoot still uses placeholder body art and an empty weapon clip.
 
 ---
 
@@ -66,7 +70,7 @@ when the art exists (see §4).
 authority (predicted on the local input authority), first match wins:
 
 1. `stats.IsDead` → **Dead**
-2. A latched one-shot action still running → **ActionState** (Attack / GroundPound / Shoot)
+2. A latched one-shot action still running → **ActionState** (Attack / AttackUp / AttackDown / Shoot)
 3. `movement.IsStunned()` → **Stunned**
 4. `movement.IsDashing()` → **Dash**
 5. otherwise → **None** (locomotion is derived locally)
@@ -87,11 +91,37 @@ Airborne poses and any air↔ground change commit immediately; only the grounded
 flip is dwell-gated. This is what makes remote locomotion smooth instead of choppy.
 
 "Latched action" = when you melee/shoot, `PlayerCombat` calls
-`PlayerAnimator.TriggerAttack/TriggerGroundPound/TriggerShoot()`, which sets a networked
+`PlayerAnimator.TriggerAttack(verticalAim)` or `TriggerShoot()`, which sets a networked
 `TickTimer` for a few tenths of a second. While that timer runs, `State` is forced to the
 action value so the swing/portal plays to completion even though you're still moving.
-The hold time is the per-action `attackDuration` / `groundPoundDuration` / `shootDuration`
-field on the `PlayerAnimator` component (default 0.3s each).
+All three melee directions share `attackDuration`; shooting uses `shootDuration`
+(default 0.3s each). Sprite-key timing is copied from the existing side swing rather
+than stretched to fill that hold.
+
+### Directional melee behavior
+
+Use the normal melee button with W/up-arrow or the gamepad stick up for an up
+attack, S/down-arrow or stick down for a down attack, and no vertical aim for a
+side attack. Side and up are available on the ground and in the air.
+
+Down attacks use `PlayerMovement.IsGrounded()` and are airborne-only. A grounded
+request does not start a swing, play its animation/sound, spend its cooldown, or
+fall back to a side attack. Landing during startup or active frames cancels the
+remaining down hits and the down pose, but retains cooldown and recovery. Leaving
+the ground again does not reactivate that swing.
+
+An accepted down hit spikes an enemy NPC or opposing player downward. The
+attacker does not dive or bounce, and simultaneous down-plus-melee does not start
+fast-fall. The target receives a one-shot downward velocity, with no new sideways
+launch, ground-impact damage, or forced fall until landing. A target's active dash
+and stale buffered jump cannot erase the spike; subsequent inputs work normally.
+Damage, target filtering, and one-hit-per-swing rules match the side attack.
+Damaging dash remains an ordinary side hit.
+
+Tune `downAttackSpikeSpeed` on `PlayerCombat` (default 20). Keep it compatible with
+the player's `maxFallSpeed`, which still caps subsequent falling motion. The old
+`groundPoundForce` value migrates to this field, but it now affects the target.
+Ordinary side/up and projectile knockback are unchanged.
 
 ---
 
@@ -106,38 +136,43 @@ field on the `PlayerAnimator` component (default 0.3s each).
 > You can also just overwrite the existing clip asset; the state already references it by
 > GUID, so the new motion shows up automatically.
 
-### B. Give the portal-weapon real attack art
-The weapon track is structurally complete and already wired to three **empty stub clips**
-(`WeaponAttackSwing.anim`, `WeaponGroundPound.anim`, `WeaponShootDraw.anim` in
-`Assets/Animation/`). They produce no visible motion yet — fill them in:
-1. On the `SideAttackTransform` child (or add a dedicated `WeaponPivot` child), add/assign
-   the **portal** and **weapon** `SpriteRenderer`s. (Today its SpriteRenderer has no
-   sprite, which is why nothing shows.)
-2. Open a stub clip (e.g. `WeaponAttackSwing.anim`) in the Animation window with the player
-   prefab selected, and key the effect: portal scales open → weapon slides out and swings →
-   both retract / fade. Animate the SpriteRenderer's `enabled`/color/position/scale.
-   The controller already references these clips by GUID, so editing them in place is all
-   you need — no re-wiring.
-3. **Match the clip length to the latch duration.** The weapon state is only held while
-   `State` stays on the action value, i.e. for `attackDuration` seconds (the stubs are
-   authored at 0.3s, non-looping, to match the defaults). If the clip is longer it gets cut
-   off; if shorter it finishes early and the weapon sits on its last frame. Keep the clip
-   length ≈ the matching `*Duration` field, or tune both together.
+### B. Update the directional weapon art
+The melee weapon clips in `Assets/Animation/` are already populated:
+`WeaponAttackSwing.anim`, `WeaponAttackUp.anim`, and `WeaponAttackDown.anim`.
+`WeaponShootDraw.anim` remains an empty stub.
+
+1. Select `WeaponFacing/WeaponVisual` in the player prefab. Its default sprite is
+   intentionally empty so the Hidden state can reset it to invisible.
+2. Edit the side swing's sprite sequence and copy the same sprites/key times into
+   the up/down clips. Preserve the vertical clips' directional transform keys.
+   Rotate in the sprite plane, not edge-on around Y; keep the existing side-art
+   orientation in mind when composing rotations.
+3. Keep the up/down visual centers aligned with their gameplay attack points.
+   Gameplay points are separate children of the player root and must not be
+   animated. Their boxes are rotated copies of the side box (3 by 2 versus 2 by 3
+   in the current prefab), with equivalent reach.
+4. Keep the clips non-looping and within `attackDuration`. A shorter clip holds
+   its final frame until the latch expires. Adjust all three clips together if
+   changing melee timing; simulation hit windows remain in `PlayerStats`.
+
+Do not animate `WeaponFacing`: its horizontal scale is owned by `PlayerAnimator`
+to preserve committed facing. The side attack point also serves as the projectile
+muzzle; moving the weapon artwork must not move that gameplay point.
 
 ### C. Tune how long an attack pose holds
-Edit `attackDuration` / `groundPoundDuration` / `shootDuration` on the `PlayerAnimator`
+Edit `attackDuration` / `shootDuration` on the `PlayerAnimator`
 component in the prefab. This is the single source of truth for the hold time on **both**
 tracks (they read the same replicated `State`).
 
 ### D. Add a brand-new state (example: `WallSlide`)
-1. **Enum:** add the value at the **end** of `AnimState` (e.g. `WallSlide = 10`) so existing
+1. **Enum:** add the value at the **end** of `AnimState` (e.g. `WallSlide = 11`) so existing
    ints don't shift. (If you must insert in the middle, you have to renumber every
    transition in both controllers — avoid it.)
-2. **Logic:** add a branch in `PlayerAnimator.ComputeState()` at the right priority.
+2. **Logic:** add a branch in `PlayerAnimator.ComputeOverride()` at the right priority.
 3. **Body controller:** add a state, bind its clip, add an Any-State transition with
-   condition `State Equals 10`, `Has Exit Time = false`, `Transition Duration = 0`,
+   condition `State Equals 11`, `Has Exit Time = false`, `Transition Duration = 0`,
    `Can Transition To Self = false`.
-4. **Weapon controller:** add a matching Any-State transition `State Equals 10` → `Hidden`
+4. **Weapon controller:** add a matching Any-State transition `State Equals 11` → `Hidden`
    (or a weapon clip if the weapon should show).
 5. If it's a one-shot (like an attack), add a `Trigger…()` latch method and call it from
    the gameplay code instead of computing it from velocity.
@@ -171,7 +206,7 @@ leaving) — see `HandleSfx()`.
 - **Enum order is a serialized contract.** The ints are baked into transition conditions in
   both `.controller` files. Add new values at the end; renumber both controllers if you
   ever reorder.
-- **Action clip length should track the latch duration**, not the other way around (§4-B/C).
+- **Directional melee clips share sprites, key times, and latch duration** (§4-B/C).
 - **Keep the authoritative/locomotion split.** Anything a remote client can't infer from
   motion (actions, stun, dash, death) is written to `OverrideState` only in `Simulate()`
   (state authority + predicted input authority). Anything derivable from motion
@@ -195,6 +230,10 @@ leaving) — see `HandleSfx()`.
 | `Assets/Scripts/Player/PlayerController.cs` | Calls `animator.Simulate()` each tick (incl. while dead) |
 | `Assets/Scripts/Player/PlayerCombat.cs` | Calls `Trigger…()` latches on melee/shoot |
 | `Assets/Scripts/Player/PlayerMovement.cs` | Exposes `IsGrounded()`/`IsDashing()`/`IsStunned()` |
-| `Assets/Animation/Player.controller` | Body track — 10 states, `State` Int param |
-| `Assets/Animation/Weapon.controller` | Weapon/portal track — Hidden + 3 action states |
-| `Assets/Scripts/Player/PlayerPrefab.prefab` | Wires `anim`/`weaponAnim` + registers `PlayerAnimator` on the NetworkObject |
+| `Assets/Animation/Player.controller` | Body track — 11 states, `State` Int param |
+| `Assets/Animation/Weapon.controller` | Weapon/portal track — Hidden + 4 action states |
+| `Assets/Animation/WeaponAttackSwing.anim`, `WeaponAttackUp.anim`, `WeaponAttackDown.anim` | Matched directional melee sprite sequences |
+| `Assets/Scripts/Combat/Core/MeleeAttackRules.cs` | Airborne eligibility, persistent landing cancellation, and spike velocity rules |
+| `Assets/Tests/EditMode/PlayerAnimation/DirectionalAttackAnimationTests.cs` | Controller mappings, sprite/timing parity, orientation, and pose reset |
+| `Assets/Tests/EditMode/Combat/Simulation/DirectionalMeleeSimulationTests.cs` | Offline Fusion gameplay coverage for hit queries, damage gates, landing cancellation, target physics, and committed direction |
+| `Assets/Scripts/Player/PlayerPrefab.prefab` | Wires body/weapon Animators, the facing pivot, directional hitboxes, and spike tuning |
