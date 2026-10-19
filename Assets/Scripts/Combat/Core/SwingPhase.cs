@@ -22,7 +22,7 @@ namespace Game.Combat.Core
             return SwingPhaseKind.None;
         }
 
-        /// <summary>True exactly on the first Active tick (used for the ground-pound impulse).</summary>
+        /// <summary>True exactly on the first Active tick.</summary>
         public static bool IsFirstActiveTick(int currentTick, int attackStartTick, int startupTicks)
         {
             return attackStartTick > 0 && currentTick - attackStartTick == startupTicks;

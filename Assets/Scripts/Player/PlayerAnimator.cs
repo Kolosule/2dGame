@@ -8,7 +8,7 @@ using Game.PlayerAnimation.Core;
 /// smoothly (see docs/player-animation-guide.md):
 ///
 /// - AUTHORITATIVE states that a client CANNOT infer from motion — Dead, the latched one-shots
-///   (Attack/GroundPound/Shoot), Stunned, Dash — are computed on the state authority (and predicted
+///   (directional attacks/Shoot), Stunned, Dash — are computed on the state authority (and predicted
 ///   on the local input authority) and REPLICATED as a single networked <see cref="OverrideState"/>
 ///   enum. <see cref="AnimState.None"/> means "no override — derive locomotion locally".
 ///
@@ -28,10 +28,8 @@ using Game.PlayerAnimation.Core;
 public class PlayerAnimator : NetworkBehaviour
 {
     [Header("Action clip durations (seconds)")]
-    [Tooltip("How long a melee swing is held as the Attack state.")]
+    [Tooltip("How long a melee swing is held, shared by side, up, and down attacks.")]
     [SerializeField] private float attackDuration = 0.3f;
-    [Tooltip("How long a ground-pound is held as the GroundPound state.")]
-    [SerializeField] private float groundPoundDuration = 0.3f;
     [Tooltip("How long a shot is held as the Shoot state.")]
     [SerializeField] private float shootDuration = 0.3f;
 
@@ -58,9 +56,12 @@ public class PlayerAnimator : NetworkBehaviour
 
     [Tooltip("Optional second track for the portal/weapon (Weapon.controller on the " +
              "WeaponVisual child). Driven off the SAME resolved State int, so it " +
-             "shows the weapon emerging during Attack/GroundPound/Shoot and stays hidden " +
+             "shows the weapon emerging during melee/Shoot and stays hidden " +
              "otherwise. Leave unset to disable the weapon track.")]
     [SerializeField] private Animator weaponAnim;
+
+    [Tooltip("Unanimated parent of WeaponVisual. Keeps the weapon on its committed facing while the body turns.")]
+    [SerializeField] private Transform weaponFacingRoot;
 
     // Networked animation state.
     // OverrideState: the authoritative, non-locomotion pose, or AnimState.None when locomotion
@@ -74,6 +75,7 @@ public class PlayerAnimator : NetworkBehaviour
     // Component refs (cached in Spawned).
     private PlayerMovement movement;
     private PlayerStatsHandler stats;
+    private PlayerCombat combat;
 
     private static readonly int StateParam = Animator.StringToHash("State");
 
@@ -94,6 +96,7 @@ public class PlayerAnimator : NetworkBehaviour
     {
         movement = GetComponent<PlayerMovement>();
         stats = GetComponent<PlayerStatsHandler>();
+        combat = GetComponent<PlayerCombat>();
 
         // A [Networked] enum defaults to 0 (= Idle), which Render would read as an authoritative
         // Idle override before the first Simulate. Seed it to None so proxies derive locomotion
@@ -105,6 +108,8 @@ public class PlayerAnimator : NetworkBehaviour
             // Prefer the explicitly-wired body Animator. Fallback keeps things working if
             // a future prefab variant forgets to assign it.
             if (anim == null) anim = GetComponentInChildren<Animator>();
+            if (weaponAnim != null && weaponFacingRoot == null)
+                Debug.LogError("PlayerAnimator: weaponFacingRoot must be assigned with weaponAnim.", this);
 
             // Seed render-motion tracking so the first frame doesn't produce a velocity spike.
             lastRenderPos = transform.position;
@@ -138,7 +143,7 @@ public class PlayerAnimator : NetworkBehaviour
     {
         // 1. Dead overrides everything.
         if (stats != null && stats.IsDead) return AnimState.Dead;
-        // 2. A latched one-shot action (Attack/Shoot/GroundPound) holds for its duration.
+        // 2. A latched one-shot action holds for its duration.
         if (!ActionTimer.ExpiredOrNotRunning(Runner)) return ActionState;
         // 3. Stun, 4. Dash.
         if (movement != null && movement.IsStunned()) return AnimState.Stunned;
@@ -150,10 +155,19 @@ public class PlayerAnimator : NetworkBehaviour
     // ---- Action latches (called from PlayerCombat instead of SetTrigger) ----
 
     /// <summary>STATE AUTHORITY: latch a melee-attack animation for its clip duration.</summary>
-    public void TriggerAttack() => LatchAction(AnimState.Attack, attackDuration);
+    public void TriggerAttack(int verticalAim)
+    {
+        AnimState action = verticalAim > 0 ? AnimState.AttackUp
+            : verticalAim < 0 ? AnimState.AttackDown : AnimState.Attack;
+        LatchAction(action, attackDuration);
+    }
 
-    /// <summary>STATE AUTHORITY: latch a ground-pound animation for its clip duration.</summary>
-    public void TriggerGroundPound() => LatchAction(AnimState.GroundPound, groundPoundDuration);
+    public void CancelDownAttack()
+    {
+        if (!HasStateAuthority && !HasInputAuthority) return;
+        if (ActionState == AnimState.AttackDown)
+            ActionTimer = default;
+    }
 
     /// <summary>STATE AUTHORITY: latch a shoot animation for its clip duration.</summary>
     public void TriggerShoot() => LatchAction(AnimState.Shoot, shootDuration);
@@ -161,7 +175,7 @@ public class PlayerAnimator : NetworkBehaviour
     private void LatchAction(AnimState action, float duration)
     {
         // State authority owns the authoritative latch; the local input authority also latches
-        // predictively so its attack/shoot/ground-pound animation fires on the input tick instead
+        // predictively so its attack/shoot animation fires on the input tick instead
         // of after a server round-trip. Fusion reconciles the networked latch against the host.
         // Proxies never call this (combat's Trigger* run only during predicted/authoritative ticks).
         if (!HasStateAuthority && !HasInputAuthority) return;
@@ -181,6 +195,17 @@ public class PlayerAnimator : NetworkBehaviour
         if (anim != null) anim.SetInteger(StateParam, state);
         // Weapon/portal track, driven off the same resolved State.
         if (weaponAnim != null) weaponAnim.SetInteger(StateParam, state);
+        if (weaponFacingRoot != null)
+        {
+            bool melee = resolved == AnimState.Attack || resolved == AnimState.AttackUp ||
+                         resolved == AnimState.AttackDown;
+            bool facingRight = movement != null ? movement.IsFacingRight() : transform.localScale.x >= 0f;
+            bool mirror = melee && combat != null &&
+                          combat.SwingFacingRight != facingRight;
+            Vector3 scale = weaponFacingRoot.localScale;
+            scale.x = Mathf.Abs(scale.x) * (mirror ? -1f : 1f);
+            weaponFacingRoot.localScale = scale;
+        }
 
         if (anim == null) return;
         HandleSfx(resolved);

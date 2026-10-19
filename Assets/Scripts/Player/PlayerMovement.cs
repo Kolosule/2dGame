@@ -1,5 +1,6 @@
 using UnityEngine;
 using Fusion;
+using Game.Combat.Core;
 using Game.PlayerMovement.Core;
 
 /// <summary>
@@ -175,7 +176,7 @@ public class PlayerMovement : NetworkBehaviour
         }
 
         // ---- Fast-fall (spec 1.5): down pressed at/past the apex snaps to fast-fall speed ----
-        // Down+melee is a ground pound (PlayerCombat), which takes precedence over fast-fall (spec 1.5).
+        // Down+melee attacks without changing the attacker's velocity; it takes precedence over fast-fall.
         if (!stunned && !Dashing && pressed.IsSet((int)PlayerButton.Down) &&
             !(input.VerticalAim < 0 && pressed.IsSet((int)PlayerButton.Melee)) &&
             MovementMath.ShouldStartFastFall(grounded, true, rb.linearVelocity.y,
@@ -229,6 +230,27 @@ public class PlayerMovement : NetworkBehaviour
         if (!HasStateAuthority) return;
         StunTimer = TickTimer.CreateFromSeconds(Runner, duration);
         if (Dashing) EndDash();
+    }
+
+    /// <summary>SERVER: a one-shot spike, not a forced fall or a control lock.</summary>
+    public void ApplySpike(float downwardSpeed)
+    {
+        if (!HasStateAuthority) return;
+        if (rb == null)
+        {
+            Debug.LogError("PlayerMovement: cannot apply a spike without a Rigidbody2D.", this);
+            return;
+        }
+
+        float velocityY = MeleeAttackRules.SpikeVelocity(rb.linearVelocity.y, downwardSpeed);
+        if (Dashing) EndDash();
+        JumpBufferCounter = 0;
+        CoyoteCounter = 0;
+        Jumping = false;
+        JumpCut = false;
+        FastFalling = false;
+        rb.gravityScale = baseGravity * stats.fallGravityMult;
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x, velocityY);
     }
 
     private void ApplyFacing()

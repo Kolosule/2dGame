@@ -1,7 +1,7 @@
 namespace Game.PlayerAnimation.Core
 {
     /// <summary>
-    /// One value per Animator state. The integer values 0..9 are a serialized CONTRACT: they are
+    /// One value per Animator state. The integer values are a serialized CONTRACT: they are
     /// baked into Player.controller / Weapon.controller as "State Equals n" transition conditions.
     /// Add new real states at the END so existing ints never shift.
     ///
@@ -20,10 +20,11 @@ namespace Game.PlayerAnimation.Core
         Fall = 3,
         Dash = 4,
         Attack = 5,
-        GroundPound = 6, // placeholder clip
+        AttackDown = 6,
         Shoot = 7,       // placeholder clip
         Stunned = 8,
         Dead = 9,
+        AttackUp = 10,
 
         /// <summary>Sentinel: no networked override — locomotion is derived locally. Never applied.</summary>
         None = 255

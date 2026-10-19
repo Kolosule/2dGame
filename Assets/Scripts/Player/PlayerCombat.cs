@@ -35,10 +35,10 @@ public class PlayerCombat : NetworkBehaviour
     [SerializeField] private Vector2 upAttackArea = new Vector2(1f, 1f);
     [SerializeField] private Vector2 downAttackArea = new Vector2(1f, 1f);
 
-    [Header("Ground Pound")]
-    [SerializeField] private bool useGroundPound = true;
-    [SerializeField] private float groundPoundForce = 20f;
-    [SerializeField] private GameObject groundPoundImpactEffect;
+    [Header("Down Attack")]
+    [Tooltip("Minimum downward speed applied to a target hit by an airborne down attack.")]
+    [FormerlySerializedAs("groundPoundForce")]
+    [SerializeField, Min(0.01f)] private float downAttackSpikeSpeed = 20f;
 
     [Header("Projectile Settings")]
     [SerializeField] private NetworkObject projectilePrefab;
@@ -63,15 +63,9 @@ public class PlayerCombat : NetworkBehaviour
     [SerializeField] private float tracerWidth = 0.08f;
     [SerializeField] private float tracerDuration = 0.1f;
 
-    [Header("Ground Check (for down attack)")]
-    [SerializeField] private Transform groundCheck;
-    [SerializeField] private float groundCheckRadius = 0.2f;
-    [SerializeField] private LayerMask groundLayer;
-
     private PlayerAnimator playerAnimator;
     private PlayerTeamData teamComponent;
     private PlayerStatsHandler statsHandler;
-    private Rigidbody2D rb;
     private PlayerMovement playerMovement;
     private PlayerStatModifiers mods;
     private int verticalAim;
@@ -121,14 +115,15 @@ public class PlayerCombat : NetworkBehaviour
     [Networked, OnChangedRender(nameof(OnAttackStartTickChanged))] private int AttackStartTick { get; set; }
     [Networked] private int AttackAim { get; set; }
     [Networked] private NetworkBool AttackFacingRight { get; set; }
-    [Networked] private NetworkBool AttackIsPound { get; set; }
+    [Networked] private NetworkBool DownAttackCancelled { get; set; }
+
+    public bool SwingFacingRight => AttackFacingRight;
 
     void Awake()
     {
         playerAnimator = GetComponent<PlayerAnimator>();
         teamComponent = GetComponent<PlayerTeamData>();
         statsHandler = GetComponent<PlayerStatsHandler>();
-        rb = GetComponent<Rigidbody2D>();
         playerMovement = GetComponent<PlayerMovement>();
         mods = GetComponent<PlayerStatModifiers>();
         ValidateRangedConfiguration();
@@ -143,6 +138,10 @@ public class PlayerCombat : NetworkBehaviour
             Debug.LogError("PlayerCombat: attackableLayer must include the Enemy layer.");
         if (playerLayerMask == 0)
             Debug.LogError("PlayerCombat: attackableLayer must include the Player layer.");
+        if (playerMovement == null)
+            Debug.LogError("PlayerCombat: PlayerMovement is required for attack grounding.", this);
+        if (sideAttackPoint == null || upAttackPoint == null || downAttackPoint == null)
+            Debug.LogError("PlayerCombat: side, up, and down attack points must all be assigned.", this);
     }
 
     private void OnValidate() => ValidateRangedConfiguration();
@@ -174,19 +173,27 @@ public class PlayerCombat : NetworkBehaviour
         lastAimWorldPoint = input.AimWorldPoint;
 
         SwingPhaseKind phase = CurrentSwingPhase();
+        bool grounded = playerMovement != null && playerMovement.IsGrounded();
 
         if (pressed.IsSet((int)PlayerButton.Melee) && phase == SwingPhaseKind.None &&
-            AttackCooldownTimer.ExpiredOrNotRunning(Runner))
+            AttackCooldownTimer.ExpiredOrNotRunning(Runner) &&
+            playerMovement != null && GetAttackPoint(verticalAim) != null &&
+            MeleeAttackRules.CanStart(verticalAim, grounded))
         {
             AttackCooldownTimer = TickTimer.CreateFromSeconds(Runner, stats.attackCooldown);
             BeginSwing();
             phase = CurrentSwingPhase(); // now Startup (or Active if startupTicks is 0)
         }
 
-        if (phase == SwingPhaseKind.Active)
+        if (phase != SwingPhaseKind.None && !DownAttackCancelled &&
+            MeleeAttackRules.CancelDownHits(AttackAim, grounded, DownAttackCancelled))
         {
-            SimulateSwingTick(phase);
+            DownAttackCancelled = true;
+            if (playerAnimator != null) playerAnimator.CancelDownAttack();
         }
+
+        if (phase == SwingPhaseKind.Active && !DownAttackCancelled)
+            SimulateSwingTick();
 
         if (allowRangedCharge) SimulateRangedCharge(input);
 
@@ -196,7 +203,7 @@ public class PlayerCombat : NetworkBehaviour
         if (HasStateAuthority && dashing && mods != null && mods.DashDealsDamage && sideAttackPoint != null)
         {
             if (!wasDashing) dashStruck.Clear();
-            ApplyMeleeHits(sideAttackPoint.position, sideAttackArea, dashStruck);
+            ApplyMeleeHits(sideAttackPoint.position, sideAttackArea, dashStruck, attackAim: 0);
         }
         wasDashing = dashing;
     }
@@ -238,27 +245,21 @@ public class PlayerCombat : NetworkBehaviour
     /// PlayerMovement reads this to block dash starts (spec 2.3).</summary>
     public bool IsSwingCommitted => CurrentSwingPhase() != SwingPhaseKind.None;
 
-    /// <summary>Latch a new swing: start tick + aim/facing/pound-ness frozen at commit
+    /// <summary>Latch a new swing: start tick + aim/facing frozen at commit
     /// (spec 2.2 — the swing never flips mid-animation). Runs on state authority and the
     /// predicting input authority, like the old Attack().</summary>
     private void BeginSwing()
     {
         AttackStartTick = Runner.Tick;
-        AttackAim = verticalAim;
+        AttackAim = System.Math.Sign(verticalAim);
         AttackFacingRight = playerMovement != null ? playerMovement.IsFacingRight()
                                                    : transform.localScale.x >= 0f;
-
-        bool isGrounded = groundCheck != null &&
-                          Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-        AttackIsPound = verticalAim < 0 && !isGrounded && downAttackPoint != null;
+        DownAttackCancelled = false;
 
         swingStruck.Clear();
 
         if (playerAnimator != null)
-        {
-            if (AttackIsPound) playerAnimator.TriggerGroundPound();
-            else playerAnimator.TriggerAttack();
-        }
+            playerAnimator.TriggerAttack(AttackAim);
     }
 
     /// <summary>
@@ -277,49 +278,31 @@ public class PlayerCombat : NetworkBehaviour
         // Tick 0 is the never-swung default; a pooled or freshly spawned player must not whoosh.
         if (AttackStartTick <= 0) return;
 
-        AudioCueId cue = AttackIsPound ? AudioCueId.MeleeSwingHeavy : AudioCueId.MeleeSwing;
+        AudioCueId cue = AttackAim < 0 ? AudioCueId.MeleeSwingHeavy : AudioCueId.MeleeSwing;
         if (HasInputAuthority) Audio.Play2D(cue);
         else Audio.PlayAt(cue, transform.position);
     }
 
-    /// <summary>Per-tick swing behaviour. Pound impulse fires exactly once on the first Active
-    /// tick (predicted + authoritative, like the old press-time write). Hit detection runs on
-    /// every Active tick, server-only, at most one hit per target per swing (swingStruck).</summary>
-    private void SimulateSwingTick(SwingPhaseKind phase)
+    /// <summary>Server-only hit detection on every uncancelled Active tick,
+    /// at most one hit per target per swing.</summary>
+    private void SimulateSwingTick()
     {
-        if (useGroundPound && AttackIsPound &&
-            SwingPhase.IsFirstActiveTick(Runner.Tick, AttackStartTick, stats.attackStartupTicks))
-        {
-            rb.linearVelocity = new Vector2(rb.linearVelocity.x, -groundPoundForce);
-        }
-
-        if (phase != SwingPhaseKind.Active) return;
         if (!HasStateAuthority) return;
-        if (sideAttackPoint == null) return; // parity with old Attack()'s null guard
 
         ResolveSwingBox(out Vector2 center, out Vector2 area);
-        ApplyMeleeHits(center, area, swingStruck);
+        ApplyMeleeHits(center, area, swingStruck, AttackAim);
     }
+
+    private Transform GetAttackPoint(int aim) =>
+        aim > 0 ? upAttackPoint : aim < 0 ? downAttackPoint : sideAttackPoint;
 
     /// <summary>Hitbox from the LATCHED aim/facing. The attack-point children flip with
     /// localScale (current facing); if facing changed mid-swing, mirror the offset back
     /// to the facing latched at commit.</summary>
     private void ResolveSwingBox(out Vector2 center, out Vector2 area)
     {
-        Transform point = sideAttackPoint;
-        area = sideAttackArea;
-
-        if (AttackAim > 0 && upAttackPoint != null)
-        {
-            point = upAttackPoint;
-            area = upAttackArea;
-        }
-        else if (AttackIsPound)
-        {
-            point = downAttackPoint;
-            area = downAttackArea;
-        }
-        // (AttackAim < 0 while grounded falls through to the side box, matching old behaviour.)
+        Transform point = GetAttackPoint(AttackAim);
+        area = AttackAim > 0 ? upAttackArea : AttackAim < 0 ? downAttackArea : sideAttackArea;
 
         Vector2 offset = (Vector2)point.position - (Vector2)transform.position;
         bool facingRightNow = playerMovement != null ? playerMovement.IsFacingRight() : transform.localScale.x >= 0f;
@@ -332,7 +315,7 @@ public class PlayerCombat : NetworkBehaviour
     /// documented current-tick fallback. Both paths share one target-id registry.
     /// </summary>
     private void ApplyMeleeHits(Vector2 center, Vector2 area,
-                                AttackHitRegistry alreadyHit)
+                                AttackHitRegistry alreadyHit, int attackAim)
     {
         Vector2 normalizedArea = new Vector2(Mathf.Abs(area.x), Mathf.Abs(area.y));
         CombatConfig config = GetCombatConfig();
@@ -341,7 +324,7 @@ public class PlayerCombat : NetworkBehaviour
             ? config.lagCompensationDiagnosticInterval
             : 30f;
 
-        ApplyCurrentTickEnemyHits(center, normalizedArea, alreadyHit, diagnosticsEnabled);
+        ApplyCurrentTickEnemyHits(center, normalizedArea, alreadyHit, diagnosticsEnabled, attackAim);
 
         HitboxManager historyManager = Runner != null ? Runner.LagCompensation : null;
         PlayerRef attacker = Object != null ? Object.InputAuthority : PlayerRef.None;
@@ -354,7 +337,7 @@ public class PlayerCombat : NetworkBehaviour
         if (queryMode == PlayerHitQueryMode.Historical)
         {
             ApplyHistoricalPlayerHits(
-                historyManager, attacker, center, normalizedArea, alreadyHit, diagnosticsEnabled);
+                historyManager, attacker, center, normalizedArea, alreadyHit, diagnosticsEnabled, attackAim);
         }
         else
         {
@@ -366,7 +349,7 @@ public class PlayerCombat : NetworkBehaviour
                 WarnLagCompensationFallbackOnce("CombatConfig is unavailable");
 
             ApplyCurrentTickPlayerHits(
-                center, normalizedArea, alreadyHit, diagnosticsEnabled);
+                center, normalizedArea, alreadyHit, diagnosticsEnabled, attackAim);
         }
 
         CombatLagCompensationDiagnostics.MaybeLog(
@@ -377,7 +360,8 @@ public class PlayerCombat : NetworkBehaviour
         Vector2 center,
         Vector2 area,
         AttackHitRegistry alreadyHit,
-        bool diagnosticsEnabled)
+        bool diagnosticsEnabled,
+        int attackAim)
     {
         currentTickHits.Clear();
         Physics2D.OverlapBox(center, area, 0f, enemyContactFilter, currentTickHits);
@@ -388,13 +372,14 @@ public class PlayerCombat : NetworkBehaviour
             if (enemy == null || !TryRegisterTarget(enemy.Object, alreadyHit, diagnosticsEnabled))
                 continue;
 
-            Vector2 knockbackDirection =
-                (hit.transform.position - transform.position).normalized;
-            Vector2 knockbackForce =
-                new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward);
             int finalDamage = ResolveMeleeDamage(enemy.Team, hit.transform.position);
-            enemy.TakeDamage(finalDamage, knockbackForce, hit.transform.position);
-            RPC_HitFeedback(enemy.Object.Id, hit.transform.position, finalDamage);
+            NetworkId targetId = enemy.Object.Id;
+            Vector2 hitPoint = hit.transform.position;
+            if (attackAim < 0)
+                enemy.ServerTakeSpikeDamage(finalDamage, downAttackSpikeSpeed);
+            else
+                enemy.TakeDamage(finalDamage, ResolveKnockback(hitPoint), hitPoint);
+            RPC_HitFeedback(targetId, hitPoint, finalDamage);
             CombatLagCompensationDiagnostics.RecordCurrentTickEnemyHit(diagnosticsEnabled);
         }
     }
@@ -405,7 +390,8 @@ public class PlayerCombat : NetworkBehaviour
         Vector2 center,
         Vector2 area,
         AttackHitRegistry alreadyHit,
-        bool diagnosticsEnabled)
+        bool diagnosticsEnabled,
+        int attackAim)
     {
         Vector3 queryCenter = new Vector3(center.x, center.y, transform.position.z);
         Vector3 queryExtents =
@@ -432,7 +418,7 @@ public class PlayerCombat : NetworkBehaviour
             PlayerStatsHandler targetPlayer =
                 root != null ? root.GetComponent<PlayerStatsHandler>() : null;
             TryApplyPlayerMeleeHit(
-                targetPlayer, alreadyHit, diagnosticsEnabled, historicalHit: true);
+                targetPlayer, alreadyHit, diagnosticsEnabled, attackAim, historicalHit: true);
         }
     }
 
@@ -440,7 +426,8 @@ public class PlayerCombat : NetworkBehaviour
         Vector2 center,
         Vector2 area,
         AttackHitRegistry alreadyHit,
-        bool diagnosticsEnabled)
+        bool diagnosticsEnabled,
+        int attackAim)
     {
         currentTickHits.Clear();
         Physics2D.OverlapBox(center, area, 0f, playerContactFilter, currentTickHits);
@@ -449,7 +436,7 @@ public class PlayerCombat : NetworkBehaviour
         {
             PlayerStatsHandler targetPlayer = hit.GetComponent<PlayerStatsHandler>();
             TryApplyPlayerMeleeHit(
-                targetPlayer, alreadyHit, diagnosticsEnabled, historicalHit: false);
+                targetPlayer, alreadyHit, diagnosticsEnabled, attackAim, historicalHit: false);
         }
     }
 
@@ -457,6 +444,7 @@ public class PlayerCombat : NetworkBehaviour
         PlayerStatsHandler targetPlayer,
         AttackHitRegistry alreadyHit,
         bool diagnosticsEnabled,
+        int attackAim,
         bool historicalHit)
     {
         if (targetPlayer == null || targetPlayer.IsDead) return;
@@ -481,18 +469,29 @@ public class PlayerCombat : NetworkBehaviour
         RPC_HitFeedback(
             targetPlayer.Object.Id, currentTargetPosition, finalDamage);
 
-        Rigidbody2D targetRb = targetPlayer.GetComponent<Rigidbody2D>();
-        if (targetRb != null)
+        if (attackAim < 0)
         {
-            Vector2 knockbackDirection =
-                (currentTargetPosition - (Vector2)transform.position).normalized;
-            targetRb.AddForce(
-                new Vector2(knockbackDirection.x * stats.attackForce, knockbackUpward),
-                ForceMode2D.Impulse);
+            PlayerMovement targetMovement = targetPlayer.GetComponent<PlayerMovement>();
+            if (targetMovement != null)
+                targetMovement.ApplySpike(downAttackSpikeSpeed);
+            else
+                Debug.LogError("PlayerCombat: spike target has no PlayerMovement.", targetPlayer);
+        }
+        else
+        {
+            Rigidbody2D targetRb = targetPlayer.GetComponent<Rigidbody2D>();
+            if (targetRb != null)
+                targetRb.AddForce(ResolveKnockback(currentTargetPosition), ForceMode2D.Impulse);
         }
 
         if (historicalHit)
             CombatLagCompensationDiagnostics.RecordHistoricalPlayerHit(diagnosticsEnabled);
+    }
+
+    private Vector2 ResolveKnockback(Vector2 targetPosition)
+    {
+        Vector2 direction = (targetPosition - (Vector2)transform.position).normalized;
+        return new Vector2(direction.x * stats.attackForce, knockbackUpward);
     }
 
     private static bool TryRegisterTarget(
@@ -641,12 +640,6 @@ public class PlayerCombat : NetworkBehaviour
         {
             Gizmos.color = Color.green;
             Gizmos.DrawWireCube(downAttackPoint.position, downAttackArea);
-        }
-
-        if (groundCheck != null)
-        {
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
         }
     }
 }
