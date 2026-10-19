@@ -59,6 +59,29 @@ behind a wall or apply both trigger and historical hits. Physical projectiles ar
 not rewound until a validated projectile design can preserve wall ordering and one-impact
 semantics.
 
+## Charged ranged attacks
+
+Hold right mouse, Left Alt, or gamepad west to charge; release to fire. The player
+prefab's former 2-second ranged cooldown is now the full-charge duration. Launch
+speed increases linearly from 5 on an uncharged tap to 40 at 2 seconds (22.5 at
+1 second), and stays at 40 for longer holds. There is no post-shot cooldown or
+automatic shot at full charge. Aim is taken at release.
+
+`PlayerCombat` stores the charge start tick and consumed shoot/cancellation sequences in
+Fusion's rollback state. The server computes launch speed rather than accepting a
+client-provided strength. A shoot-specific Input System button action retains
+press/release transitions between polls and combines the existing bindings.
+Repeated input does not repeat a shot, and a release/repress can start the next
+charge immediately. Very short taps between polls use minimum speed.
+
+Death, disabled combat, match input locks, and local control/focus loss cancel
+charge rather than firing it. A held control must be released before starting a
+new charge after cancellation. Missing network input alone is not a release.
+Melee cooldowns, projectile damage, gravity, stun, scale, collision, friendly-fire
+rules, and the defender's rapid-hit protection are unchanged. Shooting animation
+and local muzzle/tracer feedback occur on release; no charge meter or new art is
+required. Rebuild both client and server after this network input/state change.
+
 ## Authoritative hit flow
 
 1. The server reaches an active melee or damaging-dash tick.
@@ -170,6 +193,15 @@ At each condition, run once with **Enable Lag Compensation** off and once with i
 - moving attacker and both players moving
 - jump/aerial, ground-pound, and damaging-dash hits
 - physical projectile at a moving target and a target beside a wall
+- ranged taps, 1-second holds, 2-second holds, and longer holds: speeds 5 (uncharged),
+  22.5, 40, and 40 respectively, measured as launch velocity rather than later
+  gravity-affected velocity
+- no shot while holding; exactly one shot on release; repeated quick shots without
+  waiting 2 seconds; release/repress between polls; and aim changes before release
+- ranged charge cancelled by death, combat disabling, a match input lock, or focus
+  loss, with no stale shot when controls return
+- host and remote-client shots: matching launch speed and no repeated muzzle,
+  tracer, or Shoot animation from replayed input/resimulation
 - death or respawn during a swing
 - two overlapping targets and several players fighting in one area
 - disconnect/reconnect followed by immediate melee and projectile combat

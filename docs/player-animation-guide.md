@@ -93,6 +93,11 @@ action value so the swing/portal plays to completion even though you're still mo
 The hold time is the per-action `attackDuration` / `groundPoundDuration` / `shootDuration`
 field on the `PlayerAnimator` component (default 0.3s each).
 
+Ranged attacks charge while the shoot control is held and call `TriggerShoot()` only
+on release. Charging does not latch the Shoot pose or play firing effects. The player
+prefab ramps launch speed from 5 to 40 over 2 seconds, with no ranged firing cooldown;
+holding longer retains full charge until release. There is no separate charge animation.
+
 ---
 
 ## 4. Common tasks

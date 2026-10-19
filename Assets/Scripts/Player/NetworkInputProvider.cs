@@ -4,6 +4,7 @@ using Fusion;
 using Fusion.Sockets;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Game.Combat.Core;
 
 /// <summary>
 /// The ONLY place that reads local input devices. Fusion calls OnInput each tick
@@ -14,12 +15,47 @@ public class NetworkInputProvider : MonoBehaviour, INetworkRunnerCallbacks
     // Tap latches: OnInput samples "is the key down right now", so a tap that starts and ends
     // entirely between two polls would be lost. Update() runs every render frame and latches
     // press edges; OnInput ORs the latch in and clears it. Only needed for the edge-triggered
-    // actions (Jump/Dash/Melee/Shoot/Stealth all act on the press edge in their Simulate paths).
-    private bool jumpQueued, dashQueued, meleeQueued, shootQueued, stealthQueued;
+    // actions (Jump/Dash/Melee/Stealth all act on the press edge in their Simulate paths).
+    private bool jumpQueued, dashQueued, meleeQueued, stealthQueued;
+    private readonly ShootInputBuffer shootInput = new ShootInputBuffer();
+    private InputAction shootAction;
 
     // Last aim point computed with a live camera. Reused when the camera or mouse is momentarily
     // unavailable (scene transition), instead of sending (0,0) = "aim at the world origin".
     private Vector2 lastAimWorld;
+
+    private void Awake()
+    {
+        // Button actions combine bindings and retain both edges even within one render frame.
+        shootAction = new InputAction("Shoot", InputActionType.Button);
+        shootAction.AddBinding("<Mouse>/rightButton");
+        shootAction.AddBinding("<Keyboard>/leftAlt");
+        shootAction.AddBinding("<Gamepad>/buttonWest");
+        shootAction.wantsInitialStateCheck = true;
+        shootAction.performed += OnShootChanged;
+        shootAction.canceled += OnShootChanged;
+    }
+
+    private void OnEnable() => shootAction.Enable();
+
+    private void OnDisable()
+    {
+        shootInput.Cancel();
+        shootAction.Disable();
+    }
+
+    private void OnDestroy() => shootAction.Dispose();
+
+    private void OnApplicationFocus(bool focused)
+    {
+        if (focused) return;
+        shootInput.Cancel();
+    }
+
+    private void OnShootChanged(InputAction.CallbackContext context)
+    {
+        shootInput.SetHeld(context.performed);
+    }
 
     void Update()
     {
@@ -30,19 +66,28 @@ public class NetworkInputProvider : MonoBehaviour, INetworkRunnerCallbacks
         if ((keyboard != null && keyboard.spaceKey.wasPressedThisFrame)     || (gamepad != null && gamepad.buttonNorth.wasPressedThisFrame))   jumpQueued = true;
         if ((keyboard != null && keyboard.leftShiftKey.wasPressedThisFrame) || (gamepad != null && gamepad.rightShoulder.wasPressedThisFrame)) dashQueued = true;
         if ((mouse != null && mouse.leftButton.wasPressedThisFrame)         || (keyboard != null && keyboard.leftCtrlKey.wasPressedThisFrame) || (gamepad != null && gamepad.buttonSouth.wasPressedThisFrame)) meleeQueued = true;
-        if ((mouse != null && mouse.rightButton.wasPressedThisFrame)        || (keyboard != null && keyboard.leftAltKey.wasPressedThisFrame)  || (gamepad != null && gamepad.buttonWest.wasPressedThisFrame))  shootQueued = true;
         if ((keyboard != null && keyboard.qKey.wasPressedThisFrame)         || (gamepad != null && gamepad.buttonEast.wasPressedThisFrame))   stealthQueued = true;
     }
 
     public void OnInput(NetworkRunner runner, NetworkInput input)
     {
-        if (MatchManager.Instance != null && !MatchManager.Instance.InputEnabled)
+        if (!isActiveAndEnabled ||
+            (MatchManager.Instance != null && !MatchManager.Instance.InputEnabled))
         {
-            input.Set(new NetInput());
+            shootInput.Cancel();
+            input.Set(new NetInput
+            {
+                ShootSequence = shootInput.Sequence,
+                ShootCancelSequence = shootInput.CancellationSequence
+            });
             return;
         }
 
-        var data = new NetInput();
+        var data = new NetInput
+        {
+            ShootSequence = shootInput.Sequence,
+            ShootCancelSequence = shootInput.CancellationSequence
+        };
 
         var keyboard = Keyboard.current;
         var mouse = Mouse.current;
@@ -76,18 +121,17 @@ public class NetworkInputProvider : MonoBehaviour, INetworkRunnerCallbacks
         }
         data.VerticalAim = (sbyte)Mathf.Clamp(Mathf.RoundToInt(v), -1, 1);
 
-        // Buttons: held state OR the Update()-latched tap, so fast taps are never dropped.
+        // Press actions use held state OR a latched tap; Shoot carries its own edge sequence.
         bool jump    = jumpQueued    || (keyboard != null && keyboard.spaceKey.isPressed)     || (gamepad != null && gamepad.buttonNorth.isPressed);
         bool dash    = dashQueued    || (keyboard != null && keyboard.leftShiftKey.isPressed) || (gamepad != null && gamepad.rightShoulder.isPressed);
         bool melee   = meleeQueued   || (mouse != null && mouse.leftButton.isPressed)         || (keyboard != null && keyboard.leftCtrlKey.isPressed) || (gamepad != null && gamepad.buttonSouth.isPressed);
-        bool shoot   = shootQueued   || (mouse != null && mouse.rightButton.isPressed)        || (keyboard != null && keyboard.leftAltKey.isPressed)  || (gamepad != null && gamepad.buttonWest.isPressed);
         bool stealth = stealthQueued || (keyboard != null && keyboard.qKey.isPressed)         || (gamepad != null && gamepad.buttonEast.isPressed);
-        jumpQueued = dashQueued = meleeQueued = shootQueued = stealthQueued = false;
+        jumpQueued = dashQueued = meleeQueued = stealthQueued = false;
 
         data.Buttons.Set((int)PlayerButton.Jump,    jump);
         data.Buttons.Set((int)PlayerButton.Dash,    dash);
         data.Buttons.Set((int)PlayerButton.Melee,   melee);
-        data.Buttons.Set((int)PlayerButton.Shoot,   shoot);
+        data.Buttons.Set((int)PlayerButton.Shoot,   shootInput.Held);
         data.Buttons.Set((int)PlayerButton.Stealth, stealth);
 
         // Down (held state; edge detection happens in PlayerController via PreviousButtons).
