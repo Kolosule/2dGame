@@ -1,6 +1,6 @@
 namespace Game.Buffs.Core
 {
-    /// <summary>Stable network token for each buff. Serialized as a byte in PlayerBuffs.LoadoutOrder.</summary>
+    /// <summary>Stable serialized identifiers, independent of the approved upgrade order.</summary>
     public enum BuffId : byte
     {
         ExtraJump = 0,

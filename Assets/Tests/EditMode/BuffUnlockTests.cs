@@ -117,7 +117,7 @@ public class BuffUnlockTests
     }
 
     // The spec's four target outcomes, expressed as the tier of each of the four priority
-    // positions under the round-robin. Default order is [ExtraJump, Stealth, QuickerDash, FlagRunner].
+    // positions under the round-robin. Fixed order is [ExtraJump, QuickerDash, Stealth, FlagRunner].
     [TestCase(55, 2, 2, 1, 1)]
     [TestCase(120, 3, 2, 2, 2)]
     [TestCase(220, 3, 3, 3, 2)]

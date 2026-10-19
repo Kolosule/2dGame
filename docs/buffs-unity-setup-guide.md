@@ -4,6 +4,11 @@ This guide covers everything you must do **in the Unity Editor** to make the mer
 buff system actually run. All the C# is on `main`; the steps below create the data
 assets, wire components, build the lobby UI, and play-test.
 
+Every player uses one fixed upgrade path: **Jump → Dash → Invisibility → Flag Carrying**
+(`ExtraJump → QuickerDash → Stealth → FlagRunner`). This order repeats for each tier.
+The lobby shows it read-only; clients cannot submit a different order, and reconnects
+restore deposited value without restoring any personal path.
+
 Work top-to-bottom — later steps depend on earlier ones.
 
 ---
@@ -21,14 +26,15 @@ Work top-to-bottom — later steps depend on earlier ones.
 
 ### Run the unit tests
 - Window → General → **Test Runner** → **EditMode** tab → **Run All**.
-- Expected: the `BuffUnlockTests` cases all pass (the round-robin tier math).
+- Expected: `BuffUnlockTests`, `BuffProgressTests`, and `BuffUpgradePathTests` all pass
+  (round-robin tiers, progress, the fixed path, and its read-only lobby display).
 
 ---
 
 ## 1. Create the buff data assets
 
 Create a folder `Assets/Settings/Buffs/` (right-click in Project → Create → Folder).
-Then create four ScriptableObject assets via the right-click **Create → Buffs** menu.
+Then create the four buff assets and their config via the right-click **Create → Buffs** menu.
 
 ### 1a. Extra Jump  (Create → Buffs → Extra Jump)
 | Field | Value |
@@ -59,18 +65,28 @@ Then create four ScriptableObject assets via the right-click **Create → Buffs*
 | Cooldown Multipliers | `[0.5, 0, 0]` (default) |
 | Dash Damage From Tier | `3` (default) |
 
-> **The `Id` field is critical** — it's the stable token the network and the loadout
-> picker use. ExtraJump / Stealth / QuickerDash must each be set correctly; the array
-> *order* in the config does not matter, but the Ids do.
-
-### 1d. Loadout Config  (Create → Buffs → Loadout Config)
+### 1d. Flag Runner  (Create → Buffs → Flag Runner)
 | Field | Value |
 |---|---|
-| All Buffs | size 3 → assign the three assets above (any order) |
-| Thresholds | `[5,10,15, 30,45,60, 120,180,240]` (default) |
-| Default Order | `[ExtraJump, Stealth, QuickerDash]` (default) |
+| Id | `FlagRunner` |
+| Display Name | `Flag Runner` |
+| Kind | `Passive` |
+| Carry Speed Multipliers | `[1.1, 1.2, 1.2]` |
+| Dash While Carrying From Tier | `3` |
 
-This single asset is the registry + tuning knobs for the whole system.
+> **The `Id` field is critical** — it identifies the buff in the fixed path.
+> ExtraJump / QuickerDash / Stealth / FlagRunner must each be set correctly; the array
+> *order* in the registry does not change unlock priority.
+
+### 1e. Loadout Config  (Create → Buffs → Loadout Config)
+| Field | Value |
+|---|---|
+| All Buffs | size 4 → assign the four buff assets above (any order) |
+| Thresholds | `[5,10,16,24, 34,46,62,80, 110,150,200,260]` (default) |
+| Max Tier | `3` |
+
+This single asset is the registry + tuning knobs for the whole system. Upgrade order
+is not an Inspector setting: `Game.Buffs.Core.BuffUpgradePath` owns the immutable path.
 
 ---
 
@@ -81,7 +97,7 @@ the one with `PlayerMovement`, `PlayerCombat`, `NetworkObject`). Add these three
 components to the **root** GameObject:
 
 ### 2a. PlayerBuffs
-- **Config** → assign the `BuffLoadoutConfig` asset from step 1d.
+- **Config** → assign the `BuffLoadoutConfig` asset from step 1e.
 
 ### 2b. PlayerStatModifiers
 - **Stats** → assign the **same `PlayerStats` asset** already used by `PlayerMovement`
@@ -107,28 +123,21 @@ networked-behaviours list (Fusion 2 collects this automatically on save; if ther
 
 ---
 
-## 3. Build the lobby loadout picker UI
+## 3. Wire the read-only lobby upgrade path
 
-In the **MainMenu** scene, on the team-selection panel (the one with the
-`TeamSelectionUI` component), add a small "Loadout" sub-panel:
+In the **MainMenu** scene, the `LobbyScreenUI` component owns the collapsible
+**Upgrade Path** panel.
 
-1. Create **3 rows**, each containing:
-   - a `Text` label (shows e.g. "1. Extra Jump"),
-   - a ▲ Up `Button`,
-   - a ▼ Down `Button`.
-2. Select the `TeamSelectionUI` component and wire its new fields:
-   - **Buff Config** → the `BuffLoadoutConfig` asset (**don't skip this** — see footgun
-     below).
-   - **Slot Labels** → the 3 row labels, **top-to-bottom = priority 1 → 3**.
-   - **Slot Up Buttons** → the 3 ▲ buttons, same row order as the labels.
-   - **Slot Down Buttons** → the 3 ▼ buttons, same row order.
+1. Create **4 TMP text labels**, one per upgrade; do not add reorder buttons.
+2. Assign **Buff Config** to the shared `BuffLoadoutConfig` asset for display names.
+3. Assign **Slot Labels** top-to-bottom. They always show Extra Jump, Quicker Dash,
+   Stealth, and Flag Runner, using the assets' display names.
+4. Wire **Loadout Toggle Button** and **Loadout Panel** to the button and panel.
+   These serialized field names are retained for existing scene references.
 
-The picker initializes to the config's Default Order; ▲/▼ reorder the rows; picking a
-team submits the chosen order alongside the team choice and locks the rows.
-
-> **Footgun:** if you leave **Buff Config** unassigned on `TeamSelectionUI`, the picker
-> submits an empty loadout. Players still get the default loadout (a guard protects
-> this), but the picker UI will be blank. Always assign it.
+For an existing scene, run **Tools → Lobby → Refresh Upgrade Path** and save.
+The tool adds missing labels and hides legacy up/down controls. Runtime also hides
+and disables those controls; no lobby action submits an upgrade order.
 
 ---
 
@@ -138,12 +147,12 @@ team submits the chosen order alongside the team choice and locks the rows.
 local session you can test solo.
 
 **Tip:** to unlock fast while testing, temporarily set the `BuffLoadoutConfig`
-**Thresholds** to `[1,2,3, 4,5,6, 7,8,9]`. **Restore the real values afterward.**
+**Thresholds** to `[1,2,3,4, 5,6,7,8, 9,10,11,12]`. **Restore the real values afterward.**
 
 Verify, in order:
 
-1. **Loadout picker** — in the menu, the three buffs show in default order; ▲/▼ reorder
-   and renumber; picking a team locks them.
+1. **Upgrade path** — in the lobby, the four buffs show in the approved order with
+   no up/down controls. Switching teams or reopening the panel cannot change it.
 2. **Jump tiers** — deposit coins to cross thresholds: +1 air jump (T1) → +2 (T2) →
    unlimited (T3).
 3. **Dash tiers** — dash cooldown bar refills ~2× faster (T1) → effectively no cooldown
@@ -155,8 +164,10 @@ Verify, in order:
    alpha) for the tier's duration (1s at T1), then a 20s cooldown before you can re-use.
 6. **Stealth vs AI** — while stealthed, a chasing enemy loses you and returns to patrol;
    it won't start a new chase until you're visible again.
-7. **Priority order** — reorder the loadout (e.g. Stealth first) and confirm unlocks
-   follow the new order round-robin.
+7. **Fixed order** — with the normal thresholds, bank to 5 / 10 / 16 / 24: Jump,
+   Dash, Invisibility, then Flag Carrying reach T1. The same order repeats at T2 and T3.
+8. **Reconnect** — earned tiers remain intact and subsequent unlocks follow the same
+   approved path. A new match starts progression from zero in that same order.
 
 Two-client checks (optional, needs a second instance with `singlePlayerMode = false`):
 - An opposing player sees a stealthed enemy at ~0.05 alpha (near-invisible); teammates
@@ -168,12 +179,13 @@ Two-client checks (optional, needs a second instance with `singlePlayerMode = fa
 
 | Knob | Where | Default |
 |---|---|---|
-| Unlock thresholds (cumulative value) | `BuffLoadoutConfig.Thresholds` | 5/10/15, 30/45/60, 120/180/240 |
-| Default loadout order | `BuffLoadoutConfig.Default Order` | ExtraJump, Stealth, QuickerDash |
+| Unlock thresholds (cumulative value) | `BuffLoadoutConfig.Thresholds` | 5/10/16/24, 34/46/62/80, 110/150/200/260 |
+| Fixed upgrade order (not player-configurable) | `BuffUpgradePath.Order` | ExtraJump, QuickerDash, Stealth, FlagRunner |
 | Air jumps per tier | `ExtraJumpBuff.Bonus Air Jumps` / `Unlimited At Tier` | 1, 2, unlimited@3 |
 | Stealth durations / cooldown | `StealthBuff.Durations` / `Cooldown` | 1,3,10 / 20s |
 | Stealth flag-use tier | `StealthBuff.Flag Usable From Tier` | 3 |
 | Dash cooldown multipliers / damage tier | `QuickerDashBuff.Cooldown Multipliers` / `Dash Damage From Tier` | 0.5,0,0 / 3 |
+| Flag carry speed / dash tier | `FlagRunnerBuff.Carry Speed Multipliers` / `Dash While Carrying From Tier` | 1.1,1.2,1.2 / 3 |
 | Stealth alphas | `PlayerStealthVisual` | owner/teammate 0.5, enemy 0.05 |
 | Stealth key | code: `NetworkInputProvider` | `Q` (gamepad: `buttonEast`) |
 
@@ -184,9 +196,9 @@ Two-client checks (optional, needs a second instance with `singlePlayerMode = fa
 - **Gamepad stealth = B/Circle** (`buttonEast`) — unusual for an ability button. To
   change it, edit the `stealth` line in
   `Assets/Scripts/Player/NetworkInputProvider.cs`.
-- **Adding a 4th buff later:** create a new `BuffDefinition` subclass (with its tier
-  table + `ContributeStats`/`GetActiveParams`), make the asset, add it to
-  `BuffLoadoutConfig.AllBuffs`. It auto-appears in the picker. No core-loop edits.
+- **Changing the approved catalog** requires an explicit code change to
+  `BuffUpgradePath`, matching definitions in `BuffLoadoutConfig.AllBuffs`, and a
+  complete threshold curve. Adding an asset alone does not change players' paths.
 - **Pre-existing (unrelated) bug:** `PlayerStatsHandler.RPC_DisablePlayerControls`
   (the dead-player dim) uses `GetComponentInChildren<SpriteRenderer>()`, which returns
   the **weapon** renderer, not the body — so the death dim may target the wrong sprite.

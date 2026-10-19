@@ -3,29 +3,23 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.UI;
+using Game.Buffs.Core;
 
 /// <summary>
-/// One-click builder that grows the lobby loadout picker to match the buff catalog. Finds the
-/// LobbyScreenUI in the open scene and, for every buff beyond the rows that already exist, clones
-/// the last row's three objects (label / up / down), offsets them by the existing row pitch, and
-/// appends them to the three serialized slot arrays.
-///
-/// Re-runnable: it adds only the missing rows and leaves existing ones alone. Uses the Unity API
-/// rather than raw scene YAML, so it cannot collide with existing fileIDs. Undo-friendly.
-///
-/// Mirrors the MatchHudBuilder editor-tool pattern in this folder.
+/// Refreshes the lobby's read-only upgrade path, adding missing labels and hiding legacy
+/// reorder controls. Re-runnable and undo-friendly, using the Unity API rather than scene YAML.
 /// </summary>
 public static class LoadoutPickerBuilder
 {
-    private const string UndoLabel = "Extend Loadout Picker";
+    private const string UndoLabel = "Refresh Upgrade Path";
 
-    [MenuItem("Tools/Lobby/Extend Loadout Picker")]
+    [MenuItem("Tools/Lobby/Refresh Upgrade Path")]
     public static void Build()
     {
         var lobby = Object.FindFirstObjectByType<LobbyScreenUI>(FindObjectsInactive.Include);
         if (lobby == null)
         {
-            EditorUtility.DisplayDialog("Loadout Picker Builder",
+            EditorUtility.DisplayDialog("Upgrade Path Builder",
                 "No LobbyScreenUI found in the open scene.\n\nOpen Assets/Scenes/MainMenu.unity and run this again.",
                 "OK");
             return;
@@ -40,23 +34,17 @@ public static class LoadoutPickerBuilder
         var config = configProp.objectReferenceValue as BuffLoadoutConfig;
         if (config == null)
         {
-            EditorUtility.DisplayDialog("Loadout Picker Builder",
+            EditorUtility.DisplayDialog("Upgrade Path Builder",
                 "LobbyScreenUI has no BuffLoadoutConfig assigned. Assign it and run this again.", "OK");
             return;
         }
 
-        int want = config.BuffCount;
+        int want = BuffUpgradePath.Order.Count;
         int have = labels.arraySize;
         if (have == 0)
         {
-            EditorUtility.DisplayDialog("Loadout Picker Builder",
-                "The picker has no rows to clone from. Build at least one row by hand first.", "OK");
-            return;
-        }
-        if (want <= have)
-        {
-            EditorUtility.DisplayDialog("Loadout Picker Builder",
-                $"Nothing to do: the picker already has {have} rows for {want} buffs.", "OK");
+            EditorUtility.DisplayDialog("Upgrade Path Builder",
+                "The upgrade path has no labels to clone from. Build at least one label by hand first.", "OK");
             return;
         }
 
@@ -70,15 +58,40 @@ public static class LoadoutPickerBuilder
         }
 
         for (int slot = have; slot < want; slot++)
-        {
             CloneRow(labels, slot, pitch, $"Slot{slot}Label");
-            CloneRow(ups, slot, pitch, $"Slot{slot}Up");
-            CloneRow(downs, slot, pitch, $"Slot{slot}Down");
+
+        for (int slot = 0; slot < labels.arraySize; slot++)
+        {
+            var label = labels.GetArrayElementAtIndex(slot).objectReferenceValue as TMP_Text;
+            if (label == null) continue;
+            Undo.RecordObject(label, UndoLabel);
+            if (slot < want)
+            {
+                BuffId id = BuffUpgradePath.Order[slot];
+                var definition = config.GetById(id);
+                label.text = $"{slot + 1}. {(definition != null ? definition.DisplayName : id.ToString())}";
+            }
+            else label.text = "";
         }
+        HideReorderButtons(ups);
+        HideReorderButtons(downs);
 
         so.ApplyModifiedProperties();
         EditorSceneManager.MarkSceneDirty(lobby.gameObject.scene);
-        Debug.Log($"LoadoutPickerBuilder: picker now has {want} rows. Save the scene to keep them.");
+        Debug.Log($"LoadoutPickerBuilder: fixed upgrade path now has {want} rows. Save the scene to keep them.");
+    }
+
+    private static void HideReorderButtons(SerializedProperty buttons)
+    {
+        for (int i = 0; i < buttons.arraySize; i++)
+        {
+            var button = buttons.GetArrayElementAtIndex(i).objectReferenceValue as Button;
+            if (button == null) continue;
+            Undo.RecordObject(button, UndoLabel);
+            Undo.RecordObject(button.gameObject, UndoLabel);
+            button.interactable = false;
+            button.gameObject.SetActive(false);
+        }
     }
 
     /// <summary>
@@ -99,11 +112,6 @@ public static class LoadoutPickerBuilder
         var srcRt = last.GetComponent<RectTransform>();
         if (rt != null && srcRt != null)
             rt.anchoredPosition = srcRt.anchoredPosition + new Vector2(0f, pitch);
-
-        // Cloned buttons carry the source row's persistent listeners; MoveSlot is wired in code
-        // by LobbyScreenUI.WireLoadoutButtons, so strip anything the clone inherited.
-        var button = clone.GetComponent<Button>();
-        if (button != null) button.onClick = new Button.ButtonClickedEvent();
 
         Component added = clone.GetComponent(last.GetType());
         array.arraySize++;

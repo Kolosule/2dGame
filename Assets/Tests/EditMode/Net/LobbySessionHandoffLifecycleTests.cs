@@ -288,20 +288,40 @@ public class LobbySessionHandoffLifecycleTests
         Handoff(owner).SetTeam(PlayerId, 2);
         object[] teamArgs = { player, 0 };
         object[] nicknameArgs = { player, null };
-        object[] loadoutArgs = { player, null };
 
         Assert.IsTrue((bool)Invoke(owner, "TryGetLobbyTeam", teamArgs));
         Assert.AreEqual(2, teamArgs[1]);
         Assert.IsFalse((bool)Invoke(owner, "TryGetLobbyNickname", nicknameArgs));
         Assert.IsNull(nicknameArgs[1]);
-        Assert.IsFalse((bool)Invoke(owner, "TryGetLobbyLoadout", loadoutArgs));
-        Assert.IsNull(loadoutArgs[1]);
 
         SeedChoices(owner);
         Assert.IsTrue((bool)Invoke(owner, "TryGetLobbyNickname", nicknameArgs));
         Assert.AreEqual("Ada", nicknameArgs[1]);
-        Assert.IsTrue((bool)Invoke(owner, "TryGetLobbyLoadout", loadoutArgs));
-        CollectionAssert.AreEqual(new byte[] { 3, 1, 2 }, (byte[])loadoutArgs[1]);
+    }
+
+    [Test]
+    public void LegacyLoadoutMessages_AreRejectedWithoutChangingSessionChoices()
+    {
+        SeedChoices(owner);
+        Component runner = CreateRunner("Current runner");
+        SetField(owner, "runner", runner);
+        object key = managerType.GetField("LegacyLoadoutKey", BindingFlags.Static | BindingFlags.NonPublic)
+            .GetValue(null);
+        var payloads = new[]
+        {
+            new byte[] { 3, 2, 1, 0 },
+            new byte[] { 0, 0, 0, 0 },
+            new byte[] { 255 },
+            new byte[0]
+        };
+
+        foreach (byte[] payload in payloads)
+        {
+            LogAssert.Expect(LogType.Warning,
+                $"Rejected custom upgrade path from Player {PlayerId}: all players use the fixed upgrade path.");
+            Invoke(owner, "OnReliableDataReceived", runner, CreatePlayer(), key, new ArraySegment<byte>(payload));
+            AssertChoices(owner);
+        }
     }
 
     private Component CreateOwner(string name)
@@ -339,7 +359,6 @@ public class LobbySessionHandoffLifecycleTests
         LobbySessionHandoff handoff = Handoff(component);
         handoff.SetTeam(PlayerId, 2);
         handoff.SetNickname(PlayerId, "Ada");
-        handoff.SetLoadout(PlayerId, new byte[] { 3, 1, 2 });
     }
 
     private void AssertChoices(Component component)
@@ -349,8 +368,6 @@ public class LobbySessionHandoffLifecycleTests
         Assert.AreEqual(2, team);
         Assert.IsTrue(handoff.TryGetNickname(PlayerId, out string name));
         Assert.AreEqual("Ada", name);
-        Assert.IsTrue(handoff.TryGetLoadout(PlayerId, out byte[] order));
-        CollectionAssert.AreEqual(new byte[] { 3, 1, 2 }, order);
     }
 
     private void AssertMissing(Component component)
@@ -358,7 +375,6 @@ public class LobbySessionHandoffLifecycleTests
         LobbySessionHandoff handoff = Handoff(component);
         Assert.IsFalse(handoff.TryGetTeam(PlayerId, out _));
         Assert.IsFalse(handoff.TryGetNickname(PlayerId, out _));
-        Assert.IsFalse(handoff.TryGetLoadout(PlayerId, out _));
     }
 
     private object Invoke(Component component, string method, params object[] args) =>

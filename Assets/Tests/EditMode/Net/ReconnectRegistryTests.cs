@@ -6,7 +6,6 @@ public class ReconnectRegistryTests
     {
         Team = team,
         DisplayName = "Ada",
-        LoadoutOrder = new byte[] { 3, 1, 2 },
         TotalDepositedValue = deposited,
         Kills = 4,
         Deaths = 2,
