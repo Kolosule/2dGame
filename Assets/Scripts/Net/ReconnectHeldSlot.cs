@@ -12,7 +12,6 @@ public class ReconnectHeldSlot
 {
     public int Team;
     public string DisplayName;
-    public byte[] LoadoutOrder;
     public int TotalDepositedValue;
 
     // MatchStatsManager row, copied out at capture and back in at restore under the NEW PlayerId.

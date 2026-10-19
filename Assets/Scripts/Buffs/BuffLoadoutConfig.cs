@@ -2,29 +2,24 @@ using UnityEngine;
 using Game.Buffs.Core;
 
 /// <summary>
-/// Single project-wide registry + tuning. AllBuffs index is irrelevant to the network
-/// (LoadoutOrder serializes BuffId), but every buff a player can equip must be listed here.
+/// Single project-wide registry + tuning. Definitions are looked up by BuffId, not priority.
+/// Every buff in the fixed BuffUpgradePath must have a definition here.
 /// </summary>
 [CreateAssetMenu(menuName = "Buffs/Loadout Config", fileName = "BuffLoadoutConfig")]
 public class BuffLoadoutConfig : ScriptableObject
 {
-    [Header("Every equippable buff (one asset per buff)")]
+    [Header("Every approved buff (one asset per buff)")]
     [SerializeField] private BuffDefinition[] allBuffs;
 
     [Header("Cumulative deposited-value thresholds — exactly maxTier x buffCount entries, ascending")]
     [SerializeField] private int[] thresholds =
         { 5, 10, 16, 24, 34, 46, 62, 80, 110, 150, 200, 260 };
 
-    [Header("Default priority order if a player submits none")]
-    [SerializeField] private BuffId[] defaultOrder =
-        { BuffId.ExtraJump, BuffId.Stealth, BuffId.QuickerDash, BuffId.FlagRunner };
-
     [Header("Highest tier any buff can reach. AUTHORED, not derived — see IsCurveValid.")]
     [SerializeField] private int maxTier = 3;
 
     public BuffDefinition[] AllBuffs => allBuffs;
     public int[] Thresholds => thresholds;
-    public BuffId[] DefaultOrder => defaultOrder;
     public int BuffCount => allBuffs != null ? allBuffs.Length : 0;
     public int MaxTier => maxTier;
 

@@ -235,7 +235,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
             spawnPosition,
             Quaternion.identity,
             player,
-            (runner, obj) => OnPlayerSpawned(runner, obj, team, sessionOwner, restore)
+            (runner, obj) => OnPlayerSpawned(runner, obj, team, restore)
         );
 
         if (spawnedObject == null)
@@ -255,7 +255,7 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
     }
 
     private void OnPlayerSpawned(NetworkRunner runner, NetworkObject obj, int team,
-                                 GameNetworkManager sessionOwner, ReconnectHeldSlot restore)
+                                 ReconnectHeldSlot restore)
     {
         // Register this object as the player's canonical player-object. Fusion replicates the
         // association to every peer, so Runner.TryGetPlayerObject(playerRef) resolves on clients
@@ -272,19 +272,13 @@ public class NetworkedSpawnManager : NetworkBehaviour, INetworkRunnerCallbacks
         }
         // Position is set by Runner.Spawn and synced by NetworkRigidbody2D.
 
-        // Initialise the player's buff loadout from their lobby choice (host-authoritative).
         PlayerBuffs buffs = obj.GetComponent<PlayerBuffs>();
-        if (buffs != null)
+        if (buffs != null && restore != null)
         {
-            if (sessionOwner.TryGetLobbyLoadout(obj.InputAuthority, out byte[] order))
-                buffs.ServerInitLoadout(order);
-            // If no lobby choice, PlayerBuffs.Spawned applies the config default order.
-
             // Reconnect: restore earned progression HERE, in the pre-replication spawn callback, so
             // the rejoiner's very first snapshot already carries their buff tiers. There is no frame
             // in which they are visible and interactive at tier 0, and no RPC ordering to reason about.
-            if (restore != null)
-                buffs.ServerRestoreDeposited(restore.TotalDepositedValue);
+            buffs.ServerRestoreDeposited(restore.TotalDepositedValue);
         }
     }
     #endregion

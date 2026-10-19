@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace Game.Buffs.Core
 {
     /// <summary>
-    /// Pure, Fusion-free unlock math. Nine ordered unlock steps are gated by a cumulative
+    /// Pure, Fusion-free unlock math. Ordered unlock steps are gated by a cumulative
     /// deposited-value threshold list; step i unlocks priority[i % buffCount] to tier i / buffCount + 1.
     /// A buff's tier is therefore derivable from (unlocked steps, its priority position).
     /// </summary>
