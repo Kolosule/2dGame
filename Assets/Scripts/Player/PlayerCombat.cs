@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using Fusion;
 using Game.Audio.Core;
 using Game.Combat.Core;
@@ -7,7 +8,7 @@ using Game.Combat.Core;
 /// <summary>
 /// Tick-based, networked combat. Driven by PlayerController.FixedUpdateNetwork.
 /// Melee detection/damage and projectile spawning run under StateAuthority only.
-/// Cooldowns are TickTimers so they predict and reconcile correctly.
+/// Melee cooldowns and ranged charge state predict and reconcile with the simulation.
 /// </summary>
 public class PlayerCombat : NetworkBehaviour
 {
@@ -43,9 +44,14 @@ public class PlayerCombat : NetworkBehaviour
     [SerializeField] private NetworkObject projectilePrefab;
     [SerializeField] private Transform projectileSpawnPoint;
     [SerializeField] private int projectileDamage = 15;
-    [SerializeField] private float projectileSpeed = 10f;
+    [Tooltip("Launch speed at full charge.")]
+    [SerializeField, Min(0.01f)] private float projectileSpeed = 10f;
+    [Tooltip("Launch speed for an uncharged tap.")]
+    [SerializeField, Min(0f)] private float projectileMinimumSpeed = 5f;
     [SerializeField] private float projectileScale = 1f;
-    [SerializeField] private float projectileCooldown = 0.5f;
+    [Tooltip("Seconds held to reach maximum launch speed. There is no firing cooldown.")]
+    [FormerlySerializedAs("projectileCooldown")]
+    [SerializeField, Min(0.01f)] private float projectileChargeTime = 0.5f;
 
     [Header("Shoot Prediction (cosmetic, firing client only)")]
     [Tooltip("Optional muzzle-flash prefab spawned instantly on the firing client. Null = tracer only.")]
@@ -87,9 +93,28 @@ public class PlayerCombat : NetworkBehaviour
     private int playerLayerMask;
     private bool warnedLagCompensationFallback;
     private bool wasDashing;
+    private bool rangedConfigurationValid;
 
     [Networked] private TickTimer AttackCooldownTimer { get; set; }
-    [Networked] private TickTimer ShootCooldownTimer { get; set; }
+    [Networked] private NetworkBool HasShootInput { get; set; }
+    [Networked] private uint LastShootSequence { get; set; }
+    [Networked] private uint LastShootCancelSequence { get; set; }
+    [Networked] private NetworkBool IsChargingShot { get; set; }
+    [Networked] private int ChargeStartTick { get; set; }
+
+    private RangedCharge ShotCharge
+    {
+        get => new RangedCharge(
+            HasShootInput, LastShootSequence, IsChargingShot, ChargeStartTick, LastShootCancelSequence);
+        set
+        {
+            HasShootInput = value.HasInput;
+            LastShootSequence = value.InputSequence;
+            LastShootCancelSequence = value.CancellationSequence;
+            IsChargingShot = value.IsCharging;
+            ChargeStartTick = value.StartTick;
+        }
+    }
 
     // Swing state (spec 2.2): the swing is its start tick + latched aim/facing; the phase is
     // derived per tick via SwingPhase.Resolve, so it predicts and resimulates correctly.
@@ -106,6 +131,7 @@ public class PlayerCombat : NetworkBehaviour
         rb = GetComponent<Rigidbody2D>();
         playerMovement = GetComponent<PlayerMovement>();
         mods = GetComponent<PlayerStatModifiers>();
+        ValidateRangedConfiguration();
 
         int configuredMask = attackableLayer.value;
         enemyLayerMask = configuredMask & LayerMask.GetMask("Enemy");
@@ -119,6 +145,18 @@ public class PlayerCombat : NetworkBehaviour
             Debug.LogError("PlayerCombat: attackableLayer must include the Player layer.");
     }
 
+    private void OnValidate() => ValidateRangedConfiguration();
+
+    private void ValidateRangedConfiguration()
+    {
+        rangedConfigurationValid = RangedCharge.IsConfigurationValid(
+            projectileMinimumSpeed, projectileSpeed, projectileChargeTime);
+        if (!rangedConfigurationValid)
+            Debug.LogError(
+                "PlayerCombat: ranged attacks require finite speeds (0 <= minimum <= maximum, " +
+                "maximum > 0) and a positive charge time. Ranged attacks are disabled until corrected.", this);
+    }
+
     private static ContactFilter2D CreateLayerFilter(int layerMask)
     {
         ContactFilter2D filter = new ContactFilter2D
@@ -130,7 +168,7 @@ public class PlayerCombat : NetworkBehaviour
     }
 
     /// <summary>Called every tick by PlayerController when input is available.</summary>
-    public void Simulate(NetInput input, NetworkButtons pressed)
+    public void Simulate(NetInput input, NetworkButtons pressed, bool allowRangedCharge)
     {
         verticalAim = input.VerticalAim;
         lastAimWorldPoint = input.AimWorldPoint;
@@ -150,14 +188,7 @@ public class PlayerCombat : NetworkBehaviour
             SimulateSwingTick(phase);
         }
 
-        if (pressed.IsSet((int)PlayerButton.Shoot))
-        {
-            if (ShootCooldownTimer.ExpiredOrNotRunning(Runner))
-            {
-                ShootCooldownTimer = TickTimer.CreateFromSeconds(Runner, projectileCooldown);
-                ShootProjectile(input.AimWorldPoint);
-            }
-        }
+        if (allowRangedCharge) SimulateRangedCharge(input);
 
         // Quicker Dash tier 3: deal melee damage in the front swing box while dashing.
         // Each target is hit AT MOST ONCE per dash (dashStruck dedup set cleared on rising edge).
@@ -168,6 +199,33 @@ public class PlayerCombat : NetworkBehaviour
             ApplyMeleeHits(sideAttackPoint.position, sideAttackArea, dashStruck);
         }
         wasDashing = dashing;
+    }
+
+    public void CancelRangedCharge(bool hasInput, NetInput input)
+    {
+        RangedCharge charge = ShotCharge;
+        charge.Cancel(hasInput ? input.ShootSequence : (uint?)null, input.ShootCancelSequence);
+        ShotCharge = charge;
+    }
+
+    private void SimulateRangedCharge(NetInput input)
+    {
+        if (!rangedConfigurationValid)
+        {
+            CancelRangedCharge(true, input);
+            return;
+        }
+
+        RangedCharge charge = ShotCharge;
+        int? chargeTicks = charge.Sample(
+            Runner.Tick, input.ShootSequence, input.Buttons.IsSet((int)PlayerButton.Shoot),
+            input.ShootCancelSequence);
+        ShotCharge = charge;
+        if (!chargeTicks.HasValue) return;
+
+        float speed = RangedCharge.ResolveSpeed(
+            chargeTicks.Value, Runner.DeltaTime, projectileMinimumSpeed, projectileSpeed, projectileChargeTime);
+        ShootProjectile(input.AimWorldPoint, speed);
     }
 
     private SwingPhaseKind CurrentSwingPhase()
@@ -496,7 +554,7 @@ public class PlayerCombat : NetworkBehaviour
             : null;
     }
 
-    private void ShootProjectile(Vector2 aimWorldPoint)
+    private void ShootProjectile(Vector2 aimWorldPoint, float launchSpeed)
     {
         if (playerAnimator != null) playerAnimator.TriggerShoot();
         if (projectilePrefab == null || projectileSpawnPoint == null) return;
@@ -536,7 +594,7 @@ public class PlayerCombat : NetworkBehaviour
             (runner, obj) =>
             {
                 Projectile p = obj.GetComponent<Projectile>();
-                if (p != null) p.ServerInitialize(aimDirection, projectileSpeed, projectileDamage, shooterTeam, projectileScale);
+                if (p != null) p.ServerInitialize(aimDirection, launchSpeed, projectileDamage, shooterTeam, projectileScale);
             });
     }
 
